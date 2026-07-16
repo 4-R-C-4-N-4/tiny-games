@@ -15,6 +15,7 @@ import { fx, type Fx } from './fx.ts';
 import { Rng } from './fx.ts';
 import { Element } from './element.ts';
 import { Grid } from './grid.ts';
+import { Fields } from './fields.ts';
 import { PlayerState } from './player.ts';
 import {
   OccKind, Tier, NodeKind,
@@ -27,6 +28,7 @@ import {
 export class Sim {
   readonly cfg: Config;
   readonly grid: Grid;
+  readonly fields: Fields;
   readonly player: PlayerState;
   readonly rng: Rng;
 
@@ -46,6 +48,17 @@ export class Sim {
     this.player = new PlayerState(starting, cfg.startCurrency);
     this.rng = new Rng(cfg.seed);
     this._coreHp = cfg.coreHp;
+    this.fields = new Fields(grid);
+    this.mazeDirty = false; // Fields ctor just computed a fresh field
+  }
+
+  /** Recompute flow fields iff the maze changed. Called at §2 step 6; exposed so the
+   *  build phase and tests can read a current field after building/selling walls. */
+  syncFields(): void {
+    if (this.mazeDirty) {
+      this.fields.recompute(this.grid);
+      this.mazeDirty = false;
+    }
   }
 
   static create(cfg: Config, starting: Element): Sim {
