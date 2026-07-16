@@ -215,7 +215,10 @@ export class Sim {
       });
     }
     const horizon = this.secToTick(this.cfg.waveSeconds);
-    this.waveMaxTick = this.waveBaseTick + horizon * 4;
+    // Pure anti-hang backstop. Mobs always make strictly-decreasing progress (or leak /
+    // die / breach a finite-HP wall), so a wave always terminates on its own; this only
+    // guards against a logic bug. Sized well past the slowest mob crossing the whole grid.
+    this.waveMaxTick = this.waveBaseTick + horizon + this.grid.w * this.grid.h * 80;
     this.decisionTicks = [];
     const n = this.cfg.decisionPoints;
     for (let i = 1; i <= n; i++) {
@@ -282,10 +285,14 @@ export class Sim {
 
   private processSpawns(): void {
     if (this.pending.length === 0) return;
-    const due = this.pending.filter((s) => s.tick === this.tick);
-    // stable order: keep insertion order (opener then commits), spawn in that order
+    // Fire any spawn due this tick OR earlier: step() increments the tick before this
+    // phase, so a spawn scheduled for tick 0 (opener t=0) is due on the first step. Using
+    // <= also makes scheduling robust to rounding. Insertion order (opener, then commits)
+    // is preserved, so the spawn order is deterministic.
+    const due = this.pending.filter((s) => s.tick <= this.tick);
+    if (due.length === 0) return;
     for (const s of due) this.spawnGroup(s.x, s.element, s.trait, s.count);
-    this.pending = this.pending.filter((s) => s.tick !== this.tick);
+    this.pending = this.pending.filter((s) => s.tick > this.tick);
   }
 
   private moveMobs(): void {
