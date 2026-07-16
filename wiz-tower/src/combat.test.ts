@@ -6,7 +6,6 @@ import { fx } from './fx.ts';
 import { DEFAULT_CONFIG, mobStats, leakDamage } from './config.ts';
 
 const cfg = { ...DEFAULT_CONFIG };
-const col3 = { x: 3, y: 0 };
 
 /** Step until `done(sim)` or `max` ticks; returns ticks taken. */
 function runUntil(s: Sim, done: (s: Sim) => boolean, max = 2000): number {
