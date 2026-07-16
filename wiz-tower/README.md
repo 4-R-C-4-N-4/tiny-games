@@ -6,7 +6,18 @@ that reads your defense and attacks its gaps — all client-side, no backend. Se
 engine contract (`PHASE0.md`), the interface spec (`lib.rs`), and the Wave DSL grammar
 (`wave.ebnf`).
 
-## Status: Phase 0 — the deterministic sim (complete)
+## Status: Phase 1 — first playable (search opponent, no ML)
+
+`npm run dev` and open the page: pick a starting element + difficulty, build towers and
+walls on the grid, **Scout** to see the attacker's telegraphed opener, counter-build, then
+**Start Wave**. The opponent is a `SearchAttacker` — it reads your board, simulates candidate
+waves on forks of the live sim, and sends the one that best exploits your gaps. Economy and
+Core HP carry across waves; survive as long as you can. Everything runs client-side.
+
+The playable is verified headlessly (`npm run verify:web`) by driving the built page in
+Chromium — build phase, tower placement, telegraph, a full wave, clean console.
+
+## Phase 0 — the deterministic sim (complete)
 
 Phase 0 is the **engine and nothing else** — no renderer, no model, no search (those are
 the Phase 1+ consumers). It's a deterministic, headless simulation in TypeScript, written
@@ -32,11 +43,12 @@ What's implemented, each with tests:
 
 ```bash
 npm install
-npm test            # 61 tests: type chart, fields, combat, parser, determinism
+npm run dev         # play it — the Phase 1 game in the browser
+npm test            # 73 tests: type chart, fields, combat, parser, determinism, search, game loop
 npm run headless    # plays a scripted wave vs a scripted defense, twice → identical scorecard
 npm run typecheck   # tsc --noEmit
-npm run dev         # serves web/ — the same sim running in the browser (no renderer yet)
-npm run build       # bundles the browser consumer (~9 KB gzipped)
+npm run build       # bundles the browser consumer (~12 KB gzipped)
+npm run verify:web  # headless Chromium end-to-end check (needs `npm run preview` running)
 ```
 
 ## Architecture: one engine, two consumers
@@ -48,9 +60,9 @@ is behind it. Keep game rules in the sim, once — if a rule lives in two places
 
 ## What's next
 
-- **Phase 1** — a Canvas renderer + touch controls + a search-based open-loop attacker:
-  the first *playable*, validating the core loop with zero ML.
-- **Phase 1.5** — turn on the reserve + decision points via live branching search (still no
-  NN); confirm the feint/tempo dynamic is fun.
+- **Phase 1.5** — turn on the reserve + in-wave decision points via live *branching* search
+  (still no NN): the `SearchAttacker` commits a hidden reserve at decision points based on
+  where your fire actually went. Confirm the feint/tempo dynamic is fun. The sim already
+  supports this (decision points + `commit`); it's the search that needs to branch.
 - **Phase 2** — distill the search teacher into a tiny `weights.json` + a ~15-line JS
-  forward pass over the real spatial observation.
+  forward pass over the real spatial observation, swapped in behind the same `Attacker`.

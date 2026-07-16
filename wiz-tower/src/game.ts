@@ -39,6 +39,8 @@ export class Game {
   telegraph: Opener = [];
   lastMetrics: Metrics | null = null;
   highestWave = 1;
+  /** Committed opener + reserve pool, set by planWave() and consumed by startWave(). */
+  private committed: { opener: Opener; pool: number } | null = null;
 
   constructor(opts: GameOptions = {}) {
     const cfg = opts.config ?? DEFAULT_CONFIG;
@@ -65,13 +67,27 @@ export class Game {
 
   // ---- wave lifecycle -------------------------------------------------------------
 
-  /** Leave the build phase: the attacker reads the board and commits its opener. */
-  startWave(): void {
+  /** True once the attacker has committed (and telegraphed) its opener for this wave. */
+  get planned(): boolean {
+    return this.committed !== null;
+  }
+
+  /** Have the attacker read the current board and commit its telegraphed opener, WITHOUT
+   *  starting the wave — so the player can counter-build against the telegraph (§2, §4.6).
+   *  Re-callable: re-plans against the latest board. */
+  planWave(): void {
     if (this.state !== 'build') return;
     this.sim.syncFields();
     this.sim.prepareWave(this.wave, this.diff);
-    const { opener, pool } = this.attacker.open(this.sim.observe());
-    this.telegraph = opener;
+    this.committed = this.attacker.open(this.sim.observe());
+    this.telegraph = this.committed.opener;
+  }
+
+  /** Leave the build phase and run the committed opener (auto-plans if not yet planned). */
+  startWave(): void {
+    if (this.state !== 'build') return;
+    if (!this.committed) this.planWave();
+    const { opener, pool } = this.committed!;
     this.sim.beginWave(opener, pool, this.wave, this.diff);
     this.state = 'wave';
   }
@@ -107,6 +123,8 @@ export class Game {
     this.sim.player.currency += this.sim.cfg.waveStipend;
     this.wave += 1;
     this.highestWave = Math.max(this.highestWave, this.wave);
+    this.committed = null;
+    this.telegraph = [];
     this.state = 'build';
   }
 
