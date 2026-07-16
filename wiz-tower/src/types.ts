@@ -131,4 +131,63 @@ export interface Mob {
   shieldHits: number; // Shielded: absorbs first N damage applications
   entryX: number; // spawn column, for telemetry/telegraph
   alive: boolean; // freelist tombstone; iteration stays in id order
+  slowMul: Fx; // movement multiplier for the NEXT tick (set by slow towers, then reset)
+  damageTaken: Fx; // running total, for the fire-misallocation metric on leak
+  breachCell: Cell | null; // wall this mob is attacking this tick (set in move phase, blocked mobs)
 }
+
+// ---- observation — what the attacker sees (§4.2) ----------------------------------
+
+export interface CellFeatures {
+  dps: Fx[]; // per-element coverage reaching this cell, length N_ELEMENTS (§3.1 order)
+  control: Fx; // slow coverage
+  antiAir: Fx;
+  detection: Fx;
+  wallHp: Fx; // 0 if no wall
+  buildable: boolean;
+  distCore: number; // from costWalled (maze geometry the model must read)
+}
+
+/** Compact summary of what the player is teched into (§3.4) — lets the attacker anticipate. */
+export interface BuildProfile {
+  starting: Element;
+  attuned: boolean[]; // length N_ELEMENTS
+  depth: number[]; // highest tier reached per element (0 = none), length N_ELEMENTS
+}
+
+export interface Observation {
+  w: number;
+  h: number;
+  cells: CellFeatures[];
+  profile: BuildProfile;
+  budget: number;
+  wave: number;
+  diff: number;
+}
+
+/** Extra state handed to the attacker at a decision point (the reactive delta). */
+export interface DecisionContext {
+  obs: Observation;
+  reserveLeft: number;
+  coreHp: Fx;
+  t: Fx;
+  pointIndex: number;
+}
+
+// ---- metrics — the per-wave scorecard AND the search objective (§4.5) --------------
+
+export interface Metrics {
+  leakedHp: Fx;
+  timeToFirstLeak: Fx; // -1 sentinel if none
+  overkill: Fx;
+  dpsUtil: Fx[]; // damage dealt by each element's towers, length N_ELEMENTS
+  currencyDelta: number; // bounty income granted to the player this wave (economy-denial term)
+  breaches: number;
+  fireMisalloc: Fx; // damage invested in mobs that leaked anyway (tempo/bluff proxy)
+}
+
+export type StepOutcome =
+  | { kind: 'continue' }
+  | { kind: 'decision'; obs: Observation }
+  | { kind: 'waveComplete'; metrics: Metrics }
+  | { kind: 'gameOver' };

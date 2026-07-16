@@ -22,6 +22,7 @@ export interface Config {
   coreHp: Fx;
   startCurrency: number;
   waveStipend: number; // per-wave income
+  waveSeconds: Fx; // nominal wave length; places decision points and caps runaway waves
 }
 
 export const DEFAULT_CONFIG: Omit<Config, 'seed'> & { seed: bigint } = {
@@ -34,7 +35,19 @@ export const DEFAULT_CONFIG: Omit<Config, 'seed'> & { seed: bigint } = {
   coreHp: fx(100),
   startCurrency: 120,
   waveStipend: 25,
+  waveSeconds: fx(8),
 };
+
+// ---- combat / pathing constants (Fx per second where a rate) ----------------------
+
+export const BREAKER_WALL_DPS: Fx = fx(20); // Breakers demolish walls fast (§3.2)
+export const MOB_WALL_DPS: Fx = fx(4); // other blocked mobs chip walls slowly
+export const MENDER_HEAL_RADIUS: Fx = fx(2); // cell units (euclidean, compared squared)
+export const SPLASH_RADIUS: Fx = fx(1); // splash reaches mobs within 1 cell of the target
+/** Core damage per leaked mob = its point cost (tanks hurt more than swarm bodies). */
+export function leakDamage(trait: Trait): Fx {
+  return fx(mobStats(trait).cost);
+}
 
 // ---- economy: walls & towers ------------------------------------------------------
 
@@ -139,4 +152,9 @@ export function mobStats(trait: Trait): MobStats {
 /** Point cost of a mob group = per-mob cost × count (budget accounting, §3.4). */
 export function groupCost(trait: Trait, count: number): number {
   return mobStats(trait).cost * count;
+}
+
+/** Attacker point budget B(wave), scaling with wave number (§3.4). */
+export function budgetFor(wave: number): number {
+  return 60 + 20 * wave;
 }
