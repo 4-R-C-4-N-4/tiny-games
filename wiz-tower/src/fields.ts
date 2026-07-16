@@ -37,6 +37,17 @@ export class Fields {
     this.recompute(grid);
   }
 
+  /** Exact copy without recomputing (for forking a sim). */
+  clone(): Fields {
+    const f: Fields = Object.create(Fields.prototype);
+    (f as { w: number }).w = this.w;
+    (f as { h: number }).h = this.h;
+    (f as { costWalled: Uint32Array }).costWalled = this.costWalled.slice();
+    (f as { costOpen: Uint32Array }).costOpen = this.costOpen.slice();
+    f.dirty = this.dirty;
+    return f;
+  }
+
   /** BFS from Core over both wall-modes. O(cells); cheap enough per maze-change. */
   recompute(grid: Grid): void {
     this.bfs(grid, this.costWalled, /*wallsPassable=*/ false);

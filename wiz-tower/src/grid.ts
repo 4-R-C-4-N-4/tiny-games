@@ -39,6 +39,12 @@ export class Grid {
     return new Grid(w, h, cells);
   }
 
+  /** Deep copy — cells and their occupant objects are cloned (for forking a sim). */
+  clone(): Grid {
+    const cells = this.cells.map((c) => ({ buildable: c.buildable, occ: { ...c.occ } }));
+    return new Grid(this.w, this.h, cells);
+  }
+
   idx(c: Cell): number {
     return c.y * this.w + c.x;
   }

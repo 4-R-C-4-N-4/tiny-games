@@ -108,6 +108,44 @@ export class Sim {
     return new Sim(cfg, Grid.basic(cfg.gridW, cfg.gridH), starting);
   }
 
+  /**
+   * Deep fork of the entire sim state. The search (and Phase 1.5 branching) plays
+   * candidate waves on a clone and discards it, never touching the live game. `cfg` is
+   * shared by reference (it's immutable tuning data); everything mutable is copied.
+   */
+  clone(): Sim {
+    const s = Object.create(Sim.prototype) as {
+      -readonly [K in keyof Sim]: Sim[K];
+    } & Record<string, unknown>;
+    s.cfg = this.cfg;
+    s.grid = this.grid.clone();
+    s.fields = this.fields.clone();
+    s.player = this.player.clone();
+    s.rng = this.rng.clone();
+    s.towers = this.towers.map((t) => (t ? { ...t, cell: { ...t.cell }, flags: { ...t.flags } } : null));
+    s.freeTowerIds = this.freeTowerIds.slice();
+    s.mobs = this.mobs.map((m) => ({
+      ...m, pos: { ...m.pos }, flags: { ...m.flags },
+      breachCell: m.breachCell ? { ...m.breachCell } : null,
+    }));
+    s.freeMobIds = this.freeMobIds.slice();
+    s.tick = this.tick;
+    s._coreHp = this._coreHp;
+    s.mazeDirty = this.mazeDirty;
+    s.waveActive = this.waveActive;
+    s.waveNum = this.waveNum;
+    s.diff = this.diff;
+    s.budget = this.budget;
+    s.waveBaseTick = this.waveBaseTick;
+    s.pending = this.pending.map((p) => ({ ...p }));
+    s.reserveLeft = this.reserveLeft;
+    s.decisionTicks = this.decisionTicks.slice();
+    s.nextDecisionIdx = this.nextDecisionIdx;
+    s.waveMaxTick = this.waveMaxTick;
+    s.metrics = { ...this.metrics, dpsUtil: this.metrics.dpsUtil.slice() };
+    return s as unknown as Sim;
+  }
+
   coreHp(): Fx {
     return this._coreHp;
   }

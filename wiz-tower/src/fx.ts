@@ -96,4 +96,11 @@ export class Rng {
   below(n: number): number {
     return Number(this.nextU64() % BigInt(n));
   }
+
+  /** Exact copy, including internal state — for forking a sim (search). */
+  clone(): Rng {
+    const r = new Rng(0);
+    r.state = this.state;
+    return r;
+  }
 }

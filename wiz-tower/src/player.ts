@@ -29,6 +29,17 @@ export class PlayerState {
     this.depth[starting] = Tier.T1;
   }
 
+  /** Deep copy (for forking a sim). */
+  clone(): PlayerState {
+    const p = new PlayerState(this.starting, this.currency);
+    for (let i = 0; i < N_ELEMENTS; i++) {
+      p.attuned[i] = this.attuned[i];
+      p.depth[i] = this.depth[i];
+    }
+    p.attuneCount = this.attuneCount;
+    return p;
+  }
+
   attuneCost(_e: Element): number {
     // Escalation depends only on how many elements are already attuned, not which.
     return attuneCost(this.attuneCount);
