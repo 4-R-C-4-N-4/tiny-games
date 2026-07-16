@@ -265,6 +265,19 @@ export class Sim {
     this.nextDecisionIdx = 0;
   }
 
+  /** Announce the upcoming wave so a pre-wave observe() reports the right budget/wave/diff
+   *  (the attacker's open() reads the board before beginWave). beginWave re-sets these. */
+  prepareWave(wave: number, diff: number): void {
+    this.waveNum = wave;
+    this.diff = diff;
+    this.budget = budgetFor(wave);
+  }
+
+  /** The wave number currently announced (0 before the first prepareWave/beginWave). */
+  waveNumber(): number {
+    return this.waveNum;
+  }
+
   private secToTick(t: Fx): number {
     return fxToInt(fxDiv(t, this.cfg.dt));
   }
