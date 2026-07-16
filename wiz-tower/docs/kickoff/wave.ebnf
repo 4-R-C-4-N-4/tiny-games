@@ -1,0 +1,81 @@
+(* ================================================================= *)
+(*  Wave DSL grammar — v0.3                                           *)
+(*  Maps 1:1 to the AST in src/lib.rs (Wave, Spawn, Reserve, ...).    *)
+(*                                                                    *)
+(*  Two roles:                                                        *)
+(*    1. serialized attacker plan (telegraph + deterministic replay)  *)
+(*    2. the constraint grammar for model decoding — translate this   *)
+(*       to GBNF/logit-mask so a tiny model CANNOT emit invalid text. *)
+(*                                                                    *)
+(*  The grammar guarantees SHAPE. It cannot guarantee semantics       *)
+(*  (cost <= budget, x in range, gate is a real wall, t in window) —  *)
+(*  parse_wave() enforces those and may reject/repair.                *)
+(* ================================================================= *)
+
+wave        = "WAVE" , "budget=" , uint , "diff=" , uint , newline ,
+              opener ,
+              reserve ;
+
+(* ---- OPENER : telegraphed, pre-committed ------------------------ *)
+opener      = "OPEN" , newline ,
+              { indent , spawn , newline } ;
+
+spawn       = "SPAWN" , "t=" , decimal , "x=" , uint , group ;
+
+(* ---- RESERVE : hidden; resolved live at decision points --------- *)
+reserve     = "RESERVE" , "pool=" , uint , newline ,
+              { decision_point } ;
+
+decision_point
+            = indent , "AT" , "t=" , decimal , newline ,
+              guarded , { "ELSE" , guarded } ,
+              [ "ELSE" , newline , commit_block ] ;   (* trailing bare ELSE *)
+
+guarded     = "IF" , cond , newline , commit_block ;
+
+commit_block
+            = { indent , indent , commit , newline } ;
+
+commit      = spawn_commit | breach_commit ;
+spawn_commit  = "COMMIT" , "x=" , uint , group ;
+breach_commit = "COMMIT" , "x=" , uint , group , "BREACH" , cell ;
+
+(* ---- conditions : small CLOSED set (keeps decode space finite) -- *)
+cond        = dps_cond | wall_cond | core_cond | and_cond ;
+dps_cond    = "dps_near(" , "x=" , uint , "," , element , ")" , "<" , decimal ;
+wall_cond   = "wall_hp(" , cell , ")" , "<" , decimal ;
+core_cond   = "core_hp" , "<" , decimal ;
+and_cond    = cond , "AND" , cond ;
+
+(* ---- leaves ---------------------------------------------------- *)
+group       = element , trait , "x" , uint ;   (* e.g. DARK FLIER x5 *)
+cell        = "(" , uint , "," , uint , ")" ;
+
+element     = "FIRE" | "ICE" | "EARTH" | "SONIC" | "ZAP" | "LIGHT" | "DARK" ;
+
+trait       = "GRUNT" | "SWARM" | "TANK" | "RUNNER" | "FLIER"
+            | "SHADE" | "SHIELDED" | "MENDER" | "BREAKER" ;
+
+uint        = digit , { digit } ;
+decimal     = digit , { digit } , [ "." , digit , { digit } ] ;
+digit       = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+indent      = "  " ;         (* two spaces; structure is significant *)
+newline     = "\n" ;
+
+(* ================================================================= *)
+(*  EXAMPLE (the §4.3 wave, now element x trait)                     *)
+(* ----------------------------------------------------------------- *)
+(*  WAVE budget=120 diff=3                                            *)
+(*  OPEN                                                              *)
+(*    SPAWN t=0.0 x=1 FIRE SWARM x8                                   *)
+(*    SPAWN t=1.2 x=5 EARTH TANK x2                                   *)
+(*  RESERVE pool=45                                                   *)
+(*    AT t=2.0                                                        *)
+(*    IF dps_near(x=5,DARK)<40.0                                      *)
+(*        COMMIT x=5 DARK GRUNT x3                                    *)
+(*    ELSE IF wall_hp((1,7))<30.0                                     *)
+(*        COMMIT x=1 EARTH BREAKER x2 BREACH (1,7)                    *)
+(*        COMMIT x=1 FIRE GRUNT x6                                    *)
+(*    ELSE                                                            *)
+(*        COMMIT x=3 SONIC FLIER x5                                   *)
+(* ================================================================= *)

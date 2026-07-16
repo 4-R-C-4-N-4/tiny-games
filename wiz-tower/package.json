@@ -1,0 +1,20 @@
+{
+  "name": "wiz-tower",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Adversarial tower defense — deterministic sim shared by trainer (Node) and browser.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "headless": "node --experimental-strip-types scripts/headless.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
+  }
+}

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Distilled Attacker — pure-JS demo</title>
+<style>
+  :root{ --bg:#0f1020; --panel:#191a2e; --ink:#e7e7f2; --dim:#9a9ab5; --gold:#ffd166; }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.5 ui-sans-serif,system-ui;background:var(--bg);color:var(--ink);padding:20px;max-width:680px;margin:auto}
+  h1{font-size:19px;margin:.2em 0}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:18px}
+  .panel{background:var(--panel);border:1px solid #2a2b45;border-radius:12px;padding:16px;margin-bottom:14px}
+  .row{display:flex;align-items:center;gap:10px;margin:7px 0}
+  .row label{width:70px;font-size:13px}
+  .row input{flex:1}
+  .row .v{width:38px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}
+  .pick{font-size:22px;font-weight:700;color:var(--gold)}
+  .bar{height:18px;border-radius:5px;background:#2a2b45;overflow:hidden;margin:3px 0}
+  .bar>div{height:100%;background:linear-gradient(90deg,#5d5dff,#ff5d73)}
+  .lab{font-size:12px;color:var(--dim)}
+  code{color:var(--gold)}
+</style>
+</head>
+<body>
+  <h1>🧙 Distilled Attacker — pure JS, no runtime</h1>
+  <div class="sub">A ~2.5k-parameter net, distilled from search over the sim, picks the wave that best exploits your defense. The model is <code>weights.json</code> + the ~15-line forward pass below — no WASM, no ONNX, no server.</div>
+
+  <div class="panel">
+    <div class="lab" style="margin-bottom:6px">YOUR DEFENSE — DPS per element</div>
+    <div id="elems"></div>
+    <div class="lab" style="margin:10px 0 6px">CAPABILITY COVERAGE</div>
+    <div id="caps"></div>
+  </div>
+
+  <div class="panel">
+    <div class="lab">THE ATTACKER WILL SEND</div>
+    <div id="pick" class="pick">loading…</div>
+    <div id="rank" style="margin-top:10px"></div>
+  </div>
+
+<script type="module">
+// ---- the entire model runtime: load weights + a plain forward pass -----------------
+const W = await fetch('weights.json').then(r=>r.json());   // serve locally (see README)
+function forward(x){                                        // x: number[10] -> leak[28]
+  const {hidden:H, out:O} = W, a1 = new Float64Array(H);
+  for(let j=0;j<H;j++){ let s=W.b1[j]; for(let i=0;i<10;i++) s+=x[i]*W.W1[i][j]; a1[j]=s>0?s:0; }
+  const out = new Float64Array(O);
+  for(let k=0;k<O;k++){ let s=W.b2[k]; for(let j=0;j<H;j++) s+=a1[j]*W.W2[j][k]; out[k]=s; }
+  return out;
+}
+// -----------------------------------------------------------------------------------
+
+const {elems:ELEMS, traits:TRAITS} = W, NT = TRAITS.length;
+const state = { dps:[40,0,0,0,0,0,0], aa:0.2, det:0.2, splash:0.2 };
+
+function slider(parent,label,val,max,on){
+  const r=document.createElement('div'); r.className='row';
+  r.innerHTML=`<label>${label}</label><input type=range min=0 max=${max} value=${val}><span class=v></span>`;
+  const inp=r.querySelector('input'), v=r.querySelector('.v');
+  if(max<=1) inp.step=0.01;
+  const upd=()=>{ v.textContent = max<=1 ? Math.round(inp.value*100)+'%' : inp.value; on(+inp.value); };
+  inp.addEventListener('input',()=>{ upd(); run(); });
+  upd(); parent.appendChild(r);
+}
+const eD=document.getElementById('elems'), cD=document.getElementById('caps');
+ELEMS.forEach((e,i)=>slider(eD,e,state.dps[i],100,v=>state.dps[i]=v));
+slider(cD,'Anti-air',state.aa,1,v=>state.aa=v);
+slider(cD,'Detection',state.det,1,v=>state.det=v);
+slider(cD,'Splash',state.splash,1,v=>state.splash=v);
+
+function run(){
+  const x=[...state.dps, state.aa, state.det, state.splash];
+  const leak=[...forward(x)];
+  const order=leak.map((v,i)=>[v,i]).sort((a,b)=>b[0]-a[0]);
+  const best=order[0][1];
+  document.getElementById('pick').textContent=`${ELEMS[best/NT|0]}  ${TRAITS[best%NT]}`;
+  const max=order[0][0], min=order[order.length-1][0], span=(max-min)||1;
+  document.getElementById('rank').innerHTML=order.slice(0,5).map(([v,i])=>{
+    const p=Math.round((v-min)/span*100);
+    return `<div class=lab>${ELEMS[i/NT|0]} ${TRAITS[i%NT]}</div><div class=bar><div style="width:${p}%"></div></div>`;
+  }).join('');
+}
+run();
+</script>
+</body>
+</html>
