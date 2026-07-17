@@ -24,14 +24,27 @@ function openerCost(opener: Opener): number {
 }
 
 describe('SearchAttacker (L1 open-loop)', () => {
-  it('produces a within-budget opener', () => {
+  it('holds back a hidden reserve; opener fits the remaining budget', () => {
     const s = groundOnlyDefense();
     s.prepareWave(2, 3);
-    const atk = new SearchAttacker(s, { seed: 1n, topK: 1 });
+    const atk = new SearchAttacker(s, { seed: 1n, topK: 1, reserveFrac: 0.35 });
     const { opener, pool } = atk.open(s.observe());
     expect(opener.length).toBeGreaterThan(0);
-    expect(pool).toBe(0); // L1 is open-loop
-    expect(openerCost(opener)).toBeLessThanOrEqual(budgetFor(2));
+    expect(pool).toBeGreaterThan(0); // L2: reserve is hidden, not shown in the telegraph
+    expect(pool).toBe(Math.round(budgetFor(2) * 0.35));
+    // The telegraphed opener spends only the non-reserve budget.
+    expect(openerCost(opener)).toBeLessThanOrEqual(budgetFor(2) - pool);
+  });
+
+  it('fires reactive commits from the reserve at decision points', () => {
+    const s = groundOnlyDefense();
+    s.prepareWave(2, 3);
+    const atk = new SearchAttacker(s, { seed: 5n, topK: 1 });
+    playWave(s, atk, 2, 3);
+    // Two decision points (config default) → the attacker got two chances to commit.
+    expect(atk.committed.length).toBe(2);
+    // At least one point spent some reserve (a non-empty commit).
+    expect(atk.committed.some((c) => c.length > 0)).toBe(true);
   });
 
   it('exploits the anti-air gap: out-leaks a ground baseline on the same defense', () => {
