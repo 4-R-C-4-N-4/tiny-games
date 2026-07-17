@@ -51,6 +51,14 @@ export class Effects {
     this.addShake(6 * power);
   }
 
+  /** A spell being cast — twin blooming rune-rings, a spark burst, a soft thump. */
+  cast(x: number, y: number, color: string): void {
+    this.particles.push({ x, y, vx: 0, vy: 0, life: 0, max: 0.55, size: 6, color, kind: 'ring' });
+    this.particles.push({ x, y, vx: 0, vy: 0, life: 0, max: 0.4, size: 16, color, kind: 'ring' });
+    this.burst(x, y, color, 0.8);
+    this.addShake(3);
+  }
+
   addShake(mag: number): void {
     if (this.reduced) return;
     this.shakeMag = Math.min(14, Math.max(this.shakeMag, mag));

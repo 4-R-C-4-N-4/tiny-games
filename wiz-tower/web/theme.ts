@@ -37,6 +37,12 @@ export const ELEMENT_SCHOOL: Record<Element, string> = {
   [Element.Zap]: 'Storm', [Element.Light]: 'Radiant', [Element.Dark]: 'Void',
 };
 
+/** The practice you attune to when you raise a ward of this element. */
+export const ELEMENT_ARCANA: Record<Element, string> = {
+  [Element.Fire]: 'Pyromancy', [Element.Ice]: 'Cryomancy', [Element.Earth]: 'Geomancy',
+  [Element.Sonic]: 'Resonance', [Element.Zap]: 'Voltaics', [Element.Light]: 'Radiance', [Element.Dark]: 'Umbra',
+};
+
 /** The conjured-creature archetype each mechanical trait manifests as — the noun. */
 export const TRAIT_CREATURE: Record<Trait, string> = {
   [Trait.Grunt]: 'Wisp', [Trait.Swarm]: 'Sprites', [Trait.Tank]: 'Golem', [Trait.Runner]: 'Hound',

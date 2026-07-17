@@ -11,7 +11,7 @@ import { WALL_COST, WALL_HP, towerCost, tierGateCost, attuneCost } from '../src/
 import { Game, type Opponent, type Personality, type Recap } from '../src/game.ts';
 import type { Opener } from '../src/wave.ts';
 import {
-  ELEMENT_COLOR, ELEMENT_EMOJI, TRAIT_SHAPE, TRAIT_RADIUS,
+  ELEMENT_COLOR, ELEMENT_EMOJI, ELEMENT_ARCANA, TRAIT_SHAPE, TRAIT_RADIUS,
   creatureName, TRAIT_ROLE, type MobShape,
 } from './theme.ts';
 import { Effects } from './effects.ts';
@@ -135,7 +135,7 @@ export class GameView {
       const b = document.createElement('button'); b.textContent = text; b.title = title; b.className = 'wt-chip'; b.onclick = on; s.appendChild(b);
     };
     label('Attune');
-    for (let e = 0; e < N_ELEMENTS; e++) chip(ELEMENT_EMOJI[e as Element], ELEMENT_NAMES[e], () => { this.startingChoice = e as Element; this.newGame(); });
+    for (let e = 0; e < N_ELEMENTS; e++) chip(ELEMENT_EMOJI[e as Element], `${ELEMENT_NAMES[e]} — ${ELEMENT_ARCANA[e as Element]}`, () => { this.startingChoice = e as Element; this.newGame(); });
     label('Rank');
     for (let d = 1; d <= 5; d++) chip(String(d), `difficulty ${d}`, () => { this.diffChoice = d; this.newGame(); });
     label('Foe');
@@ -219,6 +219,7 @@ export class GameView {
   private refreshElementBtn(b: HTMLButtonElement, el: Element): void {
     const pl = this.game.sim.player;
     b.style.setProperty('--el', ELEMENT_COLOR[el]);
+    b.title = `${ELEMENT_NAMES[el]} ward — ${ELEMENT_ARCANA[el]}`;
     if (!pl.attuned[el]) {
       const cost = attuneCost(pl.attuneCount);
       b.innerHTML = `${ELEMENT_EMOJI[el]}<small>🔓${cost}</small>`;
@@ -250,7 +251,7 @@ export class GameView {
     if (this.game.state === 'wave') {
       if (this.verbTool && this.game.verb({ kind: this.verbTool, cell })) {
         const c = cellCenter(cell);
-        this.effects.shockwave(c.x, c.y, this.verbTool === 'overcharge' ? '#ffe14d' : this.verbTool === 'reveal' ? '#5fd0ff' : '#8fce77', 0.6);
+        this.effects.cast(c.x, c.y, this.verbTool === 'overcharge' ? '#ffe14d' : this.verbTool === 'reveal' ? '#5fd0ff' : '#8fce77');
         this.verbTool = null;
       }
       return;
@@ -474,15 +475,29 @@ export class GameView {
       if (occ.kind === OccKind.Wall) this.drawWall(x, y, fxToFloat(occ.hp) / fxToFloat(WALL_HP));
     }
 
-    // verb zones (under entities)
+    // verb zones (under entities) — a spell inscription: rune circle + a central glyph
     for (const z of this.game.sim.activeEffects()) {
       const col = z.kind === 'overcharge' ? '#ffe14d' : '#5fd0ff';
       const pulse = 0.5 + 0.5 * Math.sin(this.time * 6);
+      const zx = z.x * CELL, zy = z.y * CELL, zr = z.r * CELL;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.strokeStyle = col; ctx.globalAlpha = 0.25 + 0.25 * pulse; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(z.x * CELL, z.y * CELL, z.r * CELL, 0, TAU); ctx.stroke();
+      ctx.beginPath(); ctx.arc(zx, zy, zr, 0, TAU); ctx.stroke();
       ctx.globalAlpha = 0.06; ctx.fillStyle = col; ctx.fill();
+      // rotating inner summoning ring
+      ctx.globalAlpha = 0.3 + 0.2 * pulse; ctx.lineWidth = 1.2;
+      ctx.save(); ctx.translate(zx, zy); ctx.rotate(this.time * (z.kind === 'overcharge' ? 1.2 : -0.8));
+      ctx.setLineDash([4, 6]); ctx.beginPath(); ctx.arc(0, 0, zr * 0.6, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+      // central sigil: an empowering star (overcharge) or a scrying eye (reveal)
+      ctx.globalAlpha = 0.6 + 0.4 * pulse;
+      if (z.kind === 'overcharge') {
+        for (let i = 0; i < 4; i++) { const a = i * TAU / 4; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * 7, Math.sin(a) * 7); ctx.stroke(); }
+      } else {
+        ctx.beginPath(); ctx.moveTo(-8, 0); ctx.quadraticCurveTo(0, -5, 8, 0); ctx.quadraticCurveTo(0, 5, -8, 0); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, 2.4, 0, TAU); ctx.stroke();
+      }
+      ctx.restore();
       ctx.restore();
     }
 
@@ -531,31 +546,38 @@ export class GameView {
     const pulse = this.reduced ? 0.5 : 0.5 + 0.5 * Math.sin(this.time * 2.2);
     ctx.save();
     ctx.translate(c.x, c.y);
-    // glow
+    // halo
     ctx.globalCompositeOperation = 'lighter';
-    const halo = ctx.createRadialGradient(0, 0, 4, 0, 0, CELL * (0.9 + 0.15 * pulse));
+    const halo = ctx.createRadialGradient(0, 0, 4, 0, 0, CELL * (0.95 + 0.15 * pulse));
     halo.addColorStop(0, col); halo.addColorStop(1, 'transparent');
-    ctx.globalAlpha = 0.35 + 0.2 * pulse; ctx.fillStyle = halo;
+    ctx.globalAlpha = 0.32 + 0.2 * pulse; ctx.fillStyle = halo;
     ctx.beginPath(); ctx.arc(0, 0, CELL, 0, TAU); ctx.fill();
     ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
-    // rotating rune ring
-    ctx.rotate(this.reduced ? 0 : this.time * 0.5);
-    ctx.strokeStyle = col; ctx.globalAlpha = 0.5; ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 6]);
-    ctx.beginPath(); ctx.arc(0, 0, CELL * 0.5, 0, TAU); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.rotate(this.reduced ? 0 : -this.time * 0.5);
-    // faceted crystal (hexagon)
-    ctx.globalAlpha = 1;
+    // two counter-rotating rune rings
+    for (const [dir, rad, dash] of [[1, 0.52, [4, 7]], [-1, 0.44, [2, 5]]] as const) {
+      ctx.save(); ctx.rotate(this.reduced ? 0 : dir * this.time * 0.5);
+      ctx.strokeStyle = col; ctx.globalAlpha = 0.5; ctx.lineWidth = 1.4; ctx.setLineDash(dash as unknown as number[]);
+      ctx.beginPath(); ctx.arc(0, 0, CELL * rad, 0, TAU); ctx.stroke(); ctx.restore();
+    }
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    // the Heartstone's eye — an arcane lens that reddens as it fails
+    const ew = CELL * 0.4, eh = CELL * 0.24;
     ctx.beginPath();
-    for (let i = 0; i < 6; i++) { const a = -Math.PI / 2 + i * TAU / 6, r = CELL * 0.34; ctx[i ? 'lineTo' : 'moveTo'](Math.cos(a) * r, Math.sin(a) * r); }
-    ctx.closePath();
-    ctx.fillStyle = '#0c0d1e'; ctx.fill();
-    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
-    // inner light
-    ctx.fillStyle = col; ctx.globalAlpha = 0.4 + 0.4 * pulse;
-    ctx.beginPath(); ctx.arc(0, 0, CELL * 0.13, 0, TAU); ctx.fill();
+    ctx.moveTo(-ew, 0); ctx.quadraticCurveTo(0, -eh, ew, 0); ctx.quadraticCurveTo(0, eh, -ew, 0); ctx.closePath();
+    ctx.fillStyle = '#0a0b18'; ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.shadowColor = col; ctx.shadowBlur = 10; ctx.stroke(); ctx.shadowBlur = 0;
+    // iris + slit pupil
+    ctx.fillStyle = col; ctx.globalAlpha = 0.5 + 0.4 * pulse;
+    ctx.beginPath(); ctx.arc(0, 0, eh * 0.82, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1; ctx.fillStyle = '#06060f';
+    ctx.beginPath(); ctx.ellipse(0, 0, eh * 0.22, eh * 0.7, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.globalAlpha = 0.7;
+    ctx.beginPath(); ctx.arc(-eh * 0.25, -eh * 0.25, eh * 0.12, 0, TAU); ctx.fill();
+    // fracture lines when the Heart is failing
+    if (frac < 0.5) {
+      ctx.globalAlpha = 1; ctx.strokeStyle = '#ff5a4d'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(ew * 0.3, -eh * 0.6); ctx.lineTo(ew * 0.5, 0); ctx.lineTo(ew * 0.35, eh * 0.7); ctx.stroke();
+    }
     ctx.restore();
   }
 
@@ -564,7 +586,8 @@ export class GameView {
     const c = cellCenter(t.cell);
     const col = ELEMENT_COLOR[t.element];
     const range = fxToFloat(t.range) * CELL;
-    // range aura when building / hovering this tower's cell
+    const bob = this.reduced ? 0 : Math.sin(this.time * 2 + t.id) * 1.5;
+    // range aura when building
     if (this.game.state === 'build') {
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
       ctx.fillStyle = col; ctx.globalAlpha = 0.04;
@@ -574,32 +597,39 @@ export class GameView {
       ctx.restore();
     }
     ctx.save();
-    ctx.translate(c.x, c.y);
-    // glow
-    ctx.shadowColor = col; ctx.shadowBlur = 14;
-    // sigil hexagon
-    const r = CELL * 0.3;
-    ctx.beginPath();
-    for (let i = 0; i < 6; i++) { const a = -Math.PI / 2 + i * TAU / 6; ctx[i ? 'lineTo' : 'moveTo'](Math.cos(a) * r, Math.sin(a) * r); }
-    ctx.closePath();
+    ctx.translate(c.x, c.y + bob);
+    // floating shadow
+    ctx.save(); ctx.globalAlpha = 0.22; ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(0, CELL * 0.36 - bob, CELL * 0.22, CELL * 0.08, 0, 0, TAU); ctx.fill(); ctx.restore();
+    // outer binding rune-ring (rotating), the sigil that holds the ward
+    const rr = CELL * 0.34;
+    ctx.save(); ctx.rotate(this.reduced ? 0 : this.time * 0.6);
+    ctx.strokeStyle = col; ctx.globalAlpha = 0.55; ctx.lineWidth = 1.4;
+    ctx.setLineDash([3, 5]); ctx.beginPath(); ctx.arc(0, 0, rr, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+    ctx.globalAlpha = 0.8;
+    for (let i = 0; i < 6; i++) { const a = i * TAU / 6; ctx.beginPath(); ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr); ctx.lineTo(Math.cos(a) * (rr + 4), Math.sin(a) * (rr + 4)); ctx.stroke(); }
+    ctx.restore();
+    // bound orb
+    ctx.shadowColor = col; ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.arc(0, 0, CELL * 0.22, 0, TAU);
     ctx.fillStyle = '#0e0f22'; ctx.fill();
-    ctx.lineWidth = 2.2; ctx.strokeStyle = col; ctx.stroke();
+    ctx.lineWidth = 2; ctx.strokeStyle = col; ctx.stroke();
     ctx.shadowBlur = 0;
-    // element core dot
-    ctx.fillStyle = col;
-    ctx.beginPath(); ctx.arc(0, 0, CELL * 0.1, 0, TAU); ctx.fill();
-    // tier crystals (stacked above)
-    for (let i = 0; i < t.tier; i++) { ctx.fillRect(-1.5 + (i - (t.tier - 1) / 2) * 6, -r - 6, 3, 4); }
-    // anti-air: orbiting rune; detection: scanning arc
+    drawElementGlyph(ctx, t.element, CELL * 0.12, col);
+    // tier satellites orbiting
+    for (let i = 0; i < t.tier; i++) {
+      const a = this.time * 1.4 + i * TAU / t.tier;
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(Math.cos(a) * (rr + 3), Math.sin(a) * (rr + 3), 2.2, 0, TAU); ctx.fill();
+    }
+    // anti-air: a bright rune on a high orbit; detection: a slow scrying arc
     if (t.flags.antiAir) {
-      const a = this.time * 3;
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath(); ctx.arc(Math.cos(a) * (r + 5), Math.sin(a) * (r + 5), 2, 0, TAU); ctx.fill();
+      const a = -this.time * 2.4;
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(Math.cos(a) * (rr + 7), Math.sin(a) * (rr + 7), 1.8, 0, TAU); ctx.fill();
     }
     if (t.flags.detection) {
       const a = this.time * 2;
       ctx.strokeStyle = '#ffe8a3'; ctx.globalAlpha = 0.7; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(0, 0, r + 4, a, a + 1); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, rr - 3, a, a + 1.1); ctx.stroke();
     }
     ctx.restore();
   }
@@ -654,6 +684,42 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 }
 
 const DARK_INK = '#0c0d1e';
+
+/** Draw a small element rune centred at the origin (used on the bound wardens). */
+function drawElementGlyph(ctx: CanvasRenderingContext2D, element: Element, s: number, color: string): void {
+  ctx.save();
+  ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  switch (element) {
+    case Element.Fire:
+      ctx.beginPath(); ctx.moveTo(0, -s);
+      ctx.quadraticCurveTo(s * 0.75, -s * 0.15, s * 0.35, s * 0.7);
+      ctx.quadraticCurveTo(s * 0.5, s * 0.1, 0, s * 0.85);
+      ctx.quadraticCurveTo(-s * 0.5, s * 0.1, -s * 0.35, s * 0.7);
+      ctx.quadraticCurveTo(-s * 0.75, -s * 0.15, 0, -s); ctx.fill();
+      break;
+    case Element.Ice:
+      for (let i = 0; i < 3; i++) { const a = i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(-Math.cos(a) * s, -Math.sin(a) * s); ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s); ctx.stroke(); }
+      break;
+    case Element.Earth:
+      ctx.beginPath(); ctx.moveTo(0, -s); ctx.lineTo(s, 0); ctx.lineTo(0, s); ctx.lineTo(-s, 0); ctx.closePath(); ctx.fill();
+      break;
+    case Element.Sonic:
+      for (const rr of [0.55, 0.95]) { ctx.beginPath(); ctx.arc(-s * 0.3, 0, s * rr, -0.7, 0.7); ctx.stroke(); }
+      break;
+    case Element.Zap:
+      ctx.beginPath(); ctx.moveTo(s * 0.3, -s); ctx.lineTo(-s * 0.4, s * 0.1); ctx.lineTo(s * 0.05, s * 0.1); ctx.lineTo(-s * 0.3, s); ctx.lineTo(s * 0.5, -s * 0.2); ctx.lineTo(0, -s * 0.2); ctx.closePath(); ctx.fill();
+      break;
+    case Element.Light:
+      ctx.beginPath(); ctx.arc(0, 0, s * 0.4, 0, TAU); ctx.fill();
+      for (let i = 0; i < 8; i++) { const a = i * TAU / 8; ctx.beginPath(); ctx.moveTo(Math.cos(a) * s * 0.6, Math.sin(a) * s * 0.6); ctx.lineTo(Math.cos(a) * s, Math.sin(a) * s); ctx.stroke(); }
+      break;
+    case Element.Dark:
+      ctx.beginPath(); ctx.arc(s * 0.2, 0, s, Math.PI * 0.5, Math.PI * 1.5);
+      ctx.arc(-s * 0.15, 0, s * 0.85, Math.PI * 1.5, Math.PI * 0.5, true); ctx.closePath(); ctx.fill();
+      break;
+  }
+  ctx.restore();
+}
 
 /**
  * Draw a conjured creature centred at the current origin. Shared by the board (per mob)
