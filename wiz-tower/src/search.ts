@@ -17,7 +17,7 @@ import { fxToFloat, Rng } from './fx.ts';
 import { Element, N_ELEMENTS, typeMult } from './element.ts';
 import { Trait, type Cell } from './types.ts';
 import type { Observation, DecisionContext, Metrics } from './types.ts';
-import { budgetFor, groupCost, mobStats } from './config.ts';
+import { budgetFor, groupCost, mobStats, traitUnlocked } from './config.ts';
 import type { Attacker, Opener, Commit, Spawn, MobGroup, Wave } from './wave.ts';
 import { PlanAttacker } from './wave.ts';
 import type { Sim } from './sim.ts';
@@ -84,6 +84,8 @@ export class SearchAttacker implements Attacker {
   committed: Commit[][] = [];
   /** Set by the L3 Strategist before open()/commit() to steer this call; null = plain L2. */
   bias: WaveBias | null = null;
+  private curWave = 1;
+  private curDiff = 3;
 
   constructor(private readonly sim: Sim, opts: SearchOptions = {}) {
     this.rng = new Rng(opts.seed ?? 0xa11ce5eedn);
@@ -97,10 +99,11 @@ export class SearchAttacker implements Attacker {
 
   open(obs: Observation): { opener: Opener; pool: number } {
     const wave = obs.wave > 0 ? obs.wave : Math.max(1, this.sim.waveNumber());
-    const budget = budgetFor(wave);
+    const diff = obs.diff;
+    this.curWave = wave; this.curDiff = diff;
+    const budget = budgetFor(wave, diff);
     const pool = Math.round(budget * this.reserveFrac);
     const openerBudget = budget - pool;
-    const diff = obs.diff;
     const read = this.readBoard(obs);
     this.committed = [];
 
@@ -126,6 +129,7 @@ export class SearchAttacker implements Attacker {
    */
   commit(ctx: DecisionContext): Commit[] {
     if (ctx.reserveLeft <= 0) return [];
+    this.curWave = ctx.obs.wave || this.curWave; this.curDiff = ctx.obs.diff;
     const read = this.readBoard(ctx.obs);
     const cands = this.sampleCommits(read, ctx.reserveLeft);
 
@@ -147,7 +151,7 @@ export class SearchAttacker implements Attacker {
   /** Play `opener` (with an unused reserve pool) on a fork and score the outcome. */
   private evaluateOpener(opener: Opener, pool: number, wave: number, diff: number): number {
     const fork = this.sim.clone();
-    const plan: Wave = { budget: budgetFor(wave), diff, opener, reserve: { pool, points: [] } };
+    const plan: Wave = { budget: budgetFor(wave, diff), diff, opener, reserve: { pool, points: [] } };
     // A no-op attacker for the rollout: executes the opener, commits nothing (the reserve's
     // value is searched live at commit() time, not here — this ranks openers on their own).
     const m = playWave(fork, new PlanAttacker(plan), wave, diff);
@@ -281,6 +285,7 @@ export class SearchAttacker implements Attacker {
   private sampleTrait(airGap: boolean, detGap: boolean): Trait {
     const boost = this.bias?.traitBoost;
     const w = ALL_TRAITS.map((t) => {
+      if (!traitUnlocked(t, this.curWave, this.curDiff)) return 0; // roster escalates by wave
       let base = 1;
       if (t === Trait.Flier) base = airGap ? 4 : 1;
       else if (t === Trait.Shade) base = detGap ? 4 : 1;

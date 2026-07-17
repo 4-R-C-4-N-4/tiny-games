@@ -88,17 +88,23 @@ describe('Game controller', () => {
   });
 
   it('personality changes how the search plays (same seed, different objective)', () => {
+    // A real defense (some kills happen, the wave isn't a total wipe) so that leak-max
+    // (aggressive) and bounty-denial (economic) objectives actually diverge.
     const play = (personality: 'aggressive' | 'economic') => {
-      const g = new Game({ starting: Element.Fire, difficulty: 3, seed: 77n, personality, config: cfg });
-      g.buildTower({ x: 3, y: 6 }, Element.Fire, Tier.T2, NodeKind.Turret);
-      g.startWave();
-      let guard = 0;
-      while (g.state === 'wave' && guard++ < 100) g.update(5000);
-      return g.lastMetrics!;
+      const g = new Game({ starting: Element.Fire, difficulty: 2, seed: 77n, personality, config: cfg });
+      g.attune(Element.Sonic);
+      for (const [x, y] of [[1, 6], [3, 6], [5, 6], [2, 8], [4, 8]] as const) g.buildTower({ x, y }, Element.Fire, Tier.T2, NodeKind.Turret);
+      g.buildTower({ x: 3, y: 4 }, Element.Sonic, Tier.T1, NodeKind.Turret); // anti-air
+      const out: unknown[] = [];
+      for (let w = 0; w < 2 && g.state !== 'gameover'; w++) {
+        g.startWave();
+        let guard = 0;
+        while (g.state === 'wave' && guard++ < 200) g.update(5000);
+        if (g.lastMetrics) out.push(g.lastMetrics);
+      }
+      return out;
     };
-    const aggro = play('aggressive');
-    const econ = play('economic');
     // Different objective weightings → the search commits different waves → different metrics.
-    expect(JSON.stringify(aggro)).not.toBe(JSON.stringify(econ));
+    expect(JSON.stringify(play('aggressive'))).not.toBe(JSON.stringify(play('economic')));
   });
 });

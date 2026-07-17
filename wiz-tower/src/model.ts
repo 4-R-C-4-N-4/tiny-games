@@ -120,7 +120,7 @@ export class ModelAttacker implements Attacker {
   open(obs: Observation): { opener: Opener; pool: number } {
     this.committed = [];
     const wave = obs.wave > 0 ? obs.wave : Math.max(1, this.sim.waveNumber());
-    const budget = budgetFor(wave);
+    const budget = budgetFor(wave, obs.diff);
     const pool = Math.round(budget * this.reserveFrac);
     const openerBudget = budget - pool;
 

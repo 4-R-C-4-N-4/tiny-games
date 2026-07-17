@@ -13,20 +13,20 @@ function playMind(seed: bigint, waves: number) {
   const g = new Game({ starting: Element.Fire, difficulty: 3, seed, opponent: 'strategist', config: cfg });
   const intents: string[] = [];
   const fliers: number[] = [];
+  const cells = [[3, 7], [2, 7], [4, 7], [3, 9], [2, 9], [4, 9], [3, 10], [3, 6], [2, 6], [4, 6], [1, 7], [5, 7]] as const;
   for (let w = 0; w < waves && g.state !== 'gameover'; w++) {
-    // Reinforce a pure-Fire defense on the LEFT — never any anti-air/detection.
-    g.buildTower({ x: 1, y: 5 + w }, Element.Fire, Tier.T1, NodeKind.Turret);
-    g.buildTower({ x: 2, y: 6 }, Element.Fire, Tier.T1, NodeKind.Turret);
+    // A funnel + a wall of pure-Fire wards — strong on the ground, but NEVER any anti-air or
+    // detection, so the mind's air/stealth escalation has a gap to read and exploit.
+    if (w === 0) for (let x = 0; x < g.sim.grid.w; x++) if (x !== 3) g.buildWall({ x, y: 8 });
+    for (const [x, y] of cells) { if (g.currency < 20) break; g.buildTower({ x, y }, Element.Fire, Tier.T1, NodeKind.Turret); }
     g.startWave();
     intents.push(g.attackerIntent);
+    // Count Drakes from the telegraph (set at scry, survives a mid-wave game-over) + reserve.
+    let f = 0;
+    for (const s of g.telegraph) if (s.group.trait === Trait.Flier) f += s.group.count;
     let guard = 0;
     while (g.state === 'wave' && guard++ < 300) g.update(5000);
-    const rc = g.lastRecap;
-    let f = 0;
-    if (rc) {
-      for (const s of rc.telegraph) if (s.group.trait === Trait.Flier) f += s.group.count;
-      for (const cs of rc.committed) for (const c of cs) if (c.group.trait === Trait.Flier) f += c.group.count;
-    }
+    for (const cs of g.attacker.committed ?? []) for (const c of cs) if (c.group.trait === Trait.Flier) f += c.group.count;
     fliers.push(f);
   }
   return { intents, fliers, wave: g.wave, coreHp: fxToFloat(g.coreHp()), currency: g.currency, state: g.state };

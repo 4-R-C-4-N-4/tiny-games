@@ -33,8 +33,8 @@ export const DEFAULT_CONFIG: Omit<Config, 'seed'> & { seed: bigint } = {
   gridW: 7,
   gridH: 12,
   coreHp: fx(100),
-  startCurrency: 120,
-  waveStipend: 25,
+  startCurrency: 140,
+  waveStipend: 20, // small passive income; most currency must come from kills (bounties)
   waveSeconds: fx(8),
 };
 
@@ -78,9 +78,10 @@ export function tierGateCost(e: Element, tier: Tier, starting: Element): number 
   return 80; // T3
 }
 
-/** Escalating attunement price (§3.4): rises with how many extra elements are attuned. */
+/** Escalating attunement price (§3.4): rises with how many extra elements are attuned.
+ *  Kept modest so teching a counter (e.g. anti-air before fliers) doesn't cost a whole wave. */
 export function attuneCost(extraCount: number): number {
-  return 40 + 25 * extraCount;
+  return 25 + 15 * extraCount;
 }
 
 // ---- tower stats by (element, tier, kind) -----------------------------------------
@@ -154,9 +155,38 @@ export function groupCost(trait: Trait, count: number): number {
   return mobStats(trait).cost * count;
 }
 
-/** Attacker point budget B(wave), scaling with wave number (§3.4). */
-export function budgetFor(wave: number): number {
-  return 60 + 20 * wave;
+/**
+ * Attacker point budget B(wave, diff) (§3.4). SUPER-LINEAR in the wave and scaled by Rank,
+ * so the assault outpaces the player's income: bounties refund only a FRACTION of a mob's
+ * cost, and the stipend is small, so a linearly-growing budget would let a clearing player
+ * compound past the threat. The quadratic term is the difficulty ramp.
+ */
+export function budgetFor(wave: number, diff = 3): number {
+  const base = 36 + 16 * wave + 5 * wave * wave; // e.g. w1 57, w5 241, w10 696
+  const diffMul = 0.6 + 0.14 * diff; //             R1 0.74 · R3 1.02 · R5 1.30
+  return Math.round(base * diffMul);
+}
+
+/** Fraction of a slain mob's point cost paid back to the player as bounty. Below 1 so a
+ *  full clear does NOT refund the attacker's whole budget — the core lever for the ramp. */
+export const BOUNTY_FRAC = 0.6;
+
+/** Kill bounty for a mob (§3.4) — a fraction of its point cost, at least 1. */
+export function bounty(trait: Trait): number {
+  return Math.max(1, Math.round(mobStats(trait).cost * BOUNTY_FRAC));
+}
+
+/** The wave a threat type becomes available to the attacker at Rank 3. Composition escalates
+ *  (ground first; air, stealth, breakers, menders later) so the opener isn't an unanswerable
+ *  first-wave air-rush — you get time to tech the counters as the roster opens up. */
+const TRAIT_UNLOCK: Record<Trait, number> = {
+  [Trait.Grunt]: 1, [Trait.Swarm]: 1, [Trait.Tank]: 2, [Trait.Runner]: 2,
+  [Trait.Flier]: 3, [Trait.Shielded]: 4, [Trait.Shade]: 5, [Trait.Breaker]: 5, [Trait.Mender]: 6,
+};
+
+/** Is `trait` available to the attacker on `wave` at `diff`? Higher Rank opens it earlier. */
+export function traitUnlocked(trait: Trait, wave: number, diff = 3): boolean {
+  return wave >= Math.max(1, TRAIT_UNLOCK[trait] + (3 - diff));
 }
 
 // ---- in-wave player verbs (§2) ----------------------------------------------------

@@ -21,7 +21,7 @@ import {
 } from './types.ts';
 import {
   type Config, WALL_COST, WALL_HP, refund, towerCost, towerStats, mobStats,
-  BREAKER_WALL_DPS, MOB_WALL_DPS, MENDER_HEAL_RADIUS, SPLASH_RADIUS, leakDamage, budgetFor,
+  BREAKER_WALL_DPS, MOB_WALL_DPS, MENDER_HEAL_RADIUS, SPLASH_RADIUS, leakDamage, budgetFor, bounty,
   VERB_RADIUS, OVERCHARGE_MULT, OVERCHARGE_SECS, REVEAL_SECS, REINFORCE_HP,
 } from './config.ts';
 import type { Opener, Commit } from './wave.ts';
@@ -254,7 +254,7 @@ export class Sim {
     this.waveActive = true;
     this.waveNum = wave;
     this.diff = diff;
-    this.budget = budgetFor(wave);
+    this.budget = budgetFor(wave, diff);
     this.reserveLeft = reservePool;
     this.waveBaseTick = this.tick;
     this.metrics = emptyMetrics();
@@ -283,7 +283,7 @@ export class Sim {
   prepareWave(wave: number, diff: number): void {
     this.waveNum = wave;
     this.diff = diff;
-    this.budget = budgetFor(wave);
+    this.budget = budgetFor(wave, diff);
   }
 
   /** The wave number currently announced (0 before the first prepareWave/beginWave). */
@@ -563,9 +563,9 @@ export class Sim {
   private resolveDeaths(): void {
     for (const m of this.mobs) {
       if (!m.alive || m.hp > 0) continue;
-      const bounty = mobStats(m.trait).cost;
-      this.player.currency += bounty;
-      this.metrics.currencyDelta += bounty;
+      const b = bounty(m.trait);
+      this.player.currency += b;
+      this.metrics.currencyDelta += b;
       this.killMob(m);
     }
   }

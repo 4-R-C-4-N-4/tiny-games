@@ -14,7 +14,7 @@ import { Sim } from './sim.ts';
 import { SearchAttacker, type SearchOptions, type SearchWeights } from './search.ts';
 import { StrategistAttacker } from './strategist.ts';
 import { ModelAttacker, type Weights } from './model.ts';
-import weightsJson from './weights.json';
+import weightsJson from './weights.json' with { type: 'json' };
 import type { Attacker, Opener, Commit } from './wave.ts';
 
 const DISTILLED_WEIGHTS = weightsJson as unknown as Weights;

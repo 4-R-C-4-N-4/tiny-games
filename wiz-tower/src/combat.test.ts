@@ -3,7 +3,7 @@ import { Sim } from './sim.ts';
 import { Element } from './element.ts';
 import { Trait, Tier, NodeKind, OccKind } from './types.ts';
 import { fx } from './fx.ts';
-import { DEFAULT_CONFIG, mobStats, leakDamage } from './config.ts';
+import { DEFAULT_CONFIG, mobStats, bounty, leakDamage } from './config.ts';
 
 const cfg = { ...DEFAULT_CONFIG };
 
@@ -48,7 +48,7 @@ describe('towers: acquire, fire, typing, bounty', () => {
     runUntil(s, (s) => s.liveMobs().length === 0);
     expect(s.coreHp()).toBe(fx(100)); // never leaked
     expect(s.metricsSnapshot().dpsUtil[Element.Fire]).toBeGreaterThan(0);
-    expect(s.player.currency).toBe(currencyBefore + mobStats(Trait.Grunt).cost); // bounty
+    expect(s.player.currency).toBe(currencyBefore + bounty(Trait.Grunt)); // bounty (fraction of cost)
   });
 
   it('a weak off-type turret lets a tank leak (neutral/​resisted DPS)', () => {
