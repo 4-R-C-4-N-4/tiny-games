@@ -79,6 +79,19 @@ export function creatureName(element: Element, trait: Trait): string {
   return `${ELEMENT_SCHOOL[element]} ${TRAIT_CREATURE[trait]}`;
 }
 
+/** How to defend against each archetype — shown in the scry's threat brief. */
+export const TRAIT_COUNTER: Record<Trait, string> = {
+  [Trait.Grunt]: 'a plain spirit — any ward will do.',
+  [Trait.Swarm]: 'many frail motes — splash wards (✷ Fire/Zap) shred a cluster at once.',
+  [Trait.Tank]: 'immense vigour — needs sustained fire or a killbox of wards.',
+  [Trait.Runner]: 'very fast — slow it (~ Ice) or line the lane with wards.',
+  [Trait.Flier]: 'flies over walls — ONLY anti-air wards (↑ Sonic/Zap) can touch it.',
+  [Trait.Shade]: 'invisible to wards until you cast Reveal (👁) or field detection (◉ Light).',
+  [Trait.Shielded]: 'a ward soaks its first few hits — high per-hit damage punches through.',
+  [Trait.Mender]: 'heals nearby summons — focus it down first, or the wave never dies.',
+  [Trait.Breaker]: 'smashes your walls to breach a shortcut — kill it before it opens a lane.',
+};
+
 /** Silhouette shape per trait — the renderer draws these; identity is shape + element glow. */
 export type MobShape = 'wisp' | 'swarm' | 'golem' | 'dart' | 'wing' | 'shade' | 'ward' | 'rune' | 'maul';
 

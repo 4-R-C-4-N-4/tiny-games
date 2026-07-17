@@ -12,7 +12,7 @@ import { Game, type Opponent, type Personality, type Recap } from '../src/game.t
 import type { Opener } from '../src/wave.ts';
 import {
   ELEMENT_COLOR, ELEMENT_EMOJI, ELEMENT_ARCANA, ELEMENT_FLAVOR, TRAIT_SHAPE, TRAIT_RADIUS,
-  creatureName, TRAIT_ROLE, type MobShape,
+  creatureName, TRAIT_ROLE, TRAIT_CREATURE, TRAIT_COUNTER, type MobShape,
 } from './theme.ts';
 import { Effects } from './effects.ts';
 
@@ -531,20 +531,32 @@ export class GameView {
   private drawTelegraph(): void {
     const t = this.el.telegraph;
     const w = this.game.sim.grid.w;
-    t.classList.remove('wt-scry');
+    t.classList.toggle('wt-scry', this.game.state === 'build' && this.game.planned);
     if (this.game.state === 'build' && this.game.planned) {
-      t.style.display = 'block'; t.classList.add('wt-scry');
+      t.style.display = 'block';
       const intent = this.game.attackerIntent;
-      t.innerHTML = (intent ? `<i class="wt-intent">${intent}</i>` : '') + '<b>Scried:</b> ' + formatTelegraph(this.game.telegraph, w);
+      this.setHTML(t, (intent ? `<i class="wt-intent">${intent}</i>` : '')
+        + '<b>Scried:</b> ' + formatTelegraph(this.game.telegraph, w) + this.threatBrief());
     } else if (this.game.state === 'build' && this.game.lastRecap) {
       t.style.display = 'block';
-      t.innerHTML = formatRecap(this.game.lastRecap, w);
+      this.setHTML(t, formatRecap(this.game.lastRecap, w));
     } else if (this.game.state === 'wave') {
       t.style.display = 'block';
       const n = this.game.verbsLeft;
       const hint = this.verbTool ? `tap the board to <b>${this.verbTool}</b>` : `${n} tactical tap${n === 1 ? '' : 's'} left`;
-      t.innerHTML = `<em>${hint}</em>`;
+      this.setHTML(t, `<em>${hint}</em>`);
     } else t.style.display = 'none';
+  }
+
+  /** A per-wave "know your foe" brief: each distinct summon type in the scried opener and
+   *  how to defend against it. Plain Wisps are only listed if they're the whole wave. */
+  private threatBrief(): string {
+    const traits = new Set(this.game.telegraph.map((s) => s.group.trait));
+    const list = [...traits]
+      .filter((tr) => tr !== Trait.Grunt || traits.size === 1)
+      .map((tr) => `<div class="wt-threat"><b>${TRAIT_CREATURE[tr]}</b> — ${TRAIT_COUNTER[tr]}</div>`)
+      .join('');
+    return list ? `<div class="wt-brief">${list}</div>` : '';
   }
 
   private showGameOver(): void {
@@ -776,9 +788,15 @@ export class GameView {
       ctx.beginPath(); ctx.ellipse(0, lift + 5 - bob, r * 0.75, r * 0.26, 0, 0, TAU); ctx.fill();
       ctx.restore();
     }
-    if (m.flags.stealth && !this.revealed(m)) ctx.globalAlpha = 0.26 + 0.12 * Math.sin(this.time * 8 + m.id);
+    const hidden = m.flags.stealth && !this.revealed(m);
+    if (hidden) ctx.globalAlpha = 0.36 + 0.12 * Math.sin(this.time * 8 + m.id); // a visible ghost, still untargetable
     ctx.shadowColor = col; ctx.shadowBlur = 10;
     paintCreature(ctx, r, col, m.element, m.trait, this.time + m.id * 0.7, { warded: m.shieldHits > 0 });
+    if (hidden) { // a cloaking veil ring — reads as "here but untargetable until revealed"
+      ctx.shadowBlur = 0; ctx.globalAlpha = 0.6; ctx.setLineDash([2, 3]);
+      ctx.strokeStyle = '#c9a2ff'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(0, 0, r + 3, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+    }
     ctx.restore();
 
     // HP arc over the head (follows the flier's lift)
