@@ -17,7 +17,7 @@ import { fxToFloat, Rng } from './fx.ts';
 import { Element, N_ELEMENTS, typeMult } from './element.ts';
 import { Trait, type Cell } from './types.ts';
 import type { Observation, DecisionContext, Metrics } from './types.ts';
-import { budgetFor, groupCost, mobStats, traitUnlocked } from './config.ts';
+import { budgetFor, groupCost, mobStats, traitUnlocked, waveCountScale, waveGroupBonus } from './config.ts';
 import type { Attacker, Opener, Commit, Spawn, MobGroup, Wave } from './wave.ts';
 import { PlanAttacker } from './wave.ts';
 import type { Sim } from './sim.ts';
@@ -213,7 +213,7 @@ export class SearchAttacker implements Attacker {
   private sampleOpener(read: BoardRead, budget: number): Opener {
     const opener: Spawn[] = [];
     let remaining = budget;
-    const nGroups = 1 + this.rng.below(this.maxGroups);
+    const nGroups = 1 + this.rng.below(this.maxGroups + waveGroupBonus(this.curWave));
     for (let g = 0; g < nGroups; g++) {
       const picked = this.sampleGroup(read, remaining);
       if (!picked) continue;
@@ -234,7 +234,7 @@ export class SearchAttacker implements Attacker {
     for (let i = 0; i < this.commitCandidates; i++) {
       const commit: Commit[] = [];
       let remaining = budget;
-      const n = 1 + this.rng.below(2); // 1–2 groups per commit
+      const n = 1 + this.rng.below(2 + waveGroupBonus(this.curWave)); // 1–2 groups, wider late
       for (let g = 0; g < n; g++) {
         const picked = this.sampleGroup(read, remaining);
         if (!picked) continue;
@@ -248,7 +248,7 @@ export class SearchAttacker implements Attacker {
       for (let i = 0; i < 2; i++) {
         const gate = read.walls[this.rng.below(read.walls.length)];
         const cost1 = mobStats(Trait.Breaker).cost;
-        const maxCount = Math.min(TRAIT_MAX_COUNT[Trait.Breaker], Math.floor(budget / cost1));
+        const maxCount = Math.min(TRAIT_MAX_COUNT[Trait.Breaker] * waveCountScale(this.curWave), Math.floor(budget / cost1));
         if (maxCount < 1) break;
         const count = 1 + this.rng.below(maxCount);
         const element = this.sampleWeighted(this.elemWeights(read));
@@ -267,7 +267,9 @@ export class SearchAttacker implements Attacker {
     if (cost1 > budget) return null;
     const element = this.sampleWeighted(this.elemWeights(read));
     const x = this.sampleWeighted(this.colWeights(read));
-    const cap = Math.min(TRAIT_MAX_COUNT[trait], Math.floor(budget / cost1));
+    // Group-size cap grows with the wave so the (quadratic) budget is actually spendable.
+    const maxCount = TRAIT_MAX_COUNT[trait] * waveCountScale(this.curWave);
+    const cap = Math.min(maxCount, Math.floor(budget / cost1));
     if (cap < 1) return null;
     const count = 1 + this.rng.below(cap);
     return { x, group: { element, trait, count } };

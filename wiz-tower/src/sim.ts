@@ -22,6 +22,7 @@ import {
 import {
   type Config, WALL_COST, WALL_HP, refund, towerCost, towerStats, mobStats,
   BREAKER_WALL_DPS, MOB_WALL_DPS, MENDER_HEAL_RADIUS, SPLASH_RADIUS, leakDamage, budgetFor, bounty, harvestBonus,
+  waveMobScale, waveLeakScale,
   VERB_RADIUS, OVERCHARGE_MULT, OVERCHARGE_SECS, REVEAL_SECS, REINFORCE_HP,
 } from './config.ts';
 import type { Opener, Commit } from './wave.ts';
@@ -344,7 +345,10 @@ export class Sim {
   /** Schedule a group to STREAM in one mob at a time (staggered), so a group reads as a
    *  file of creatures marching, not a single stack of overlapping sprites at one point. */
   private scheduleGroup(baseTick: number, x: number, element: Element, trait: Trait, count: number): void {
-    const gap = 6; // ticks between successive bodies (~0.2s)
+    // Stagger the file, but bound the whole group's spawn window to ~2s so a big late-wave
+    // group still arrives as a dense flood, not a minutes-long trickle. gap ∈ [1, 6] ticks.
+    const WINDOW = 60; // ticks (~2s at 30Hz)
+    const gap = count > 1 ? Math.max(1, Math.min(6, Math.floor(WINDOW / count))) : 6;
     for (let k = 0; k < count; k++) {
       this.pending.push({ tick: baseTick + k * gap, x, element, trait, count: 1 });
     }
@@ -355,6 +359,9 @@ export class Sim {
     const st = mobStats(trait);
     const spawnCell: Cell = { x, y: 0 };
     const center = cellCenter(spawnCell);
+    // Late-wave toughness: spawned mobs get spongier so the assault scales without needing an
+    // un-renderable body count (waveNum is 0 in unit tests → scale 1, no effect there).
+    const hp = fxMul(st.hp, waveMobScale(this.waveNum));
     for (let i = 0; i < count; i++) {
       const id = this.freeMobIds.pop() ?? this.mobs.length;
       // Small deterministic per-mob offset so a clump never renders as one stacked sprite
@@ -364,7 +371,7 @@ export class Sim {
       const mob: Mob = {
         id, element, trait,
         pos: { x: center.x + jx, y: center.y + jy },
-        hp: st.hp, maxHp: st.hp, speed: st.speed,
+        hp, maxHp: hp, speed: st.speed,
         flags: { ...st.flags }, shieldHits: st.shieldHits,
         entryX: x, alive: true, slowMul: FX_ONE, damageTaken: 0, breachCell: null, lastHitElement: null,
       };
@@ -456,8 +463,9 @@ export class Sim {
   }
 
   private leak(m: Mob): void {
-    this._coreHp -= leakDamage(m.trait);
-    this.metrics.leakedHp += leakDamage(m.trait);
+    const dmg = fxMul(leakDamage(m.trait), waveLeakScale(this.waveNum)); // late leaks bite harder
+    this._coreHp -= dmg;
+    this.metrics.leakedHp += dmg;
     this.metrics.fireMisalloc += m.damageTaken; // fire invested in a mob that leaked anyway
     if (this.metrics.timeToFirstLeak < 0) {
       this.metrics.timeToFirstLeak = fxMul((this.tick - this.waveBaseTick) << FX_SHIFT, this.cfg.dt);

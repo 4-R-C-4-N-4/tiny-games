@@ -6,7 +6,7 @@
  * Everything a game rule multiplies is fixed-point (Fx); costs/bounties are integer
  * points (the currency/budget unit, `i64` in lib.rs).
  */
-import { fx, fxRatio, fxMul, type Fx } from './fx.ts';
+import { fx, fxRatio, fxMul, FX_ONE, type Fx } from './fx.ts';
 import { Element } from './element.ts';
 import { Trait, Tier, NodeKind, TargetPriority, type TowerFlags, type MobFlags } from './types.ts';
 
@@ -168,6 +168,33 @@ export function budgetFor(wave: number, diff = 3): number {
   const base = 34 + 15 * wave + 4 * wave * wave; // e.g. w1 53, w5 209, w10 584
   const diffMul = 0.62 + 0.13 * diff; //            R1 0.75 · R3 1.01 · R5 1.27
   return Math.round(base * diffMul);
+}
+
+// ---- late-wave escalation --------------------------------------------------------------
+// The attacker's per-wave point budget grows quadratically, but its spawn THROUGHPUT (group
+// sizes, group count) was capped at early-wave values — so past ~w5 the budget was almost
+// entirely unspendable and a strong board faced a fixed trickle forever. These scalars let
+// the assault's body-count, toughness, and bite grow with the wave so the budget becomes
+// real and any fixed board is eventually overwhelmed. Ramp starts after w4: early waves are
+// unchanged. Toughness (not sheer count) is the main lever, so a big wave arrives as fewer,
+// spongier bodies — bounded for render/perf — rather than an un-renderable swarm.
+function waveRamp(wave: number): number { return Math.max(0, wave - 4); }
+
+/** Multiplier on the attacker's group-size caps (more bodies per group, capped for perf). */
+export function waveCountScale(wave: number): number {
+  return Math.min(3, 1 + Math.floor(waveRamp(wave) / 7)); // w4:1 w11:2 w18+:3
+}
+/** Extra spawn groups an opener/commit may field at higher waves (a wider assault). */
+export function waveGroupBonus(wave: number): number {
+  return Math.min(2, Math.floor(waveRamp(wave) / 10)); // w4:0 w14:1 w24+:2
+}
+/** Toughness multiplier applied to spawned-mob HP — the primary late-wave threat lever. */
+export function waveMobScale(wave: number): Fx {
+  return Math.round((1 + 0.18 * waveRamp(wave)) * FX_ONE); // w10:2.1× w30:5.7× w70:12.9×
+}
+/** Gentle growth on the Core damage a leaked mob deals — late leaks bite harder. */
+export function waveLeakScale(wave: number): Fx {
+  return Math.round((1 + 0.05 * waveRamp(wave)) * FX_ONE); // w30:2.3× w70:4.3×
 }
 
 /** Fraction of a slain mob's point cost paid back to the player as bounty. Below 1 so a
