@@ -11,6 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "headless": "node --experimental-transform-types scripts/headless.ts",
+    "train": "node --experimental-transform-types scripts/train.ts",
+    "calibrate": "node --experimental-transform-types scripts/calibrate.ts",
     "preview": "vite preview --port 5199 --strictPort",
     "verify:web": "node scripts/verify-web.mjs"
   },

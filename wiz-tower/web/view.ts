@@ -7,7 +7,7 @@ import { fxToFloat } from '../src/fx.ts';
 import { Element, ELEMENT_NAMES, N_ELEMENTS } from '../src/element.ts';
 import { Trait, TRAIT_NAMES, Tier, NodeKind, OccKind, type Cell } from '../src/types.ts';
 import { WALL_COST, towerCost, tierGateCost, attuneCost } from '../src/config.ts';
-import { Game } from '../src/game.ts';
+import { Game, type Opponent } from '../src/game.ts';
 import type { Opener } from '../src/wave.ts';
 import { ELEMENT_COLOR, ELEMENT_EMOJI, TRAIT_TAG, TRAIT_RADIUS } from './theme.ts';
 
@@ -29,6 +29,7 @@ export class GameView {
   private lastT = 0;
   private startingChoice: Element = Element.Fire;
   private diffChoice = 3;
+  private opponentChoice: Opponent = 'search';
   private seed = 1n;
 
   // DOM refs
@@ -100,11 +101,23 @@ export class GameView {
       b.onclick = () => { this.diffChoice = d; this.newGame(); };
       s.appendChild(b);
     }
+    const oLabel = document.createElement('span');
+    oLabel.textContent = ' Foe:';
+    oLabel.className = 'wt-lbl';
+    s.appendChild(oLabel);
+    for (const [label, opp] of [['Search', 'search'], ['Net', 'model']] as const) {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.className = 'wt-chip';
+      b.title = opp === 'search' ? 'Live branching search (L2)' : 'Distilled tiny net';
+      b.onclick = () => { this.opponentChoice = opp; this.newGame(); };
+      s.appendChild(b);
+    }
   }
 
   private newGame(): void {
     this.seed = (this.seed * 6364136223846793005n + 1442695040888963407n) & ((1n << 64n) - 1n);
-    this.game = new Game({ starting: this.startingChoice, difficulty: this.diffChoice, seed: this.seed });
+    this.game = new Game({ starting: this.startingChoice, difficulty: this.diffChoice, seed: this.seed, opponent: this.opponentChoice });
     this.tool = { kind: 'wall' };
     this.tier = Tier.T1;
     this.speed = 1;
@@ -267,7 +280,7 @@ export class GameView {
   private drawHud(): void {
     const g = this.game;
     this.el.currency.textContent = `💰 ${g.currency}`;
-    this.el.wavelabel.textContent = `Wave ${g.wave} · Diff ${g.diff}`;
+    this.el.wavelabel.textContent = `Wave ${g.wave} · Diff ${g.diff} · ${g.opponent === 'model' ? '🧠 net' : '🔍 search'}`;
     const frac = g.coreHpFraction();
     (this.el.corefill as HTMLElement).style.width = Math.round(frac * 100) + '%';
     (this.el.corefill as HTMLElement).style.background = frac > 0.5 ? '#7CFFB2' : frac > 0.25 ? '#ffd23f' : '#ff5a4d';

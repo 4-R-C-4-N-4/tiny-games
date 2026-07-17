@@ -12,7 +12,13 @@ import type { Metrics } from './types.ts';
 import { DEFAULT_CONFIG, type Config } from './config.ts';
 import { Sim } from './sim.ts';
 import { SearchAttacker, type SearchOptions } from './search.ts';
-import type { Opener } from './wave.ts';
+import { ModelAttacker, type Weights } from './model.ts';
+import weightsJson from './weights.json';
+import type { Attacker, Opener } from './wave.ts';
+
+const DISTILLED_WEIGHTS = weightsJson as unknown as Weights;
+
+export type Opponent = 'search' | 'model';
 
 export type GameState = 'build' | 'wave' | 'gameover';
 
@@ -21,6 +27,7 @@ export interface GameOptions {
   difficulty?: number; // 1 (gentle) … 5 (brutal) — maps to the search's top-K
   seed?: bigint; // makes a whole run reproducible
   config?: Config;
+  opponent?: Opponent; // 'search' (live L2) or 'model' (distilled net) — same interface
 }
 
 /** Map difficulty to the search's beatability knob: lower diff picks a weaker top-K. */
@@ -31,7 +38,8 @@ function searchOptsForDiff(diff: number, seed: bigint): SearchOptions {
 
 export class Game {
   readonly sim: Sim;
-  readonly attacker: SearchAttacker;
+  readonly attacker: Attacker;
+  readonly opponent: Opponent;
   readonly diff: number;
   wave = 1;
   state: GameState = 'build';
@@ -46,8 +54,11 @@ export class Game {
     const cfg = opts.config ?? DEFAULT_CONFIG;
     const starting = opts.starting ?? Element.Fire;
     this.diff = opts.difficulty ?? 3;
+    this.opponent = opts.opponent ?? 'search';
     this.sim = Sim.create(cfg, starting);
-    this.attacker = new SearchAttacker(this.sim, searchOptsForDiff(this.diff, opts.seed ?? 0xd15ea5en));
+    this.attacker = this.opponent === 'model'
+      ? new ModelAttacker(this.sim, DISTILLED_WEIGHTS)
+      : new SearchAttacker(this.sim, searchOptsForDiff(this.diff, opts.seed ?? 0xd15ea5en));
   }
 
   // ---- build phase actions (ignored unless in the build phase) --------------------

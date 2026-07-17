@@ -51,7 +51,20 @@ const result = await page.evaluate(() => {
   return { state: g.state, wave: g.wave, coreFrac: g.coreHpFraction(), maxMobs };
 });
 
-await page.waitForTimeout(200);
+// Switch to the distilled-net opponent and run a wave with it (exercises the bundled
+// weights.json + JS forward pass in the browser).
+await page.getByText('Net', { exact: true }).click();
+const modelRun = await page.evaluate(() => {
+  const g = window.wt.game;
+  g.buildTower({ x: 2, y: 6 }, 0, 2, 0); // Fire T2 turret
+  g.buildTower({ x: 4, y: 6 }, 0, 2, 0);
+  g.startWave();
+  let guard = 0, maxMobs = 0;
+  while (g.state === 'wave' && guard++ < 2000) { g.update(500); maxMobs = Math.max(maxMobs, g.sim.liveMobs().length); }
+  return { opponent: g.opponent, state: g.state, wave: g.wave, maxMobs };
+});
+
+await page.waitForTimeout(150);
 await page.screenshot({ path: SHOT });
 await browser.close();
 
@@ -64,11 +77,15 @@ if (!telegraph.includes('Incoming')) problems.push(`telegraph missing: "${telegr
 if (startedState !== 'wave') problems.push(`start did not enter wave (got ${startedState})`);
 if (result.maxMobs <= 0) problems.push('no mobs ever spawned during the wave');
 if (result.state === 'wave') problems.push('wave never terminated');
+if (modelRun.opponent !== 'model') problems.push(`did not switch to net opponent (${modelRun.opponent})`);
+if (modelRun.maxMobs <= 0) problems.push('net opponent spawned no mobs');
+if (modelRun.state === 'wave') problems.push('net-opponent wave never terminated');
 
 console.log('initial     ', initial);
 console.log('afterBuild  ', afterBuild);
 console.log('telegraph   ', telegraph);
 console.log('wave result ', result);
+console.log('model run   ', modelRun);
 console.log('console errs', errors.length ? errors : 'none');
 console.log('screenshot  ', SHOT);
 
