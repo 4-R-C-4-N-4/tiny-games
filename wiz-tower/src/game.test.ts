@@ -86,4 +86,19 @@ describe('Game controller', () => {
     // At difficulty 3 the top-K pick differs by seed, so runs should not be identical.
     expect(JSON.stringify(a)).not.toBe(JSON.stringify(b));
   });
+
+  it('personality changes how the search plays (same seed, different objective)', () => {
+    const play = (personality: 'aggressive' | 'economic') => {
+      const g = new Game({ starting: Element.Fire, difficulty: 3, seed: 77n, personality, config: cfg });
+      g.buildTower({ x: 3, y: 6 }, Element.Fire, Tier.T2, NodeKind.Turret);
+      g.startWave();
+      let guard = 0;
+      while (g.state === 'wave' && guard++ < 100) g.update(5000);
+      return g.lastMetrics!;
+    };
+    const aggro = play('aggressive');
+    const econ = play('economic');
+    // Different objective weightings → the search commits different waves → different metrics.
+    expect(JSON.stringify(aggro)).not.toBe(JSON.stringify(econ));
+  });
 });

@@ -7,7 +7,7 @@ import { fxToFloat } from '../src/fx.ts';
 import { Element, ELEMENT_NAMES, N_ELEMENTS } from '../src/element.ts';
 import { Trait, TRAIT_NAMES, Tier, NodeKind, OccKind, type Cell } from '../src/types.ts';
 import { WALL_COST, towerCost, tierGateCost, attuneCost } from '../src/config.ts';
-import { Game, type Opponent, type Recap } from '../src/game.ts';
+import { Game, type Opponent, type Personality, type Recap } from '../src/game.ts';
 import type { Opener } from '../src/wave.ts';
 import { ELEMENT_COLOR, ELEMENT_EMOJI, TRAIT_TAG, TRAIT_RADIUS } from './theme.ts';
 
@@ -31,6 +31,7 @@ export class GameView {
   private startingChoice: Element = Element.Fire;
   private diffChoice = 3;
   private opponentChoice: Opponent = 'search';
+  private personalityChoice: Personality = 'balanced';
   private seed = 1n;
 
   // DOM refs
@@ -114,11 +115,27 @@ export class GameView {
       b.onclick = () => { this.opponentChoice = opp; this.newGame(); };
       s.appendChild(b);
     }
+    const pLabel = document.createElement('span');
+    pLabel.textContent = ' Style:';
+    pLabel.className = 'wt-lbl';
+    s.appendChild(pLabel);
+    const styleLabel: Record<Personality, string> = { balanced: 'Bal', aggressive: 'Agg', economic: 'Eco', bluffy: 'Blf' };
+    for (const p of ['balanced', 'aggressive', 'economic', 'bluffy'] as const) {
+      const b = document.createElement('button');
+      b.textContent = styleLabel[p];
+      b.className = 'wt-chip';
+      b.title = `${p} attacker (search only)`;
+      b.onclick = () => { this.personalityChoice = p; this.newGame(); };
+      s.appendChild(b);
+    }
   }
 
   private newGame(): void {
     this.seed = (this.seed * 6364136223846793005n + 1442695040888963407n) & ((1n << 64n) - 1n);
-    this.game = new Game({ starting: this.startingChoice, difficulty: this.diffChoice, seed: this.seed, opponent: this.opponentChoice });
+    this.game = new Game({
+      starting: this.startingChoice, difficulty: this.diffChoice, seed: this.seed,
+      opponent: this.opponentChoice, personality: this.personalityChoice,
+    });
     this.tool = { kind: 'wall' };
     this.verbTool = null;
     this.tier = Tier.T1;

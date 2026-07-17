@@ -10,3 +10,11 @@ if (root) {
   // Debug handle for headless verification / console poking. Harmless in production.
   (window as unknown as { wt: GameView }).wt = view;
 }
+
+// Register the offline service worker (secure contexts incl. localhost). Best-effort.
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
+  });
+}
+

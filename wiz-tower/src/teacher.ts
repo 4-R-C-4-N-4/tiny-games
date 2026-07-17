@@ -5,13 +5,13 @@
  * Same recipe as the POC's `leak_vector`, but over the REAL spatial sim.
  */
 import { Rng, fxToFloat } from './fx.ts';
-import { Element, N_ELEMENTS } from './element.ts';
+import { Element, N_ELEMENTS, typeMult, STRONG } from './element.ts';
 import { Tier, NodeKind, OccKind, type Cell } from './types.ts';
 import { type Config } from './config.ts';
 import { Sim } from './sim.ts';
 import { PlanAttacker, type Wave } from './wave.ts';
 import { playWave } from './driver.ts';
-import { N_ACTIONS, decodeAction } from './model.ts';
+import { N_ACTIONS, decodeAction, featurize, forward, argmax, type Weights } from './model.ts';
 
 /** Bodies of the probed action sent down EACH spawn column (front-wide). Kept small so the
  *  defense can meaningfully answer it — a saturated probe (everything leaks) is degenerate,
@@ -96,6 +96,32 @@ export function sampleBoard(rng: Rng, cfg: Config, opts: SampleBoardOptions = {}
   if (chance(0.5)) place(Element.Light, Tier.T1); // detection
   if (chance(0.35)) place(Element.Ice, Tier.T1); // control/slow
 
+  sim.syncFields();
+  return sim;
+}
+
+/** The element that counters `e` (1.5×): its wheel predator, or the Light/Dark opposite. */
+function counterElement(e: Element): Element {
+  for (let c = 0; c < N_ELEMENTS; c++) if (typeMult(c as Element, e) === STRONG) return c as Element;
+  return e;
+}
+
+/**
+ * A DAgger board (§4.4 step 5): the boards the DEPLOYED model actually induces. We take a
+ * random defense, let the current model pick its lead element, then have a naive player
+ * COUNTER-build the element that beats it — the state the model's own play walks into. Re-
+ * searching these and retraining teaches it to pivot instead of repeating a countered lead.
+ */
+export function sampleInducedBoard(rng: Rng, cfg: Config, weights: Weights): Sim {
+  const sim = sampleBoard(rng, cfg);
+  const lead = decodeAction(argmax(forward(weights, featurize(sim.observe()))));
+  const counter = counterElement(lead.element);
+  for (let i = 0; i < 2; i++) {
+    const cell = randomBuildableEmpty(sim, rng);
+    if (!cell) break;
+    if (!sim.player.attuned[counter]) sim.attune(counter);
+    if (sim.player.attuned[counter]) sim.buildTower(cell, counter, Tier.T1, NodeKind.Turret);
+  }
   sim.syncFields();
   return sim;
 }

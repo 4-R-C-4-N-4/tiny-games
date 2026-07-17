@@ -10,7 +10,9 @@ const SHOT = process.argv[2] || '/tmp/claude-1000/-home-ivy-Work-tiny-games/415a
 
 const errors = [];
 const browser = await chromium.launch({ executablePath: EXE, args: ['--no-sandbox'] });
-const page = await browser.newPage({ viewport: { width: 420, height: 780 }, deviceScaleFactor: 2 });
+// Block the service worker so each run always tests the freshly built bundle, not a cache.
+const context = await browser.newContext({ viewport: { width: 420, height: 780 }, deviceScaleFactor: 2, serviceWorkers: 'block' });
+const page = await context.newPage();
 page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 

@@ -9,13 +9,13 @@
  *
  * Run: `npm run train`.  Mirrors the POC recipe, now on the spatial sim.
  */
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { Rng } from '../src/fx.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 import { featurize, N_FEATURES, N_ACTIONS, argmax, forward, type Weights } from '../src/model.ts';
-import { leakSurface, sampleBoard } from '../src/teacher.ts';
+import { leakSurface, sampleBoard, sampleInducedBoard } from '../src/teacher.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const N_TRAIN = 1600;
@@ -26,6 +26,17 @@ const BATCH = 256;
 const LR = 2e-3;
 
 const rng = new Rng(20260716n);
+
+// DAgger: if a previous model exists, draw a fraction of boards from the distribution IT
+// induces (defenses that counter its favored leads), re-search them, and retrain — one
+// iteration of §4.4 step 5. First run (no weights yet) bootstraps on random boards only.
+const WEIGHTS_PATH = join(HERE, '..', 'src', 'weights.json');
+const DAGGER_FRAC = 0.4;
+let prior: Weights | null = null;
+if (existsSync(WEIGHTS_PATH)) {
+  try { prior = JSON.parse(readFileSync(WEIGHTS_PATH, 'utf8')) as Weights; } catch { prior = null; }
+}
+console.log(prior ? `DAgger round: mixing ${Math.round(DAGGER_FRAC * 100)}% model-induced boards.` : 'Bootstrap round: random boards only.');
 
 // ---- Gaussian init via Box–Muller on the seeded RNG (deterministic training) --------
 function uniform(): number { return (rng.below(1_000_000) + 0.5) / 1_000_000; }
@@ -40,10 +51,11 @@ function zeros(n: number): number[] { return new Array(n).fill(0); }
 function zerosMat(r: number, c: number): number[][] { return Array.from({ length: r }, () => zeros(c)); }
 
 // ---- data ---------------------------------------------------------------------------
-function makeData(n: number): { X: number[][]; Y: number[][] } {
+function makeData(n: number, useDagger: boolean): { X: number[][]; Y: number[][] } {
   const X: number[][] = [], Y: number[][] = [];
   for (let i = 0; i < n; i++) {
-    const sim = sampleBoard(rng, DEFAULT_CONFIG);
+    const induced = useDagger && prior && rng.below(1000) / 1000 < DAGGER_FRAC;
+    const sim = induced ? sampleInducedBoard(rng, DEFAULT_CONFIG, prior!) : sampleBoard(rng, DEFAULT_CONFIG);
     X.push(featurize(sim.observe()));
     Y.push(leakSurface(sim));
     if ((i + 1) % 200 === 0) process.stdout.write(`  generated ${i + 1}/${n} boards\n`);
@@ -52,8 +64,8 @@ function makeData(n: number): { X: number[][]; Y: number[][] } {
 }
 
 console.log(`Generating ${N_TRAIN + N_TEST} boards (teacher = search over the real sim)…`);
-const { X: Xtr, Y: Ytr } = makeData(N_TRAIN);
-const { X: Xte, Y: Yte } = makeData(N_TEST);
+const { X: Xtr, Y: Ytr } = makeData(N_TRAIN, true); //  train: mix in induced boards (DAgger)
+const { X: Xte, Y: Yte } = makeData(N_TEST, false); // test: fixed random distribution
 
 // standardize inputs; scale targets to ~unit (argmax-invariant), like the POC
 const mu = zeros(N_FEATURES), sd = zeros(N_FEATURES);

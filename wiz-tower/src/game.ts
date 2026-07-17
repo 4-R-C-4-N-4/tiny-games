@@ -11,7 +11,7 @@ import { Tier, NodeKind, type Cell, type PlayerVerb } from './types.ts';
 import type { Metrics } from './types.ts';
 import { DEFAULT_CONFIG, VERB_CHARGES, type Config } from './config.ts';
 import { Sim } from './sim.ts';
-import { SearchAttacker, type SearchOptions } from './search.ts';
+import { SearchAttacker, type SearchOptions, type SearchWeights } from './search.ts';
 import { ModelAttacker, type Weights } from './model.ts';
 import weightsJson from './weights.json';
 import type { Attacker, Opener, Commit } from './wave.ts';
@@ -36,6 +36,7 @@ export interface GameOptions {
   seed?: bigint; // makes a whole run reproducible
   config?: Config;
   opponent?: Opponent; // 'search' (live L2) or 'model' (distilled net) — same interface
+  personality?: Personality; // objective weighting for the search opponent (§4.5)
 }
 
 /** Map difficulty to the search's beatability knob: lower diff picks a weaker top-K. */
@@ -44,10 +45,21 @@ function searchOptsForDiff(diff: number, seed: bigint): SearchOptions {
   return { seed, topK };
 }
 
+export type Personality = 'balanced' | 'aggressive' | 'economic' | 'bluffy';
+
+/** Objective weightings → distinct attacker personalities from the same search (§4.5). */
+const PERSONALITIES: Record<Personality, SearchWeights> = {
+  balanced: { leak: 1, econ: 0.3, tempo: 0.05 },
+  aggressive: { leak: 1.5, econ: 0, tempo: 0 }, //   pure Core damage
+  economic: { leak: 0.6, econ: 1.0, tempo: 0.1 }, // starve bounty income
+  bluffy: { leak: 0.8, econ: 0.2, tempo: 0.6 }, //   force wasted player fire
+};
+
 export class Game {
   readonly sim: Sim;
   readonly attacker: Attacker;
   readonly opponent: Opponent;
+  readonly personality: Personality;
   readonly diff: number;
   wave = 1;
   state: GameState = 'build';
@@ -67,10 +79,14 @@ export class Game {
     const starting = opts.starting ?? Element.Fire;
     this.diff = opts.difficulty ?? 3;
     this.opponent = opts.opponent ?? 'search';
+    this.personality = opts.personality ?? 'balanced';
     this.sim = Sim.create(cfg, starting);
     this.attacker = this.opponent === 'model'
       ? new ModelAttacker(this.sim, DISTILLED_WEIGHTS)
-      : new SearchAttacker(this.sim, searchOptsForDiff(this.diff, opts.seed ?? 0xd15ea5en));
+      : new SearchAttacker(this.sim, {
+          ...searchOptsForDiff(this.diff, opts.seed ?? 0xd15ea5en),
+          weights: PERSONALITIES[this.personality],
+        });
   }
 
   // ---- build phase actions (ignored unless in the build phase) --------------------

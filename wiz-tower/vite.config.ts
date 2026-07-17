@@ -5,6 +5,8 @@ import { defineConfig } from 'vitest/config';
 // consumer (the Phase 1 renderer lives in web/ later); Vitest reuses this config.
 export default defineConfig({
   root: 'web',
+  // Relative base so the static build works under any path (e.g. GitHub Pages /repo/).
+  base: './',
   build: {
     outDir: '../dist',
     emptyOutDir: true,
