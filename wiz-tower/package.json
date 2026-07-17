@@ -14,6 +14,7 @@
     "train": "node --experimental-transform-types scripts/train.ts",
     "calibrate": "node --experimental-transform-types scripts/calibrate.ts",
     "preview": "vite preview --port 5199 --strictPort",
+    "single": "vite build && node scripts/bundle-single.mjs",
     "verify:web": "node scripts/verify-web.mjs"
   },
   "devDependencies": {
