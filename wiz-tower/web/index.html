@@ -68,10 +68,16 @@
     .wt-go { text-align:center; padding:20px; animation:rise .4s ease both; }
     .wt-go h2 { margin:0 0 6px; font-family:var(--display); color:var(--danger); font-size:22px; text-shadow:0 0 18px rgba(255,90,77,.5); }
     .wt-go p { color:var(--dim); margin:0 0 14px; }
-    .wt-codex-in { text-align:center; padding:14px; max-width:300px; }
-    .wt-codex-in img { width:210px; height:auto; }
-    .wt-codex-in p { color:var(--dim); font-size:12px; line-height:1.6; margin:6px 0 12px; }
+    .wt-codex-in { text-align:center; padding:14px 12px; max-width:320px; max-height:100%; overflow-y:auto; }
+    .wt-codex-in img { width:180px; height:auto; }
+    .wt-codex-in p { color:var(--dim); font-size:11.5px; line-height:1.6; margin:4px 0 8px; }
     .wt-codex-in b { color:var(--ink); }
+    .wt-codex-in h3 { font-family:var(--display); color:var(--gold); font-size:15px; letter-spacing:1px; margin:8px 0 8px; }
+    .wt-bestiary { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px; }
+    .wt-beast { display:flex; align-items:center; gap:6px; text-align:left; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:4px 6px; }
+    .wt-beast canvas { width:44px; height:44px; flex:0 0 44px; }
+    .wt-beast b { display:block; font-size:11px; color:var(--ink); }
+    .wt-beast span { display:block; font-size:9px; color:var(--dim); line-height:1.3; }
 
     /* --- telegraph / scrying --- */
     .wt-telegraph { min-height:34px; font-size:11.5px; color:#d7cffa; background:var(--panel);

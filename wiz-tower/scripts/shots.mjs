@@ -29,5 +29,11 @@ await page.evaluate(() => { window.wt.game.verb({ kind: 'overcharge', cell: { x:
 await page.waitForTimeout(500);
 await page.screenshot({ path: `${DIR}/wt-wave.png` });
 
+// Open the codex / bestiary.
+await page.evaluate(() => { window.wt.speed = 0; });
+await page.locator('#codexbtn').click();
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${DIR}/wt-codex.png` });
+
 await browser.close();
 console.log('shots saved');

@@ -6,11 +6,14 @@
  */
 import { fxToFloat } from '../src/fx.ts';
 import { Element, ELEMENT_NAMES, N_ELEMENTS } from '../src/element.ts';
-import { Trait, TRAIT_NAMES, Tier, NodeKind, OccKind, type Cell, type Mob, type Tower } from '../src/types.ts';
+import { Trait, Tier, NodeKind, OccKind, type Cell, type Mob, type Tower } from '../src/types.ts';
 import { WALL_COST, WALL_HP, towerCost, tierGateCost, attuneCost } from '../src/config.ts';
 import { Game, type Opponent, type Personality, type Recap } from '../src/game.ts';
 import type { Opener } from '../src/wave.ts';
-import { ELEMENT_COLOR, ELEMENT_EMOJI, TRAIT_SHAPE, TRAIT_RADIUS } from './theme.ts';
+import {
+  ELEMENT_COLOR, ELEMENT_EMOJI, TRAIT_SHAPE, TRAIT_RADIUS,
+  creatureName, TRAIT_ROLE, type MobShape,
+} from './theme.ts';
 import { Effects } from './effects.ts';
 
 type Tool = { kind: 'wall' } | { kind: 'sell' } | { kind: 'tower'; element: Element };
@@ -97,10 +100,29 @@ export class GameView {
     const c = this.el.codex;
     if (c.style.display === 'flex') { c.style.display = 'none'; return; }
     c.style.display = 'flex';
+    // Representative element per creature, chosen to show the whole palette.
+    const cards: [Trait, Element][] = [
+      [Trait.Grunt, Element.Fire], [Trait.Swarm, Element.Zap], [Trait.Tank, Element.Earth],
+      [Trait.Runner, Element.Ice], [Trait.Flier, Element.Sonic], [Trait.Shade, Element.Dark],
+      [Trait.Shielded, Element.Light], [Trait.Mender, Element.Earth], [Trait.Breaker, Element.Fire],
+    ];
     c.innerHTML = `<div class="wt-codex-in">
       <img src="./art/affinity-sigil.svg" alt="Affinity wheel" />
-      <p>Each element <b>counters the next</b> around the wheel (1.5× damage) and is weak to the one before (0.5×). <b>Light ⇄ Dark</b> are a mutual pair — the only strong answer to one is the other. Everything else is neutral. Read your foe's colors; attack the type you answer weakly.</p>
+      <p>Each school <b>counters the next</b> around the wheel (1.5×) and is weak to the one before (0.5×). <b>Radiant ⇄ Void</b> answer only each other. Read your foe's colours; conjure against the school they ward weakly.</p>
+      <h3>Bestiary</h3>
+      <div class="wt-bestiary">${cards.map(([tr, el]) =>
+        `<div class="wt-beast"><canvas width="56" height="56"></canvas><div><b>${creatureName(el, tr)}</b><span>${TRAIT_ROLE[tr]}</span></div></div>`).join('')}</div>
       <button class="wt-ctl" id="codexclose">Close</button></div>`;
+    const canvases = c.querySelectorAll('canvas');
+    cards.forEach(([tr, el], i) => {
+      const cv = canvases[i] as HTMLCanvasElement;
+      const dpr = window.devicePixelRatio || 1;
+      cv.width = 56 * dpr; cv.height = 56 * dpr;
+      const cx = cv.getContext('2d')!;
+      cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      cx.translate(28, 30); cx.shadowColor = ELEMENT_COLOR[el]; cx.shadowBlur = 8;
+      paintCreature(cx, 15, ELEMENT_COLOR[el], el, tr, 0.7, { warded: true });
+    });
     c.querySelector<HTMLButtonElement>('#codexclose')!.onclick = () => { c.style.display = 'none'; };
     c.onclick = (e) => { if (e.target === c) c.style.display = 'none'; };
   }
@@ -587,78 +609,18 @@ export class GameView {
     const x = fxToFloat(m.pos.x) * CELL, y = fxToFloat(m.pos.y) * CELL;
     const r = TRAIT_RADIUS[m.trait] * CELL;
     const col = ELEMENT_COLOR[m.element];
-    const shape = TRAIT_SHAPE[m.trait];
-    const bob = this.reduced ? 0 : Math.sin(this.time * 4 + m.id) * (shape === 'wing' ? 3 : 1);
+    const flier = m.flags.flier;
+    const bob = this.reduced ? 0 : Math.sin(this.time * 4 + m.id) * (flier ? 3 : 1);
 
     ctx.save();
     ctx.translate(x, y + bob);
-    ctx.shadowColor = col;
-    ctx.shadowBlur = 10;
-    ctx.fillStyle = col;
-    ctx.strokeStyle = col;
-
-    if (m.flags.flier) { // airborne shadow on the ground below
-      ctx.save(); ctx.shadowBlur = 0; ctx.globalAlpha = 0.25; ctx.fillStyle = '#000';
+    if (flier) { // cast a shadow on the ground so it reads as airborne
+      ctx.save(); ctx.globalAlpha = 0.25; ctx.fillStyle = '#000';
       ctx.beginPath(); ctx.ellipse(0, r + 6 - bob, r * 0.8, r * 0.3, 0, 0, TAU); ctx.fill(); ctx.restore();
     }
-    if (m.flags.stealth && !this.revealed(m)) ctx.globalAlpha = 0.28 + 0.12 * Math.sin(this.time * 8 + m.id);
-
-    switch (shape) {
-      case 'swarm': {
-        for (let i = 0; i < 4; i++) { const a = this.time * 2 + i * TAU / 4; ctx.beginPath(); ctx.arc(Math.cos(a) * r, Math.sin(a) * r, r * 0.55, 0, TAU); ctx.fill(); }
-        break;
-      }
-      case 'golem': {
-        roundRect(ctx, -r, -r * 0.85, r * 2, r * 1.7, r * 0.35); ctx.fill();
-        ctx.shadowBlur = 0; ctx.fillStyle = '#0c0d1e';
-        ctx.beginPath(); ctx.arc(-r * 0.35, -r * 0.1, r * 0.16, 0, TAU); ctx.arc(r * 0.35, -r * 0.1, r * 0.16, 0, TAU); ctx.fill();
-        break;
-      }
-      case 'dart': { // triangle pointing toward Core (down)
-        ctx.beginPath(); ctx.moveTo(0, r); ctx.lineTo(-r * 0.8, -r); ctx.lineTo(r * 0.8, -r); ctx.closePath(); ctx.fill();
-        break;
-      }
-      case 'wing': {
-        ctx.beginPath(); ctx.moveTo(0, -r); ctx.lineTo(r * 0.6, 0); ctx.lineTo(0, r); ctx.lineTo(-r * 0.6, 0); ctx.closePath(); ctx.fill();
-        const flap = Math.sin(this.time * 10 + m.id) * 0.3;
-        ctx.globalAlpha *= 0.8;
-        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-r * 1.6, -r * 0.6 + flap * r); ctx.lineTo(-r * 0.6, r * 0.2); ctx.closePath(); ctx.fill();
-        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(r * 1.6, -r * 0.6 + flap * r); ctx.lineTo(r * 0.6, r * 0.2); ctx.closePath(); ctx.fill();
-        break;
-      }
-      case 'shade': {
-        ctx.beginPath(); ctx.moveTo(0, -r);
-        for (let i = 1; i <= 8; i++) { const a = -Math.PI / 2 + i * TAU / 8, rr = r * (0.8 + 0.25 * Math.sin(this.time * 5 + i + m.id)); ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
-        ctx.closePath(); ctx.fill();
-        break;
-      }
-      case 'ward': {
-        ctx.beginPath(); ctx.arc(0, 0, r * 0.7, 0, TAU); ctx.fill();
-        if (m.shieldHits > 0) {
-          ctx.shadowBlur = 0; ctx.globalAlpha *= 0.9; ctx.strokeStyle = '#5fd0ff'; ctx.lineWidth = 2;
-          ctx.beginPath();
-          for (let i = 0; i < 6; i++) { const a = this.time + i * TAU / 6, rr = r + 3; ctx[i ? 'lineTo' : 'moveTo'](Math.cos(a) * rr, Math.sin(a) * rr); }
-          ctx.closePath(); ctx.stroke();
-        }
-        break;
-      }
-      case 'rune': { // Mender — plus with healing halo
-        const pw = r * 0.35;
-        ctx.fillRect(-pw, -r, pw * 2, r * 2); ctx.fillRect(-r, -pw, r * 2, pw * 2);
-        ctx.shadowBlur = 0; ctx.globalAlpha *= 0.4; ctx.strokeStyle = '#8fce77'; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(0, 0, r + 4 + 3 * Math.sin(this.time * 4), 0, TAU); ctx.stroke();
-        break;
-      }
-      case 'maul': { // Breaker — chunky wedge
-        ctx.beginPath(); ctx.moveTo(-r, -r * 0.6); ctx.lineTo(r * 0.4, -r * 0.6); ctx.lineTo(r, 0); ctx.lineTo(r * 0.4, r * 0.6); ctx.lineTo(-r, r * 0.6); ctx.closePath(); ctx.fill();
-        break;
-      }
-      default: { // wisp (Grunt)
-        ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
-        ctx.shadowBlur = 0; ctx.fillStyle = '#0c0d1e';
-        ctx.beginPath(); ctx.arc(0, -r * 0.1, r * 0.3, 0, TAU); ctx.fill();
-      }
-    }
+    if (m.flags.stealth && !this.revealed(m)) ctx.globalAlpha = 0.26 + 0.12 * Math.sin(this.time * 8 + m.id);
+    ctx.shadowColor = col; ctx.shadowBlur = 10;
+    paintCreature(ctx, r, col, m.element, m.trait, this.time + m.id * 0.7, { warded: m.shieldHits > 0 });
     ctx.restore();
 
     // HP arc over the head
@@ -691,17 +653,173 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
+const DARK_INK = '#0c0d1e';
+
+/**
+ * Draw a conjured creature centred at the current origin. Shared by the board (per mob)
+ * and the bestiary. Each mechanical trait manifests as an archetype (wisp/golem/wraith/…);
+ * element supplies the colour and a small material accent so a "Void Wraith" and an
+ * "Ember Wraith" read as the same beast woven from different magic.
+ */
+function paintCreature(
+  ctx: CanvasRenderingContext2D, r: number, color: string, element: Element, trait: Trait,
+  t: number, opts: { warded?: boolean } = {},
+): void {
+  const shape: MobShape = TRAIT_SHAPE[trait];
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  const eye = (x: number, y: number, s: number, bright = false) => {
+    ctx.save(); ctx.shadowBlur = 0; ctx.fillStyle = bright ? '#fff' : DARK_INK;
+    ctx.beginPath(); ctx.arc(x, y, s, 0, TAU); ctx.fill(); ctx.restore();
+  };
+
+  switch (shape) {
+    case 'wisp': { // a floating spirit with a wavering tail and a single eye
+      const sway = Math.sin(t * 3) * r * 0.18;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.78, r * 0.1);
+      ctx.quadraticCurveTo(-r * 0.85, -r * 0.9, sway, -r * 1.25);
+      ctx.quadraticCurveTo(r * 0.85, -r * 0.9, r * 0.78, r * 0.1);
+      ctx.arc(0, r * 0.1, r * 0.78, 0, Math.PI);
+      ctx.closePath(); ctx.fill();
+      eye(0, -r * 0.05, r * 0.26); eye(-r * 0.08, -r * 0.12, r * 0.09, true);
+      break;
+    }
+    case 'swarm': { // a cluster of conjured sparks
+      for (let i = 0; i < 5; i++) {
+        const a = t * 2 + i * TAU / 5, px = Math.cos(a) * r * 0.85, py = Math.sin(a * 1.3) * r * 0.65, s = r * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(px, py - s); ctx.lineTo(px + s * 0.28, py - s * 0.28); ctx.lineTo(px + s, py);
+        ctx.lineTo(px + s * 0.28, py + s * 0.28); ctx.lineTo(px, py + s); ctx.lineTo(px - s * 0.28, py + s * 0.28);
+        ctx.lineTo(px - s, py); ctx.lineTo(px - s * 0.28, py - s * 0.28); ctx.closePath(); ctx.fill();
+      }
+      break;
+    }
+    case 'golem': { // a hulking elemental construct with runic seams
+      ctx.beginPath();
+      const pts = [[-1, -0.75], [-0.55, -0.95], [0.6, -0.9], [1, -0.5], [0.95, 0.7], [0.5, 0.95], [-0.6, 0.9], [-1, 0.55]];
+      pts.forEach(([px, py], i) => ctx[i ? 'lineTo' : 'moveTo'](px * r, py * r));
+      ctx.closePath(); ctx.fill();
+      ctx.save(); ctx.shadowBlur = 0; ctx.strokeStyle = DARK_INK; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-r * 0.2, -r * 0.9); ctx.lineTo(0, -r * 0.1); ctx.lineTo(-r * 0.3, r * 0.9); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(r * 0.5, -r * 0.6); ctx.lineTo(r * 0.1, 0); ctx.stroke(); ctx.restore();
+      eye(-r * 0.34, -r * 0.12, r * 0.15, true); eye(r * 0.34, -r * 0.12, r * 0.15, true);
+      break;
+    }
+    case 'dart': { // a low, fast hound with a motion streak
+      ctx.save(); ctx.shadowBlur = 0; ctx.globalAlpha *= 0.35;
+      ctx.beginPath(); ctx.moveTo(-r * 0.4, -r * 1.4); ctx.lineTo(r * 0.4, -r * 1.4); ctx.lineTo(0, -r * 0.2); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      ctx.beginPath();
+      ctx.moveTo(0, r * 1.15); ctx.lineTo(-r * 0.7, -r * 0.2); ctx.lineTo(-r * 0.28, -r * 0.05);
+      ctx.lineTo(0, -r * 0.7); ctx.lineTo(r * 0.28, -r * 0.05); ctx.lineTo(r * 0.7, -r * 0.2);
+      ctx.closePath(); ctx.fill();
+      eye(0, r * 0.35, r * 0.12);
+      break;
+    }
+    case 'wing': { // a winged drake — wings, serpent body, small head, tail
+      const flap = Math.sin(t * 10) * 0.35;
+      ctx.save(); ctx.globalAlpha *= 0.85;
+      for (const s of [-1, 1]) {
+        ctx.beginPath(); ctx.moveTo(0, -r * 0.1);
+        ctx.quadraticCurveTo(s * r * 1.5, -r * (0.9 + flap), s * r * 1.7, -r * 0.1 + flap * r);
+        ctx.quadraticCurveTo(s * r * 1.1, r * 0.1, 0, r * 0.25); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+      ctx.beginPath(); ctx.ellipse(0, 0, r * 0.42, r * 0.62, 0, 0, TAU); ctx.fill(); // body
+      ctx.beginPath(); ctx.moveTo(0, r * 0.5); ctx.lineTo(-r * 0.3, r * 0.9); ctx.lineTo(r * 0.3, r * 0.9); ctx.closePath(); ctx.fill(); // head
+      eye(-r * 0.12, r * 0.7, r * 0.07, true); eye(r * 0.12, r * 0.7, r * 0.07, true);
+      break;
+    }
+    case 'shade': { // a hooded wraith with glowing eyes and a tattered hem
+      ctx.beginPath();
+      ctx.moveTo(0, -r * 1.25);
+      ctx.quadraticCurveTo(r * 0.95, -r * 0.6, r * 0.8, r * 0.5);
+      for (let i = 3; i >= -3; i--) { const px = (i / 3) * r * 0.8, py = r * (0.55 + 0.28 * (i & 1) + 0.1 * Math.sin(t * 4 + i)); ctx.lineTo(px, py); }
+      ctx.quadraticCurveTo(-r * 0.95, -r * 0.6, 0, -r * 1.25);
+      ctx.closePath(); ctx.fill();
+      eye(-r * 0.24, -r * 0.35, r * 0.11, true); eye(r * 0.24, -r * 0.35, r * 0.11, true);
+      break;
+    }
+    case 'ward': { // a warded sentinel eye
+      ctx.beginPath(); ctx.ellipse(0, 0, r * 0.72, r * 0.5, 0, 0, TAU); ctx.fill();
+      ctx.save(); ctx.shadowBlur = 0; ctx.fillStyle = DARK_INK;
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.26, 0, TAU); ctx.fill(); ctx.restore();
+      eye(0, 0, r * 0.12, true);
+      if (opts.warded) {
+        ctx.save(); ctx.shadowBlur = 0; ctx.globalAlpha *= 0.9; ctx.strokeStyle = '#8fd6ff'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i <= 6; i++) { const a = t + i * TAU / 6, rr = r + 3; ctx[i ? 'lineTo' : 'moveTo'](Math.cos(a) * rr, Math.sin(a) * rr); }
+        ctx.stroke(); ctx.restore();
+      }
+      break;
+    }
+    case 'rune': { // a robed acolyte with a healing halo
+      ctx.beginPath(); ctx.moveTo(0, -r * 0.15); ctx.lineTo(-r * 0.9, r); ctx.lineTo(r * 0.9, r); ctx.closePath(); ctx.fill(); // robe
+      ctx.beginPath(); ctx.arc(0, -r * 0.5, r * 0.4, 0, TAU); ctx.fill(); // hood
+      ctx.save(); ctx.shadowBlur = 0; ctx.fillStyle = DARK_INK; ctx.beginPath(); ctx.arc(0, -r * 0.5, r * 0.26, 0, TAU); ctx.fill(); ctx.restore();
+      ctx.save(); ctx.shadowBlur = 0; ctx.globalAlpha *= 0.5; ctx.strokeStyle = '#9fe38a'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(0, -r * 0.5, r * 0.62 + 3 * Math.sin(t * 4), 0, TAU); ctx.stroke(); ctx.restore();
+      break;
+    }
+    default: { // 'maul' — a hunched, horned gargoyle
+      ctx.beginPath();
+      ctx.moveTo(-r, r * 0.7); ctx.lineTo(-r * 0.8, -r * 0.2);
+      ctx.lineTo(-r * 0.5, -r * 0.5); ctx.lineTo(-r * 0.2, -r * 0.85); ctx.lineTo(0, -r * 0.45);
+      ctx.lineTo(r * 0.2, -r * 0.85); ctx.lineTo(r * 0.5, -r * 0.5);
+      ctx.lineTo(r * 0.8, -r * 0.2); ctx.lineTo(r, r * 0.7);
+      ctx.closePath(); ctx.fill();
+      eye(-r * 0.28, -r * 0.15, r * 0.12); eye(r * 0.28, -r * 0.15, r * 0.12);
+      break;
+    }
+  }
+
+  elementAccent(ctx, r, element, color, t);
+}
+
+/** A small element-material flourish over a creature's body. */
+function elementAccent(ctx: CanvasRenderingContext2D, r: number, element: Element, color: string, t: number): void {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = color; ctx.strokeStyle = color;
+  if (element === Element.Fire) { // ember tongues rising
+    for (const s of [-1, 1]) {
+      const fl = Math.sin(t * 9 + s) * r * 0.15;
+      ctx.globalAlpha = 0.5; ctx.beginPath();
+      ctx.moveTo(s * r * 0.35, -r * 1.0); ctx.quadraticCurveTo(s * r * 0.55 + fl, -r * 1.45, s * r * 0.25, -r * 1.6);
+      ctx.quadraticCurveTo(s * r * 0.15, -r * 1.3, s * r * 0.35, -r * 1.0); ctx.fill();
+    }
+  } else if (element === Element.Zap) { // a crackle
+    ctx.globalAlpha = 0.6 * (0.5 + 0.5 * Math.sin(t * 20)); ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(-r * 0.6, -r * 0.8); ctx.lineTo(-r * 0.1, -r * 0.3); ctx.lineTo(-r * 0.35, -r * 0.1); ctx.lineTo(r * 0.4, r * 0.5); ctx.stroke();
+  } else if (element === Element.Ice) { // a frost sparkle
+    ctx.globalAlpha = 0.55; ctx.lineWidth = 1.2;
+    for (let i = 0; i < 3; i++) { const a = t * 0.5 + i * Math.PI / 3; ctx.beginPath(); ctx.moveTo(-Math.cos(a) * r * 0.5, -Math.sin(a) * r * 0.5); ctx.lineTo(Math.cos(a) * r * 0.5, Math.sin(a) * r * 0.5); ctx.stroke(); }
+  } else if (element === Element.Light) { // a soft corona
+    ctx.globalAlpha = 0.3 + 0.15 * Math.sin(t * 3); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.1, 0, TAU); ctx.stroke();
+  } else if (element === Element.Sonic) { // a resonance ripple
+    ctx.globalAlpha = 0.3; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(0, 0, r * (0.9 + 0.3 * ((t * 0.7) % 1)), 0, TAU); ctx.stroke();
+  } else if (element === Element.Dark) { // a void core
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 0.7; ctx.fillStyle = '#05030f';
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.32, 0, TAU); ctx.fill();
+  }
+  ctx.restore();
+}
+
 const side = (x: number, w: number) => (x < w / 3 ? 'left' : x >= (2 * w) / 3 ? 'right' : 'centre');
 
 function formatTelegraph(opener: Opener, w: number): string {
   return opener
-    .map((s) => `${s.group.count}× ${ELEMENT_EMOJI[s.group.element]} ${TRAIT_NAMES[s.group.trait]} <em>(${side(s.x, w)})</em>`)
+    .map((s) => `${s.group.count}× ${ELEMENT_EMOJI[s.group.element]} ${creatureName(s.group.element, s.group.trait)} <em>(${side(s.x, w)})</em>`)
     .join(', ') || '(nothing)';
 }
 
 function formatRecap(recap: Recap, w: number): string {
   const reserve = recap.committed.flat()
-    .map((c) => `${c.group.count}× ${ELEMENT_EMOJI[c.group.element]} ${TRAIT_NAMES[c.group.trait]}${c.kind === 'breach' ? ' ⚒' : ''} <em>(${side(c.x, w)})</em>`)
+    .map((c) => `${c.group.count}× ${ELEMENT_EMOJI[c.group.element]} ${creatureName(c.group.element, c.group.trait)}${c.kind === 'breach' ? ' ⚒' : ''} <em>(${side(c.x, w)})</em>`)
     .join(', ') || 'nothing (held back)';
   const leaked = Math.round(fxToFloat(recap.metrics.leakedHp));
   return `<b>Wave ${recap.wave}:</b> scried ${formatTelegraph(recap.telegraph, w)} · reserve struck ${reserve} · leaked ${leaked}${recap.metrics.breaches ? ` · ${recap.metrics.breaches} breach` : ''}`;

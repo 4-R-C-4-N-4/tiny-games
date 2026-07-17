@@ -31,6 +31,37 @@ export const ELEMENT_EMOJI: Record<Element, string> = {
   [Element.Zap]: '⚡', [Element.Light]: '✨', [Element.Dark]: '🌑',
 };
 
+/** The school of magic each element belongs to — the adjective in a summon's name. */
+export const ELEMENT_SCHOOL: Record<Element, string> = {
+  [Element.Fire]: 'Ember', [Element.Ice]: 'Frost', [Element.Earth]: 'Stone', [Element.Sonic]: 'Echo',
+  [Element.Zap]: 'Storm', [Element.Light]: 'Radiant', [Element.Dark]: 'Void',
+};
+
+/** The conjured-creature archetype each mechanical trait manifests as — the noun. */
+export const TRAIT_CREATURE: Record<Trait, string> = {
+  [Trait.Grunt]: 'Wisp', [Trait.Swarm]: 'Sprites', [Trait.Tank]: 'Golem', [Trait.Runner]: 'Hound',
+  [Trait.Flier]: 'Drake', [Trait.Shade]: 'Wraith', [Trait.Shielded]: 'Sentinel',
+  [Trait.Mender]: 'Acolyte', [Trait.Breaker]: 'Gargoyle',
+};
+
+/** One-line bestiary role, in the game's voice. */
+export const TRAIT_ROLE: Record<Trait, string> = {
+  [Trait.Grunt]: 'A plain conjured spirit.',
+  [Trait.Swarm]: 'Many frail motes — punish single-target wards.',
+  [Trait.Tank]: 'Slow, immense vigor — punishes low burst.',
+  [Trait.Runner]: 'Fast and fragile — slips past slow wards.',
+  [Trait.Flier]: 'Ignores walls; only anti-air wards touch it.',
+  [Trait.Shade]: 'Unseen until a Reveal lays it bare.',
+  [Trait.Shielded]: 'A ward soaks the first hits.',
+  [Trait.Mender]: 'Channels healing into nearby summons.',
+  [Trait.Breaker]: 'Batters walls to breach your maze.',
+};
+
+/** Full summon name, e.g. "Void Wraith", "Ember Sprites". */
+export function creatureName(element: Element, trait: Trait): string {
+  return `${ELEMENT_SCHOOL[element]} ${TRAIT_CREATURE[trait]}`;
+}
+
 /** Silhouette shape per trait — the renderer draws these; identity is shape + element glow. */
 export type MobShape = 'wisp' | 'swarm' | 'golem' | 'dart' | 'wing' | 'shade' | 'ward' | 'rune' | 'maul';
 
