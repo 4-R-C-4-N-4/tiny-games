@@ -7,7 +7,7 @@
 import { fxToFloat } from '../src/fx.ts';
 import { Element, ELEMENT_NAMES, N_ELEMENTS } from '../src/element.ts';
 import { Trait, Tier, NodeKind, OccKind, type Cell, type Mob, type Tower } from '../src/types.ts';
-import { WALL_COST, WALL_HP, towerCost, tierGateCost, attuneCost } from '../src/config.ts';
+import { WALL_COST, WALL_HP, towerCost, towerStats, tierGateCost, attuneCost } from '../src/config.ts';
 import { Game, type Opponent, type Personality, type Recap } from '../src/game.ts';
 import type { Opener } from '../src/wave.ts';
 import {
@@ -282,15 +282,20 @@ export class GameView {
 
   private refreshElementBtn(b: HTMLButtonElement, el: Element): void {
     const pl = this.game.sim.player;
+    const flags = towerStats(el, Tier.T1, NodeKind.Turret).flags;
+    const badge = flags.antiAir ? '<i class="wt-cap aa" title="anti-air">↑</i>'
+      : flags.detection ? '<i class="wt-cap det" title="detection">◉</i>'
+        : flags.slow > 0 ? '<i class="wt-cap slow" title="slow">∼</i>'
+          : flags.splash > 0 ? '<i class="wt-cap spl" title="splash">✷</i>' : '';
     b.style.setProperty('--el', ELEMENT_COLOR[el]);
-    b.title = `${ELEMENT_NAMES[el]} ward — ${ELEMENT_ARCANA[el]}`;
+    b.title = `${ELEMENT_NAMES[el]} ward — ${ELEMENT_ARCANA[el]}${flags.antiAir ? ' · hits fliers' : flags.detection ? ' · reveals shades' : ''}`;
     if (!pl.attuned[el]) {
       const cost = attuneCost(pl.attuneCount);
-      b.innerHTML = `${ELEMENT_EMOJI[el]}<small>🔓${cost}</small>`;
+      b.innerHTML = `<span class="wt-glyph">${ELEMENT_EMOJI[el]}${badge}</span><small>🔓${cost}</small>`;
       b.disabled = this.game.currency < cost || this.game.state !== 'build';
     } else {
       const cost = this.towerPrice(el);
-      b.innerHTML = `${ELEMENT_EMOJI[el]}<small>${cost}</small>`;
+      b.innerHTML = `<span class="wt-glyph">${ELEMENT_EMOJI[el]}${badge}</span><small>${cost}</small>`;
       b.disabled = this.tier > pl.depth[el] + 1 || this.game.currency < cost || this.game.state !== 'build';
     }
   }
@@ -688,15 +693,21 @@ export class GameView {
       const a = this.time * 1.4 + i * TAU / t.tier;
       ctx.fillStyle = col; ctx.beginPath(); ctx.arc(Math.cos(a) * (rr + 3), Math.sin(a) * (rr + 3), 2.2, 0, TAU); ctx.fill();
     }
-    // anti-air: a bright rune on a high orbit; detection: a slow scrying arc
+    // anti-air: a bright up-chevron badge (+ orbiting rune); detection: a scrying-eye badge.
     if (t.flags.antiAir) {
       const a = -this.time * 2.4;
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(Math.cos(a) * (rr + 7), Math.sin(a) * (rr + 7), 1.8, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#eaf2ff'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(-4, -rr - 5); ctx.lineTo(0, -rr - 9); ctx.lineTo(4, -rr - 5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-4, -rr - 9); ctx.lineTo(0, -rr - 13); ctx.lineTo(4, -rr - 9); ctx.stroke();
     }
     if (t.flags.detection) {
       const a = this.time * 2;
       ctx.strokeStyle = '#ffe8a3'; ctx.globalAlpha = 0.7; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(0, 0, rr - 3, a, a + 1.1); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(-5, -rr - 8); ctx.quadraticCurveTo(0, -rr - 12, 5, -rr - 8); ctx.quadraticCurveTo(0, -rr - 4, -5, -rr - 8); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, -rr - 8, 1.4, 0, TAU); ctx.stroke();
     }
     ctx.restore();
   }
@@ -708,22 +719,27 @@ export class GameView {
     const col = ELEMENT_COLOR[m.element];
     const flier = m.flags.flier;
     const bob = this.reduced ? 0 : Math.sin(this.time * 4 + m.id) * (flier ? 3 : 1);
+    const lift = flier ? 11 : 0; // fliers hover clearly above their ground shadow
 
     ctx.save();
-    ctx.translate(x, y + bob);
-    if (flier) { // cast a shadow on the ground so it reads as airborne
-      ctx.save(); ctx.globalAlpha = 0.25; ctx.fillStyle = '#000';
-      ctx.beginPath(); ctx.ellipse(0, r + 6 - bob, r * 0.8, r * 0.3, 0, 0, TAU); ctx.fill(); ctx.restore();
+    ctx.translate(x, y + bob - lift);
+    if (flier) { // a ground shadow + a tether line so it reads unmistakably as airborne
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, r * 0.4); ctx.lineTo(0, lift + 4 - bob); ctx.stroke(); ctx.setLineDash([]);
+      ctx.globalAlpha = 0.28; ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.ellipse(0, lift + 5 - bob, r * 0.75, r * 0.26, 0, 0, TAU); ctx.fill();
+      ctx.restore();
     }
     if (m.flags.stealth && !this.revealed(m)) ctx.globalAlpha = 0.26 + 0.12 * Math.sin(this.time * 8 + m.id);
     ctx.shadowColor = col; ctx.shadowBlur = 10;
     paintCreature(ctx, r, col, m.element, m.trait, this.time + m.id * 0.7, { warded: m.shieldHits > 0 });
     ctx.restore();
 
-    // HP arc over the head
+    // HP arc over the head (follows the flier's lift)
     const hp = Math.max(0, fxToFloat(m.hp) / fxToFloat(m.maxHp));
     if (hp < 0.999) {
-      ctx.save(); ctx.translate(x, y + bob);
+      ctx.save(); ctx.translate(x, y + bob - lift);
       ctx.lineWidth = 2.4; ctx.lineCap = 'round';
       ctx.strokeStyle = 'rgba(0,0,0,0.45)';
       ctx.beginPath(); ctx.arc(0, 0, r + 5, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
@@ -944,9 +960,15 @@ function elementAccent(ctx: CanvasRenderingContext2D, r: number, element: Elemen
 
 const side = (x: number, w: number) => (x < w / 3 ? 'left' : x >= (2 * w) / 3 ? 'right' : 'centre');
 
+function counterHint(trait: Trait): string {
+  if (trait === Trait.Flier) return ' <b class="wt-warn">↑ needs anti-air</b>';
+  if (trait === Trait.Shade) return ' <b class="wt-warn">◉ needs detection</b>';
+  return '';
+}
+
 function formatTelegraph(opener: Opener, w: number): string {
   return opener
-    .map((s) => `${s.group.count}× ${ELEMENT_EMOJI[s.group.element]} ${creatureName(s.group.element, s.group.trait)} <em>(${side(s.x, w)})</em>`)
+    .map((s) => `${s.group.count}× ${ELEMENT_EMOJI[s.group.element]} ${creatureName(s.group.element, s.group.trait)}${counterHint(s.group.trait)} <em>(${side(s.x, w)})</em>`)
     .join(', ') || '(nothing)';
 }
 

@@ -37,13 +37,17 @@ describe('SearchAttacker (L1 open-loop)', () => {
   });
 
   it('fires reactive commits from the reserve at decision points', () => {
-    const s = groundOnlyDefense();
-    s.prepareWave(2, 3);
+    // A weak board + a bigger wave, so spending the reserve is clearly worth it (against a
+    // strong defense the search may correctly HOLD, which isn't what we're testing here).
+    const s = Sim.create(cfg, Element.Fire);
+    for (const [x, y] of [[2, 6], [4, 6], [3, 8]] as const) s.buildTower({ x, y }, Element.Fire, Tier.T2, NodeKind.Turret);
+    s.syncFields();
+    s.prepareWave(3, 3);
     const atk = new SearchAttacker(s, { seed: 5n, topK: 1 });
-    playWave(s, atk, 2, 3);
-    // Two decision points (config default) → the attacker got two chances to commit.
+    playWave(s, atk, 3, 3);
+    // Two decision points (config default) → the attacker got two chances to commit…
     expect(atk.committed.length).toBe(2);
-    // At least one point spent some reserve (a non-empty commit).
+    // …and against a thin defense it spends the reserve at least once.
     expect(atk.committed.some((c) => c.length > 0)).toBe(true);
   });
 

@@ -260,10 +260,7 @@ export class Sim {
     this.metrics = emptyMetrics();
     this.pending = [];
     for (const s of opener) {
-      this.pending.push({
-        tick: this.waveBaseTick + this.secToTick(s.t),
-        x: s.x, element: s.group.element, trait: s.group.trait, count: s.group.count,
-      });
+      this.scheduleGroup(this.waveBaseTick + this.secToTick(s.t), s.x, s.group.element, s.group.trait, s.group.count);
     }
     const horizon = this.secToTick(this.cfg.waveSeconds);
     // Pure anti-hang backstop. Mobs always make strictly-decreasing progress (or leak /
@@ -303,10 +300,7 @@ export class Sim {
       this.reserveLeft -= cost;
       // Enter next tick; breachers path to walls autonomously (the gate is a hint the
       // validator checked was a real wall — Phase 0 needs no extra steering).
-      this.pending.push({
-        tick: this.tick + 1,
-        x: c.x, element: c.group.element, trait: c.group.trait, count: c.group.count,
-      });
+      this.scheduleGroup(this.tick + 1, c.x, c.group.element, c.group.trait, c.group.count);
     }
   }
 
@@ -347,15 +341,29 @@ export class Sim {
     return false;
   }
 
+  /** Schedule a group to STREAM in one mob at a time (staggered), so a group reads as a
+   *  file of creatures marching, not a single stack of overlapping sprites at one point. */
+  private scheduleGroup(baseTick: number, x: number, element: Element, trait: Trait, count: number): void {
+    const gap = 6; // ticks between successive bodies (~0.2s)
+    for (let k = 0; k < count; k++) {
+      this.pending.push({ tick: baseTick + k * gap, x, element, trait, count: 1 });
+    }
+  }
+
   /** Directly spawn a group at a spawn column (used by the schedule and by tests). */
   spawnGroup(x: number, element: Element, trait: Trait, count: number): void {
     const st = mobStats(trait);
     const spawnCell: Cell = { x, y: 0 };
+    const center = cellCenter(spawnCell);
     for (let i = 0; i < count; i++) {
       const id = this.freeMobIds.pop() ?? this.mobs.length;
+      // Small deterministic per-mob offset so a clump never renders as one stacked sprite
+      // (id-based → still fully deterministic). It washes out as they align to the lane.
+      const jx = (((id * 7) % 5) - 2) * (FX_ONE >> 3); // ±0.25 cell
+      const jy = ((id * 3) % 4) * (FX_ONE >> 4); //       0…0.19 cell down
       const mob: Mob = {
         id, element, trait,
-        pos: cellCenter(spawnCell),
+        pos: { x: center.x + jx, y: center.y + jy },
         hp: st.hp, maxHp: st.hp, speed: st.speed,
         flags: { ...st.flags }, shieldHits: st.shieldHits,
         entryX: x, alive: true, slowMul: FX_ONE, damageTaken: 0, breachCell: null,
