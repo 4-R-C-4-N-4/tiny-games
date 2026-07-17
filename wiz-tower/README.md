@@ -30,6 +30,7 @@ you're thin; the post-wave recap shows the feint. Economy and Core HP carry acro
 | **2** | Distilled model | sim-as-teacher leak surface → 10→64→28 MLP (`weights.json`, 23 KB) → JS forward pass `ModelAttacker` |
 | **3** | Close the loop | in-wave verbs, post-wave recap, personality presets, difficulty, one DAgger round |
 | **4** | Ship | static build, relative base, offline service worker, GitHub Pages workflow |
+| **5** | The mind (L3) | a cross-wave Strategist that models your habits and sets traps — steers the search with a per-wave bias |
 
 **Distilled model quality:** top-1 agreement with the search teacher **45%** vs a 19%
 defense-blind baseline (random 3.6%), **4.5% leak regret** when it disagrees. The action
@@ -63,10 +64,18 @@ npm run train       # distill weights.json (a DAgger round if a prior model exis
 static folder (relative asset paths) with an offline service worker, so it runs from any path
 and works offline after first load. No server, no headers, no WASM.
 
-## What's next (stretch)
+## The three opponents (same `Attacker` interface)
 
-- **Phase 5 — L3 cross-wave strategist.** Give the attacker memory + a multi-wave plan so it
-  models your build tendencies and sets traps across waves (over-defend one side for three
-  waves, punish the next three). This is where "feels like a mind" fully lives.
+- **Search** (L2) — live branching search; forks the sim to simulate candidate waves.
+- **Mind** (L3) — a cross-wave `Strategist` that carries a model of your habits (chronic type
+  gap, open sky, favoured flank, teching) and steers the search: it hammers the school you
+  answer weakly, escalates Drakes when you never raise anti-air, feints one flank and swings
+  its reserve to the other, and *tells you its plan* in the scry banner.
+- **Net** — the distilled tiny net (`weights.json` + JS forward pass).
+
+## What's next
+
 - **Tuning.** The `config.ts` cost/stat tables are deliberately placeholder — balance the
   breach/maze curve, difficulty pacing, and verb economy against real play.
+- **Distil the mind.** Phase 2 distilled the opener picker; the L3 Strategist's decisions are
+  a natural next distillation target (a memory vector feeding the same tiny-net recipe).
