@@ -7,7 +7,7 @@ import { fxToFloat } from '../src/fx.ts';
 import { Element, ELEMENT_NAMES, N_ELEMENTS } from '../src/element.ts';
 import { Trait, TRAIT_NAMES, Tier, NodeKind, OccKind, type Cell } from '../src/types.ts';
 import { WALL_COST, towerCost, tierGateCost, attuneCost } from '../src/config.ts';
-import { Game, type Opponent } from '../src/game.ts';
+import { Game, type Opponent, type Recap } from '../src/game.ts';
 import type { Opener } from '../src/wave.ts';
 import { ELEMENT_COLOR, ELEMENT_EMOJI, TRAIT_TAG, TRAIT_RADIUS } from './theme.ts';
 
@@ -23,6 +23,7 @@ export class GameView {
   private canvas!: HTMLCanvasElement;
   private ctx!: CanvasRenderingContext2D;
   private tool: Tool | null = null;
+  private verbTool: 'overcharge' | 'reveal' | 'reinforce' | null = null;
   private tier: Tier = Tier.T1;
   private speed = 1;
   private acc = 0;
@@ -119,6 +120,7 @@ export class GameView {
     this.seed = (this.seed * 6364136223846793005n + 1442695040888963407n) & ((1n << 64n) - 1n);
     this.game = new Game({ starting: this.startingChoice, difficulty: this.diffChoice, seed: this.seed, opponent: this.opponentChoice });
     this.tool = { kind: 'wall' };
+    this.verbTool = null;
     this.tier = Tier.T1;
     this.speed = 1;
     this.sizeCanvas();
@@ -211,7 +213,13 @@ export class GameView {
   private onBoardClick(e: PointerEvent): void {
     const rect = this.canvas.getBoundingClientRect();
     const cell: Cell = { x: Math.floor((e.clientX - rect.left) / CELL), y: Math.floor((e.clientY - rect.top) / CELL) };
-    if (!this.game.sim.grid.inBounds(cell) || this.game.state !== 'build' || !this.tool) return;
+    if (!this.game.sim.grid.inBounds(cell)) return;
+    if (this.game.state === 'wave') {
+      // In-wave tactical taps: apply the selected verb at the tapped cell.
+      if (this.verbTool && this.game.verb({ kind: this.verbTool, cell })) this.verbTool = null;
+      return;
+    }
+    if (this.game.state !== 'build' || !this.tool) return;
     if (this.tool.kind === 'wall') this.game.buildWall(cell);
     else if (this.tool.kind === 'sell') this.game.sell(cell);
     else this.game.buildTower(cell, this.tool.element, this.tier, NodeKind.Turret);
@@ -223,7 +231,8 @@ export class GameView {
     const g = this.game;
     // Only rebuild when the visible control set actually changes (avoids per-frame DOM
     // churn — which also detaches buttons mid-click).
-    const key = g.state === 'build' ? `build:${g.planned}` : g.state === 'wave' ? `wave:${this.speed}` : 'over';
+    const key = g.state === 'build' ? `build:${g.planned}`
+      : g.state === 'wave' ? `wave:${this.speed}:${this.verbTool}:${g.verbsLeft}` : 'over';
     if (key === this.controlsKey) return;
     this.controlsKey = key;
     const c = this.el.controls;
@@ -234,8 +243,21 @@ export class GameView {
       start.classList.add('wt-primary');
       c.append(plan, start);
     } else if (g.state === 'wave') {
+      // In-wave verbs (tap a verb, then tap the board). Limited charges per wave.
+      for (const [label, kind] of [['⚡', 'overcharge'], ['👁', 'reveal'], ['🧱', 'reinforce']] as const) {
+        const b = this.btn(label, () => { this.verbTool = this.verbTool === kind ? null : kind; this.controlsKey = ''; });
+        b.classList.add('wt-verb');
+        b.disabled = g.verbsLeft <= 0;
+        b.classList.toggle('sel', this.verbTool === kind);
+        b.title = kind;
+        c.appendChild(b);
+      }
+      const charges = document.createElement('span');
+      charges.className = 'wt-charges';
+      charges.textContent = `×${g.verbsLeft}`;
+      c.appendChild(charges);
       for (const [label, sp] of [['⏸', 0], ['1×', 1], ['2×', 2], ['4×', 4]] as const) {
-        const b = this.btn(label, () => { this.speed = sp; });
+        const b = this.btn(label, () => { this.speed = sp; this.controlsKey = ''; });
         b.classList.toggle('sel', this.speed === sp);
         c.appendChild(b);
       }
@@ -289,12 +311,17 @@ export class GameView {
 
   private drawTelegraph(): void {
     const t = this.el.telegraph;
+    const w = this.game.sim.grid.w;
     if (this.game.state === 'build' && this.game.planned) {
       t.style.display = 'block';
-      t.innerHTML = '⚠ Incoming: ' + formatTelegraph(this.game.telegraph, this.game.sim.grid.w);
+      t.innerHTML = '⚠ Incoming: ' + formatTelegraph(this.game.telegraph, w);
+    } else if (this.game.state === 'build' && this.game.lastRecap) {
+      t.style.display = 'block';
+      t.innerHTML = formatRecap(this.game.lastRecap, w);
     } else if (this.game.state === 'wave') {
       t.style.display = 'block';
-      t.innerHTML = '⚔ Wave in progress…';
+      const hint = this.verbTool ? `tap the board to ${this.verbTool}` : `${this.game.verbsLeft} tactical taps left`;
+      t.innerHTML = `⚔ Wave in progress — <em>${hint}</em>`;
     } else {
       t.style.display = 'none';
     }
@@ -370,6 +397,17 @@ export class GameView {
       if (t.flags.detection) this.ring(cx, cy, CELL * 0.44, '#f2f0d888');
     }
 
+    // active verb zones (overcharge / reveal)
+    for (const z of this.game.sim.activeEffects()) {
+      ctx.strokeStyle = z.kind === 'overcharge' ? '#ffd23f88' : '#4fc3ff88';
+      ctx.fillStyle = z.kind === 'overcharge' ? '#ffd23f18' : '#4fc3ff18';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(z.x * CELL, z.y * CELL, z.r * CELL, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
     // mobs
     for (const m of this.game.sim.liveMobs()) {
       const cx = fxToFloat(m.pos.x) * CELL, cy = fxToFloat(m.pos.y) * CELL;
@@ -417,10 +455,21 @@ export class GameView {
   }
 }
 
+const side = (x: number, w: number) => (x < w / 3 ? 'left' : x >= (2 * w) / 3 ? 'right' : 'center');
+
 /** "8× 🔥 Swarm (left), 2× 🪨 Tank (right)" from the telegraphed opener. */
 function formatTelegraph(opener: Opener, w: number): string {
-  const side = (x: number) => (x < w / 3 ? 'left' : x >= (2 * w) / 3 ? 'right' : 'center');
   return opener
-    .map((s) => `${s.group.count}× ${ELEMENT_EMOJI[s.group.element]} ${TRAIT_NAMES[s.group.trait]} <em>(${side(s.x)})</em>`)
-    .join(', ');
+    .map((s) => `${s.group.count}× ${ELEMENT_EMOJI[s.group.element]} ${TRAIT_NAMES[s.group.trait]} <em>(${side(s.x, w)})</em>`)
+    .join(', ') || '(nothing)';
+}
+
+/** Post-wave recap — makes the feint legible: telegraphed vs. what the hidden reserve struck. */
+function formatRecap(recap: Recap, w: number): string {
+  const commits = recap.committed.flat();
+  const reserve = commits
+    .map((c) => `${c.group.count}× ${ELEMENT_EMOJI[c.group.element]} ${TRAIT_NAMES[c.group.trait]}${c.kind === 'breach' ? ' ⚒breach' : ''} <em>(${side(c.x, w)})</em>`)
+    .join(', ') || 'nothing (held back)';
+  const leaked = Math.round(fxToFloat(recap.metrics.leakedHp));
+  return `📿 Wave ${recap.wave}: telegraphed ${formatTelegraph(recap.telegraph, w)} · reserve struck ${reserve} · leaked ${leaked}${recap.metrics.breaches ? ` · ${recap.metrics.breaches} breach` : ''}`;
 }

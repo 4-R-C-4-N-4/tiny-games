@@ -7,18 +7,26 @@
  */
 import { fxToFloat, type Fx } from './fx.ts';
 import { Element } from './element.ts';
-import { Tier, NodeKind, type Cell } from './types.ts';
+import { Tier, NodeKind, type Cell, type PlayerVerb } from './types.ts';
 import type { Metrics } from './types.ts';
-import { DEFAULT_CONFIG, type Config } from './config.ts';
+import { DEFAULT_CONFIG, VERB_CHARGES, type Config } from './config.ts';
 import { Sim } from './sim.ts';
 import { SearchAttacker, type SearchOptions } from './search.ts';
 import { ModelAttacker, type Weights } from './model.ts';
 import weightsJson from './weights.json';
-import type { Attacker, Opener } from './wave.ts';
+import type { Attacker, Opener, Commit } from './wave.ts';
 
 const DISTILLED_WEIGHTS = weightsJson as unknown as Weights;
 
 export type Opponent = 'search' | 'model';
+
+/** Post-wave recap that makes the feint legible (§4.6). */
+export interface Recap {
+  wave: number;
+  telegraph: Opener;
+  committed: Commit[][];
+  metrics: Metrics;
+}
 
 export type GameState = 'build' | 'wave' | 'gameover';
 
@@ -47,6 +55,10 @@ export class Game {
   telegraph: Opener = [];
   lastMetrics: Metrics | null = null;
   highestWave = 1;
+  /** Post-wave recap that makes the feint legible (§4.6): what was telegraphed vs. committed. */
+  lastRecap: Recap | null = null;
+  /** In-wave tactical taps remaining this wave (§2). */
+  verbsLeft = VERB_CHARGES;
   /** Committed opener + reserve pool, set by planWave() and consumed by startWave(). */
   private committed: { opener: Opener; pool: number } | null = null;
 
@@ -100,7 +112,16 @@ export class Game {
     if (!this.committed) this.planWave();
     const { opener, pool } = this.committed!;
     this.sim.beginWave(opener, pool, this.wave, this.diff);
+    this.verbsLeft = VERB_CHARGES;
     this.state = 'wave';
+  }
+
+  /** Spend one tactical tap on an in-wave verb (§2). Only during a wave, while charges remain. */
+  verb(v: PlayerVerb): boolean {
+    if (this.state !== 'wave' || this.verbsLeft <= 0) return false;
+    if (!this.sim.playerVerb(v)) return false;
+    this.verbsLeft -= 1;
+    return true;
   }
 
   /** Advance the active wave by up to `maxSteps` ticks (the speed control). Returns the
@@ -131,6 +152,14 @@ export class Game {
   }
 
   private endWave(): void {
+    if (this.lastMetrics) {
+      this.lastRecap = {
+        wave: this.wave,
+        telegraph: this.telegraph,
+        committed: this.attacker.committed ?? [],
+        metrics: this.lastMetrics,
+      };
+    }
     this.sim.player.currency += this.sim.cfg.waveStipend;
     this.wave += 1;
     this.highestWave = Math.max(this.highestWave, this.wave);

@@ -158,3 +158,12 @@ export function groupCost(trait: Trait, count: number): number {
 export function budgetFor(wave: number): number {
   return 60 + 20 * wave;
 }
+
+// ---- in-wave player verbs (§2) ----------------------------------------------------
+
+export const VERB_RADIUS: Fx = fx(2); // effect radius in cells (euclidean, compared squared)
+export const OVERCHARGE_MULT: Fx = fx(3); // towers in range fire ×3 while active
+export const OVERCHARGE_SECS: Fx = fx(3);
+export const REVEAL_SECS: Fx = fx(4);
+export const REINFORCE_HP: Fx = WALL_HP; // restore a wall to full
+export const VERB_CHARGES = 2; // taps per wave (design §2: "1–2 cheap tactical taps")

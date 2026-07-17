@@ -64,7 +64,7 @@ describe('towers: acquire, fire, typing, bounty', () => {
 describe('trait gates: flier needs anti-air, shade needs detection', () => {
   it('a Fire turret cannot touch a flier (it leaks); a Sonic anti-air turret kills it', () => {
     const noAir = Sim.create(cfg, Element.Fire);
-    noAir.buildTower({ x: 3, y: 5 }, Element.Fire, Tier.T3, NodeKind.Turret);
+    noAir.buildTower({ x: 3, y: 5 }, Element.Fire, Tier.T2, NodeKind.Turret);
     noAir.spawnGroup(3, Element.Light, Trait.Flier, 1);
     runUntil(noAir, (s) => s.coreHp() < fx(100));
     expect(noAir.coreHp()).toBeLessThan(fx(100)); // leaked over the wall-less field
@@ -78,7 +78,7 @@ describe('trait gates: flier needs anti-air, shade needs detection', () => {
 
   it('a Fire turret cannot target a Shade; a Light detection turret can', () => {
     const blind = Sim.create(cfg, Element.Fire);
-    blind.buildTower({ x: 3, y: 5 }, Element.Fire, Tier.T3, NodeKind.Turret);
+    blind.buildTower({ x: 3, y: 5 }, Element.Fire, Tier.T2, NodeKind.Turret);
     blind.spawnGroup(3, Element.Fire, Trait.Shade, 1);
     runUntil(blind, (s) => s.coreHp() < fx(100));
     expect(blind.coreHp()).toBeLessThan(fx(100));

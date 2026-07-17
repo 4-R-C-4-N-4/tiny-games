@@ -40,16 +40,21 @@ const telegraph = await page.locator('#telegraph').innerText();
 await page.getByText('Start Wave').click();
 const startedState = await page.evaluate(() => window.wt.game.state);
 
-// Fast-forward the wave to completion inside the page (exercises the browser bundle's sim).
+// Fast-forward the wave to completion inside the page (exercises the browser bundle's sim),
+// firing an in-wave verb partway through.
 const result = await page.evaluate(() => {
   const g = window.wt.game;
-  let guard = 0, maxMobs = 0;
+  let guard = 0, maxMobs = 0, usedVerb = false, verbOk = false;
   while (g.state === 'wave' && guard++ < 2000) {
     g.update(500);
-    maxMobs = Math.max(maxMobs, g.sim.liveMobs().length);
+    const live = g.sim.liveMobs().length;
+    maxMobs = Math.max(maxMobs, live);
+    if (!usedVerb && live > 0) { usedVerb = true; verbOk = g.verb({ kind: 'overcharge', cell: { x: 3, y: 6 } }); }
   }
-  return { state: g.state, wave: g.wave, coreFrac: g.coreHpFraction(), maxMobs };
+  return { state: g.state, wave: g.wave, coreFrac: g.coreHpFraction(), maxMobs, verbOk, verbsLeft: g.verbsLeft };
 });
+// Back in the build phase, the telegraph area should show the post-wave recap.
+const recapText = await page.locator('#telegraph').innerText();
 
 // Switch to the distilled-net opponent and run a wave with it (exercises the bundled
 // weights.json + JS forward pass in the browser).
@@ -77,6 +82,9 @@ if (!telegraph.includes('Incoming')) problems.push(`telegraph missing: "${telegr
 if (startedState !== 'wave') problems.push(`start did not enter wave (got ${startedState})`);
 if (result.maxMobs <= 0) problems.push('no mobs ever spawned during the wave');
 if (result.state === 'wave') problems.push('wave never terminated');
+if (!result.verbOk) problems.push('in-wave verb (overcharge) did not apply');
+if (result.verbsLeft !== 1) problems.push(`verb charge not spent (left ${result.verbsLeft})`);
+if (!/Wave 1/.test(recapText)) problems.push(`post-wave recap missing: "${recapText}"`);
 if (modelRun.opponent !== 'model') problems.push(`did not switch to net opponent (${modelRun.opponent})`);
 if (modelRun.maxMobs <= 0) problems.push('net opponent spawned no mobs');
 if (modelRun.state === 'wave') problems.push('net-opponent wave never terminated');
@@ -85,6 +93,7 @@ console.log('initial     ', initial);
 console.log('afterBuild  ', afterBuild);
 console.log('telegraph   ', telegraph);
 console.log('wave result ', result);
+console.log('recap       ', recapText);
 console.log('model run   ', modelRun);
 console.log('console errs', errors.length ? errors : 'none');
 console.log('screenshot  ', SHOT);

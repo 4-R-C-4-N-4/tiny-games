@@ -68,6 +68,9 @@ export interface Attacker {
   open(obs: Observation): { opener: Opener; pool: number };
   /** React at a decision point: choose commits from the remaining reserve. */
   commit(ctx: DecisionContext): Commit[];
+  /** The reserve commits fired at each decision point this wave — for the post-wave recap
+   *  that makes the feint legible (§4.6). Reset at open(). */
+  readonly committed?: Commit[][];
 }
 
 export type WaveErrorKind = 'syntax' | 'overBudget' | 'badCell' | 'badTiming';

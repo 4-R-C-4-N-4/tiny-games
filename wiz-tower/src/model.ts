@@ -110,12 +110,15 @@ export interface ModelOptions {
 export class ModelAttacker implements Attacker {
   private readonly reserveFrac: number;
   lastAction = 0;
+  /** Reserve commits fired this wave (for the recap), reset at open(). */
+  committed: Commit[][] = [];
 
   constructor(private readonly sim: Sim, private readonly weights: Weights, opts: ModelOptions = {}) {
     this.reserveFrac = opts.reserveFrac ?? 0.35;
   }
 
   open(obs: Observation): { opener: Opener; pool: number } {
+    this.committed = [];
     const wave = obs.wave > 0 ? obs.wave : Math.max(1, this.sim.waveNumber());
     const budget = budgetFor(wave);
     const pool = Math.round(budget * this.reserveFrac);
@@ -132,11 +135,13 @@ export class ModelAttacker implements Attacker {
   }
 
   commit(ctx: DecisionContext): Commit[] {
-    if (ctx.reserveLeft <= 0) return [];
+    if (ctx.reserveLeft <= 0) { this.committed.push([]); return []; }
     const { element, trait } = decodeAction(this.lastAction);
     const x = this.thinnestColumn(ctx.obs);
     const group = this.fill(element, trait, ctx.reserveLeft);
-    return group ? [{ kind: 'spawn', x, group }] : [];
+    const commit: Commit[] = group ? [{ kind: 'spawn', x, group }] : [];
+    this.committed.push(commit);
+    return commit;
   }
 
   private fill(element: Element, trait: Trait, budget: number): MobGroup | null {

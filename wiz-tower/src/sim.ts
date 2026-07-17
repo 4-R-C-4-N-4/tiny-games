@@ -8,7 +8,7 @@
  * Determinism contract (PHASE0.md §1): fixed timestep, fixed-point math, entities in
  * arrays iterated in stable id order (never Map key order for logic).
  */
-import { fx, fxMul, fxDiv, fxToInt, FX_SHIFT, FX_ONE, Rng, type Fx } from './fx.ts';
+import { fx, fxMul, fxDiv, fxToInt, fxToFloat, FX_SHIFT, FX_ONE, Rng, type Fx } from './fx.ts';
 import { Element, N_ELEMENTS, typeMult } from './element.ts';
 import { Grid } from './grid.ts';
 import { Fields } from './fields.ts';
@@ -17,11 +17,12 @@ import {
   OccKind, Tier, NodeKind, Trait, TargetPriority,
   type Cell, type Pos, type Tower, type Mob, type TowerId, type MobId,
   type Metrics, type Observation, type CellFeatures, type BuildProfile,
-  type DecisionContext, type StepOutcome,
+  type DecisionContext, type StepOutcome, type PlayerVerb,
 } from './types.ts';
 import {
   type Config, WALL_COST, WALL_HP, refund, towerCost, towerStats, mobStats,
   BREAKER_WALL_DPS, MOB_WALL_DPS, MENDER_HEAL_RADIUS, SPLASH_RADIUS, leakDamage, budgetFor,
+  VERB_RADIUS, OVERCHARGE_MULT, OVERCHARGE_SECS, REVEAL_SECS, REINFORCE_HP,
 } from './config.ts';
 import type { Opener, Commit } from './wave.ts';
 
@@ -49,6 +50,15 @@ interface ScheduledSpawn {
   element: Element;
   trait: Trait;
   count: number;
+}
+
+/** A transient in-wave effect from a player verb (§2). Pruned when `until` passes. */
+interface Effect {
+  kind: 'overcharge' | 'reveal';
+  cx: Fx;
+  cy: Fx;
+  r2: Fx;
+  until: number; // tick it expires
 }
 
 function emptyMetrics(): Metrics {
@@ -80,6 +90,8 @@ export class Sim {
   tick = 0;
   private _coreHp: Fx;
   mazeDirty = true;
+  /** Active in-wave verb effects (overcharge/reveal zones). */
+  private effects: Effect[] = [];
 
   // ---- wave state ----
   private waveActive = false;
@@ -132,6 +144,7 @@ export class Sim {
     s.tick = this.tick;
     s._coreHp = this._coreHp;
     s.mazeDirty = this.mazeDirty;
+    s.effects = this.effects.map((e) => ({ ...e }));
     s.waveActive = this.waveActive;
     s.waveNum = this.waveNum;
     s.diff = this.diff;
@@ -297,6 +310,43 @@ export class Sim {
     }
   }
 
+  /** Apply an in-wave player verb (§2). Overcharge/Reveal drop a timed zone; Reinforce
+   *  restores a wall immediately. The Game gates how many charges the player has. */
+  playerVerb(verb: PlayerVerb): boolean {
+    const c = cellCenter(verb.cell);
+    const r2 = fxMul(VERB_RADIUS, VERB_RADIUS);
+    if (verb.kind === 'overcharge') {
+      this.effects.push({ kind: 'overcharge', cx: c.x, cy: c.y, r2, until: this.tick + this.secToTick(OVERCHARGE_SECS) });
+      return true;
+    }
+    if (verb.kind === 'reveal') {
+      this.effects.push({ kind: 'reveal', cx: c.x, cy: c.y, r2, until: this.tick + this.secToTick(REVEAL_SECS) });
+      return true;
+    }
+    // reinforce
+    if (!this.grid.inBounds(verb.cell)) return false;
+    const occ = this.grid.get(verb.cell).occ;
+    if (occ.kind !== OccKind.Wall) return false;
+    this.grid.setOcc(verb.cell, { kind: OccKind.Wall, hp: REINFORCE_HP });
+    return true;
+  }
+
+  /** Active verb zones in cell units (for rendering). */
+  activeEffects(): { kind: 'overcharge' | 'reveal'; x: number; y: number; r: number }[] {
+    return this.effects
+      .filter((e) => e.until >= this.tick)
+      .map((e) => ({ kind: e.kind, x: fxToFloat(e.cx), y: fxToFloat(e.cy), r: fxToFloat(VERB_RADIUS) }));
+  }
+
+  private effectActive(kind: 'overcharge' | 'reveal', p: Pos): boolean {
+    for (const e of this.effects) {
+      if (e.kind !== kind || e.until < this.tick) continue;
+      const dx = e.cx - p.x, dy = e.cy - p.y;
+      if (fxMul(dx, dx) + fxMul(dy, dy) <= e.r2) return true;
+    }
+    return false;
+  }
+
   /** Directly spawn a group at a spawn column (used by the schedule and by tests). */
   spawnGroup(x: number, element: Element, trait: Trait, count: number): void {
     const st = mobStats(trait);
@@ -322,6 +372,7 @@ export class Sim {
   step(): StepOutcome {
     this.tick += 1; // §2.1
 
+    if (this.effects.length) this.effects = this.effects.filter((e) => e.until >= this.tick);
     this.processSpawns(); // §2.2
     this.moveMobs(); // §2.3 + §2.4 (intended movement, move, leaks)
     this.applyBreachDamage(); // §2.5
@@ -430,7 +481,11 @@ export class Sim {
       if (!t) continue;
       const target = this.acquire(t);
       if (!target) continue;
-      const base = fxMul(t.dps, this.cfg.dt);
+      let base = fxMul(t.dps, this.cfg.dt);
+      // Overcharge verb: towers inside an active zone fire much harder.
+      if (this.effects.length && this.effectActive('overcharge', cellCenter(t.cell))) {
+        base = fxMul(base, OVERCHARGE_MULT);
+      }
       this.damageMob(t, target, base, /*isSplash=*/ false);
       if (t.flags.splash > 0) {
         const splashDmg = fxMul(base, t.flags.splash);
@@ -445,10 +500,11 @@ export class Sim {
     }
   }
 
-  /** Can tower `t` legally hit mob `m`? Fliers need antiAir; Shades need detection. */
+  /** Can tower `t` legally hit mob `m`? Fliers need antiAir; Shades need detection (or a
+   *  Reveal verb zone covering the mob). */
   private canHit(t: Tower, m: Mob): boolean {
     if (m.flags.flier && !t.flags.antiAir) return false;
-    if (m.flags.stealth && !t.flags.detection) return false;
+    if (m.flags.stealth && !t.flags.detection && !this.effectActive('reveal', m.pos)) return false;
     return true;
   }
 

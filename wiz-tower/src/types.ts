@@ -136,6 +136,14 @@ export interface Mob {
   breachCell: Cell | null; // wall this mob is attacking this tick (set in move phase, blocked mobs)
 }
 
+// ---- player in-wave verbs (§2 tap-light counterplay) ------------------------------
+
+/** Cheap tactical taps the player gets DURING a wave (a couple per wave, not RTS APM). */
+export type PlayerVerb =
+  | { kind: 'overcharge'; cell: Cell } // towers near cell fire much harder, briefly
+  | { kind: 'reveal'; cell: Cell } //     stealth mobs near cell become targetable, briefly
+  | { kind: 'reinforce'; cell: Cell }; // restore a wall's HP
+
 // ---- observation — what the attacker sees (§4.2) ----------------------------------
 
 export interface CellFeatures {
