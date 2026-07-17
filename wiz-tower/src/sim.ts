@@ -21,7 +21,7 @@ import {
 } from './types.ts';
 import {
   type Config, WALL_COST, WALL_HP, refund, towerCost, towerStats, mobStats,
-  BREAKER_WALL_DPS, MOB_WALL_DPS, MENDER_HEAL_RADIUS, SPLASH_RADIUS, leakDamage, budgetFor, bounty,
+  BREAKER_WALL_DPS, MOB_WALL_DPS, MENDER_HEAL_RADIUS, SPLASH_RADIUS, leakDamage, budgetFor, bounty, harvestBonus,
   VERB_RADIUS, OVERCHARGE_MULT, OVERCHARGE_SECS, REVEAL_SECS, REINFORCE_HP,
 } from './config.ts';
 import type { Opener, Commit } from './wave.ts';
@@ -366,7 +366,7 @@ export class Sim {
         pos: { x: center.x + jx, y: center.y + jy },
         hp: st.hp, maxHp: st.hp, speed: st.speed,
         flags: { ...st.flags }, shieldHits: st.shieldHits,
-        entryX: x, alive: true, slowMul: FX_ONE, damageTaken: 0, breachCell: null,
+        entryX: x, alive: true, slowMul: FX_ONE, damageTaken: 0, breachCell: null, lastHitElement: null,
       };
       if (id === this.mobs.length) this.mobs.push(mob);
       else this.mobs[id] = mob;
@@ -549,16 +549,17 @@ export class Sim {
   }
 
   private damageMob(t: Tower, m: Mob, rawDamage: Fx, isSplash: boolean): void {
-    // Shielded absorbs a whole hit (primary hits only; splash doesn't burn shields).
+    // Shielded absorbs a whole hit (primary hits only; splash doesn't burn shields)...
     if (m.shieldHits > 0 && !isSplash) {
-      m.shieldHits -= 1;
-      return;
+      if (t.flags.disrupt) m.shieldHits = 0; // ...but Resonance shatters the whole ward and rings on through
+      else { m.shieldHits -= 1; return; }
     }
     const dmg = fxMul(rawDamage, typeMult(t.element, m.element));
     const hpBefore = m.hp;
     const applied = dmg > hpBefore ? hpBefore : dmg;
     m.hp -= dmg;
     m.damageTaken += applied;
+    if (applied > 0) m.lastHitElement = t.element; // for Umbra's harvest bounty on the killing blow
     this.metrics.dpsUtil[t.element] += applied;
     if (dmg > hpBefore) this.metrics.overkill += dmg - hpBefore;
     if (t.flags.slow > 0 && !isSplash) {
@@ -571,17 +572,28 @@ export class Sim {
   private resolveDeaths(): void {
     for (const m of this.mobs) {
       if (!m.alive || m.hp > 0) continue;
-      const b = bounty(m.trait);
+      // Umbra harvests: a Dark ward's kill reaps a bounty bonus (kills → power).
+      const b = bounty(m.trait) + (m.lastHitElement === Element.Dark ? harvestBonus(m.trait) : 0);
       this.player.currency += b;
       this.metrics.currencyDelta += b;
       this.killMob(m);
     }
   }
 
+  /** Is `p` inside any Resonance ward's aura? Such a mob is disrupted (Menders there are hushed). */
+  private inDisruptAura(p: Pos): boolean {
+    for (const t of this.towers) {
+      if (!t || !t.flags.disrupt) continue;
+      if (dist2(cellCenter(t.cell), p) <= fxMul(t.range, t.range)) return true;
+    }
+    return false;
+  }
+
   private menderRegen(): void {
     const r2 = fxMul(MENDER_HEAL_RADIUS, MENDER_HEAL_RADIUS);
     for (const healer of this.mobs) {
       if (!healer.alive || healer.flags.regen <= 0) continue;
+      if (this.inDisruptAura(healer.pos)) continue; // Resonance silences the healer's channel
       const heal = fxMul(healer.flags.regen, this.cfg.dt);
       for (const m of this.mobs) {
         if (!m.alive || m.hp >= m.maxHp) continue;

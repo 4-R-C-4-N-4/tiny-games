@@ -111,6 +111,9 @@ export function towerStats(element: Element, tier: Tier, kind: NodeKind): TowerS
     detection: element === Element.Light,
     splash: element === Element.Fire ? fxRatio(1, 2) : element === Element.Zap ? fxRatio(1, 3) : 0,
     slow: element === Element.Ice ? fxRatio(1, 2) : 0,
+    // Resonance shatters wards & hushes healers; Umbra harvests power from its own kills.
+    disrupt: element === Element.Sonic,
+    harvest: element === Element.Dark,
   };
   const priority = flags.antiAir ? TargetPriority.Flying : TargetPriority.First;
   return { dps, range, flags, priority };
@@ -174,6 +177,13 @@ export const BOUNTY_FRAC = 0.6;
 /** Kill bounty for a mob (§3.4) — a fraction of its point cost, at least 1. */
 export function bounty(trait: Trait): number {
   return Math.max(1, Math.round(mobStats(trait).cost * BOUNTY_FRAC));
+}
+
+/** Umbra's harvest: when a Dark ward lands the killing blow it reaps extra power (bounty),
+ *  the mechanical form of "turn kills to power" — Dark's build-cost is repaid in economy. */
+export const DARK_KILL_BONUS = 0.5;
+export function harvestBonus(trait: Trait): number {
+  return Math.max(1, Math.round(bounty(trait) * DARK_KILL_BONUS));
 }
 
 /** The wave a threat type becomes available to the attacker at Rank 3. Composition escalates

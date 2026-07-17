@@ -193,7 +193,7 @@ export class GameView {
     c.innerHTML = `<div class="wt-codex-in">
       <img src="./art/affinity-sigil.svg" alt="Affinity wheel" />
       <p>Each school <b>counters the next</b> around the wheel (1.5×) and is weak to the one before (0.5×). <b>Radiant ⇄ Void</b> answer only each other. Read your foe's colours; conjure against the school they ward weakly.</p>
-      <p class="wt-note"><b>Your wards.</b> Your chosen school (★) is pre-attuned — build its wards freely. Any <i>other</i> school needs a one-time <b>🔓 attunement</b> before you can build it (the price rises with each school you add). Ward badges: <b>↑</b> anti-air · <b>◉</b> detection · <b>~</b> slow · <b>✷</b> splash.</p>
+      <p class="wt-note"><b>Your wards.</b> Your chosen school (★) is pre-attuned — build its wards freely. Any <i>other</i> school needs a one-time <b>🔓 attunement</b> before you can build it (the price rises with each school you add). Ward badges: <b>↑</b> anti-air · <b>◉</b> detection · <b>~</b> slow · <b>✷</b> splash · <b>⊘</b> disrupt (breaks shields &amp; hushes menders) · <b>◈</b> harvest (kills pay bonus power).</p>
       <p class="wt-note"><b>Walls.</b> 🧱 walls funnel the ground path (fliers ignore them). They have HP: blocked mobs only chip them, but <b>Gargoyles (Breakers)</b> smash them fast to breach a shortcut — watch the wall's bar.</p>
       <h3>Bestiary</h3>
       <div class="wt-bestiary">${cards.map(([tr, el]) =>
@@ -293,17 +293,21 @@ export class GameView {
   private refreshElementBtn(b: HTMLButtonElement, el: Element): void {
     const pl = this.game.sim.player;
     const flags = towerStats(el, Tier.T1, NodeKind.Turret).flags;
-    const badge = flags.antiAir ? '<i class="wt-cap aa" title="anti-air">↑</i>'
-      : flags.detection ? '<i class="wt-cap det" title="detection">◉</i>'
-        : flags.slow > 0 ? '<i class="wt-cap slow" title="slow">∼</i>'
-          : flags.splash > 0 ? '<i class="wt-cap spl" title="splash">✷</i>' : '';
+    const caps: string[] = [];
+    if (flags.antiAir) caps.push('<i class="wt-cap aa" title="anti-air — hits fliers">↑</i>');
+    if (flags.detection) caps.push('<i class="wt-cap det" title="detection — reveals shades">◉</i>');
+    if (flags.slow > 0) caps.push('<i class="wt-cap slow" title="slow">∼</i>');
+    if (flags.splash > 0) caps.push('<i class="wt-cap spl" title="splash">✷</i>');
+    if (flags.disrupt) caps.push('<i class="wt-cap dis" title="disrupt — shatters shields & hushes menders">⊘</i>');
+    if (flags.harvest) caps.push('<i class="wt-cap har" title="harvest — kills pay a bonus bounty">◈</i>');
+    const badge = caps.length ? `<span class="wt-caps">${caps.join('')}</span>` : '';
     b.style.setProperty('--el', ELEMENT_COLOR[el]);
     const home = el === pl.starting;
     b.classList.toggle('wt-home', home);
     b.title = home
       ? `${ELEMENT_NAMES[el]} — your school (pre-attuned, build freely)`
       : pl.attuned[el]
-        ? `${ELEMENT_NAMES[el]} ward — ${ELEMENT_ARCANA[el]}${flags.antiAir ? ' · hits fliers' : flags.detection ? ' · reveals shades' : ''}`
+        ? `${ELEMENT_NAMES[el]} ward — ${ELEMENT_ARCANA[el]}${flags.antiAir ? ' · hits fliers' : flags.detection ? ' · reveals shades' : flags.disrupt ? ' · breaks shields & menders' : flags.harvest ? ' · kills → bonus power' : flags.slow > 0 ? ' · slows' : flags.splash > 0 ? ' · splash' : ''}`
         : `Attune ${ELEMENT_NAMES[el]} (${ELEMENT_ARCANA[el]}) — one-time unlock, then build its wards`;
     if (!pl.attuned[el]) {
       const cost = attuneCost(pl.attuneCount);

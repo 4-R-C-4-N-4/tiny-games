@@ -129,8 +129,10 @@
     .wt-home { border-color:color-mix(in srgb, var(--gold) 55%, var(--line)); }
     .wt-home::after { content:'★'; position:absolute; top:-6px; left:-3px; font-size:9px; color:var(--gold); text-shadow:0 0 4px rgba(255,225,77,.6); }
     .wt-glyph { position:relative; display:inline-block; }
-    .wt-cap { position:absolute; top:-5px; right:-9px; font:700 9px var(--sans); font-style:normal; }
+    .wt-caps { position:absolute; top:-5px; right:-9px; display:flex; gap:1px; }
+    .wt-cap { font:700 9px var(--sans); font-style:normal; text-shadow:0 0 3px #000; }
     .wt-cap.aa { color:#eaf2ff; } .wt-cap.det { color:#ffe8a3; } .wt-cap.slow { color:#5fd0ff; } .wt-cap.spl { color:#ff9a4d; }
+    .wt-cap.dis { color:#c17bff; } .wt-cap.har { color:#6d5cff; }
     .wt-warn { color:#eaf2ff; font-weight:700; }
     .wt-tool:disabled { opacity:.32; cursor:default; }
     .wt-elem { border-color:color-mix(in srgb, var(--el) 45%, var(--line)); }

@@ -98,6 +98,8 @@ export interface TowerFlags {
   detection: boolean;
   splash: Fx; // fraction of hit damage dealt to other mobs in-cell/adjacent (0 = none)
   slow: Fx; // movement multiplier applied on hit (0 = none)
+  disrupt: boolean; // Sonic (Resonance): shatters shields on hit & silences Menders in range
+  harvest: boolean; // Dark (Umbra): its killing blows pay a bonus bounty (kills → power)
 }
 
 export interface Tower {
@@ -134,6 +136,7 @@ export interface Mob {
   slowMul: Fx; // movement multiplier for the NEXT tick (set by slow towers, then reset)
   damageTaken: Fx; // running total, for the fire-misallocation metric on leak
   breachCell: Cell | null; // wall this mob is attacking this tick (set in move phase, blocked mobs)
+  lastHitElement: Element | null; // element of the last ward to damage it (for Dark's harvest bounty)
 }
 
 // ---- player in-wave verbs (§2 tap-light counterplay) ------------------------------
