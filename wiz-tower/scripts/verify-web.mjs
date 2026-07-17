@@ -18,7 +18,7 @@ page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 
 await page.goto(URL, { waitUntil: 'networkidle' });
 await page.waitForFunction(() => window.wt, null, { timeout: 5000 });
-// Discipline-select: choose the first class (Fire) and begin the run (default Search foe).
+// Discipline-select: choose the first class (Fire) and begin the run (default Mind foe).
 await page.locator('.wt-class').first().click();
 await page.locator('#begin').click();
 await page.waitForFunction(() => window.wt.game, null, { timeout: 5000 });
@@ -63,8 +63,10 @@ const result = await page.evaluate(() => {
 const recapText = await page.locator('#telegraph').innerText();
 
 // New run against the distilled-net opponent (exercises the bundled weights.json + JS
-// forward pass): back to the discipline screen, pick the Net foe + Fire, begin.
+// forward pass): back to the discipline screen, reveal the dev foes via the training toggle,
+// pick the Net foe + Fire, begin.
 await page.locator('#newrun').click();
+await page.locator('.wt-train').click(); // reveal Search/Net (Mind is the default shipped foe)
 await page.getByText('Net', { exact: true }).click();
 await page.locator('.wt-class').first().click();
 await page.locator('#begin').click();

@@ -37,7 +37,8 @@ export class GameView {
   private started = false;
   private classChoice: Element | null = null; // no discipline pre-selected — you must choose
   private diffChoice = 3;
-  private opponentChoice: Opponent = 'search';
+  private opponentChoice: Opponent = 'strategist'; // the Mind (L3) is the shipped foe
+  private trainingMode = false; // reveals the dev foes (L2 search, distilled net) + attacker style
   private personalityChoice: Personality = 'balanced';
   private seed = 1n;
 
@@ -166,10 +167,21 @@ export class GameView {
       opts.appendChild(row);
     };
     group('Rank', ([1, 2, 3, 4, 5] as const).map((d) => [String(d), `difficulty ${d}`, () => { this.diffChoice = d; }, this.diffChoice === d]));
-    group('Foe', ([['Search', 'search'], ['Mind', 'strategist'], ['Net', 'model']] as const).map(([t, o]) =>
-      [t, o === 'search' ? 'Live branching search (L2)' : o === 'strategist' ? 'Cross-wave strategist (L3) — learns your habits' : 'Distilled tiny net', () => { this.opponentChoice = o; }, this.opponentChoice === o]));
-    group('Style', ([['Balanced', 'balanced'], ['Aggressive', 'aggressive'], ['Economic', 'economic'], ['Bluffy', 'bluffy']] as const).map(([t, p]) =>
-      [t, `${p} attacker (search foes)`, () => { this.personalityChoice = p; }, this.personalityChoice === p]));
+    // The Mind (L3 strategist) is the one shipped foe. The L2 search and distilled net are
+    // development/training tools — revealed only under the training toggle, along with the
+    // attacker Style (which only steers those search-driven foes).
+    if (this.trainingMode) {
+      group('Foe', ([['Search', 'search'], ['Mind', 'strategist'], ['Net', 'model']] as const).map(([t, o]) =>
+        [t, o === 'search' ? 'Live branching search (L2)' : o === 'strategist' ? 'Cross-wave strategist (L3) — learns your habits' : 'Distilled tiny net', () => { this.opponentChoice = o; }, this.opponentChoice === o]));
+      group('Style', ([['Balanced', 'balanced'], ['Aggressive', 'aggressive'], ['Economic', 'economic'], ['Bluffy', 'bluffy']] as const).map(([t, p]) =>
+        [t, `${p} attacker (search foes)`, () => { this.personalityChoice = p; }, this.personalityChoice === p]));
+    }
+    const trow = document.createElement('div'); trow.className = 'wt-optrow';
+    const tb = document.createElement('button'); tb.className = 'wt-train' + (this.trainingMode ? ' on' : '');
+    tb.textContent = this.trainingMode ? '⚙ Training mode · on' : '⚙ Training mode';
+    tb.title = 'Reveal the development foes (L2 search, distilled net) and the attacker style';
+    tb.onclick = () => { this.trainingMode = !this.trainingMode; if (!this.trainingMode) this.opponentChoice = 'strategist'; this.buildStartOpts(); };
+    trow.appendChild(tb); opts.appendChild(trow);
   }
 
   private startRun(): void {
