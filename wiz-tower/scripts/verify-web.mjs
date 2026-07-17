@@ -37,9 +37,9 @@ await clickCell(3, 8);
 const afterBuild = await page.evaluate(() => ({ towers: window.wt.game.sim.liveTowers().length, currency: window.wt.game.currency }));
 
 // Scout (telegraph) then Start Wave via the real control buttons.
-await page.getByText('Scout wave').click();
+await page.getByText('Scry wave').click();
 const telegraph = await page.locator('#telegraph').innerText();
-await page.getByText('Start Wave').click();
+await page.getByText('Begin').click();
 const startedState = await page.evaluate(() => window.wt.game.state);
 
 // Fast-forward the wave to completion inside the page (exercises the browser bundle's sim),
@@ -80,7 +80,7 @@ const problems = [];
 if (initial.state !== 'build') problems.push(`initial state ${initial.state} != build`);
 if (afterBuild.towers !== 3) problems.push(`expected 3 towers, got ${afterBuild.towers}`);
 if (afterBuild.currency >= initial.currency) problems.push('building did not spend currency');
-if (!telegraph.includes('Incoming')) problems.push(`telegraph missing: "${telegraph}"`);
+if (!telegraph.includes('Scried')) problems.push(`telegraph missing: "${telegraph}"`);
 if (startedState !== 'wave') problems.push(`start did not enter wave (got ${startedState})`);
 if (result.maxMobs <= 0) problems.push('no mobs ever spawned during the wave');
 if (result.state === 'wave') problems.push('wave never terminated');

@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 420" width="400" height="420" font-family="ui-sans-serif, system-ui, sans-serif">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="44%" r="70%">
+      <stop offset="0%" stop-color="#15152e"/>
+      <stop offset="60%" stop-color="#0b0b1c"/>
+      <stop offset="100%" stop-color="#07070f"/>
+    </radialGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="soft" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+  </defs>
+
+  <rect width="400" height="420" rx="20" fill="url(#bg)"/>
+
+  <!-- outer ring -->
+  <circle cx="200" cy="190" r="162" fill="none" stroke="#2a2a4d" stroke-width="1"/>
+  <circle cx="200" cy="190" r="150" fill="none" stroke="#20203c" stroke-width="1" stroke-dasharray="2 6"/>
+
+  <!-- pentagon cycle: Sonic(top)->Earth->Zap->Ice->Fire->Sonic, drawn clockwise -->
+  <g stroke-width="2.5" fill="none" opacity="0.85" stroke-linecap="round">
+    <path d="M200,60 L323,150" stroke="#c17bff"/>
+    <path d="M323,150 L276,296" stroke="#8fce77"/>
+    <path d="M276,296 L124,296" stroke="#ffe14d"/>
+    <path d="M124,296 L77,150" stroke="#5fd0ff"/>
+    <path d="M77,150 L200,60" stroke="#ff6b4a"/>
+  </g>
+  <!-- directional arrowheads mid-edge (the "beats" direction) -->
+  <g fill="#e9e6ff" opacity="0.9">
+    <polygon points="0,-5 9,0 0,5" transform="translate(261.5,105) rotate(36)"/>
+    <polygon points="0,-5 9,0 0,5" transform="translate(299.5,223) rotate(108)"/>
+    <polygon points="0,-5 9,0 0,5" transform="translate(200,296) rotate(180)"/>
+    <polygon points="0,-5 9,0 0,5" transform="translate(100.5,223) rotate(252)"/>
+    <polygon points="0,-5 9,0 0,5" transform="translate(138.5,105) rotate(324)"/>
+  </g>
+
+  <!-- element nodes -->
+  <!-- Sonic (top) -->
+  <g transform="translate(200,60)">
+    <circle r="30" fill="#c17bff" opacity="0.30" filter="url(#soft)"/>
+    <circle r="19" fill="#0d0d20" stroke="#c17bff" stroke-width="2.5" filter="url(#glow)"/>
+    <g fill="none" stroke="#c17bff" stroke-width="2" stroke-linecap="round"><path d="M-3,-6 A7,7 0 0 1 -3,6"/><path d="M2,-9 A11,11 0 0 1 2,9"/></g>
+  </g>
+  <!-- Earth (right) -->
+  <g transform="translate(323,150)">
+    <circle r="30" fill="#8fce77" opacity="0.30" filter="url(#soft)"/>
+    <circle r="19" fill="#0d0d20" stroke="#8fce77" stroke-width="2.5" filter="url(#glow)"/>
+    <path d="M0,-9 L8,0 L0,9 L-8,0 Z" fill="#8fce77"/>
+  </g>
+  <!-- Zap (lower right) -->
+  <g transform="translate(276,296)">
+    <circle r="30" fill="#ffe14d" opacity="0.30" filter="url(#soft)"/>
+    <circle r="19" fill="#0d0d20" stroke="#ffe14d" stroke-width="2.5" filter="url(#glow)"/>
+    <polygon points="3,-10 -4,1 1,1 -3,10 5,-2 0,-2" fill="#ffe14d"/>
+  </g>
+  <!-- Ice (lower left) -->
+  <g transform="translate(124,296)">
+    <circle r="30" fill="#5fd0ff" opacity="0.30" filter="url(#soft)"/>
+    <circle r="19" fill="#0d0d20" stroke="#5fd0ff" stroke-width="2.5" filter="url(#glow)"/>
+    <g stroke="#5fd0ff" stroke-width="2" stroke-linecap="round"><path d="M0,-9 V9"/><path d="M-8,-4.5 L8,4.5"/><path d="M-8,4.5 L8,-4.5"/></g>
+  </g>
+  <!-- Fire (left) -->
+  <g transform="translate(77,150)">
+    <circle r="30" fill="#ff6b4a" opacity="0.30" filter="url(#soft)"/>
+    <circle r="19" fill="#0d0d20" stroke="#ff6b4a" stroke-width="2.5" filter="url(#glow)"/>
+    <path d="M0,-10 C6,-3 8,3 3,8 C6,3 0,3 0,9 C-6,4 -6,-2 0,-10 Z" fill="#ff6b4a"/>
+  </g>
+
+  <!-- Light / Dark mutual pair — the specialist axis at the heart -->
+  <line x1="200" y1="158" x2="200" y2="222" stroke="#8b86c9" stroke-width="2" stroke-dasharray="3 4"/>
+  <g fill="#e9e6ff"><polygon points="0,-4 5,0 0,4" transform="translate(200,162) rotate(-90)"/><polygon points="0,-4 5,0 0,4" transform="translate(200,218) rotate(90)"/></g>
+  <g transform="translate(200,150)">
+    <circle r="24" fill="#ffe8a3" opacity="0.28" filter="url(#soft)"/>
+    <circle r="15" fill="#0d0d20" stroke="#ffe8a3" stroke-width="2.5" filter="url(#glow)"/>
+    <circle r="5.5" fill="#ffe8a3"/><g stroke="#ffe8a3" stroke-width="1.6" stroke-linecap="round"><path d="M0,-11 V-8"/><path d="M0,8 V11"/><path d="M-11,0 H-8"/><path d="M8,0 H11"/></g>
+  </g>
+  <g transform="translate(200,230)">
+    <circle r="24" fill="#6d5cff" opacity="0.30" filter="url(#soft)"/>
+    <circle r="15" fill="#0d0d20" stroke="#6d5cff" stroke-width="2.5" filter="url(#glow)"/>
+    <path d="M4,-8 A8,8 0 1 0 4,8 A6,6 0 1 1 4,-8 Z" fill="#6d5cff"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="200" y="388" text-anchor="middle" fill="#efeaff" font-size="30" font-weight="800" letter-spacing="8">WIZ·TOWER</text>
+  <text x="200" y="408" text-anchor="middle" fill="#7d78ad" font-size="10.5" letter-spacing="6">ARCANE · AFFINITY · DEFENSE</text>
+</svg>
