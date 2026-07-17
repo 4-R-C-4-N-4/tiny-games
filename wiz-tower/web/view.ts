@@ -649,16 +649,36 @@ export class GameView {
 
   private drawWall(x: number, y: number, frac: number): void {
     const ctx = this.ctx;
-    const px = x * CELL + 5, py = y * CELL + 5, s = CELL - 10;
-    ctx.fillStyle = `rgba(140,140,170,${0.3 + 0.55 * Math.max(0.12, frac)})`;
-    roundRect(ctx, px, py, s, s, 5); ctx.fill();
-    ctx.strokeStyle = 'rgba(200,200,230,0.25)'; ctx.lineWidth = 1;
-    roundRect(ctx, px, py, s, s, 5); ctx.stroke();
-    // fracture lines deepen as it's chewed down
-    if (frac < 0.92) {
-      ctx.strokeStyle = `rgba(12,12,22,${0.3 + 0.45 * (1 - frac)})`; ctx.lineWidth = 1 + (1 - frac);
-      ctx.beginPath(); ctx.moveTo(px + s * 0.32, py); ctx.lineTo(px + s * 0.5, py + s * 0.55); ctx.lineTo(px + s * 0.34, py + s); ctx.stroke();
-      if (frac < 0.55) { ctx.beginPath(); ctx.moveTo(px + s, py + s * 0.38); ctx.lineTo(px + s * 0.55, py + s * 0.5); ctx.lineTo(px + s * 0.78, py + s); ctx.stroke(); }
+    const px = x * CELL + 4, py = y * CELL + 4, s = CELL - 8;
+    const lit = 0.55 + 0.45 * Math.max(0.15, frac); // damaged runestone darkens
+    const cx = px + s / 2, cy = py + s / 2;
+    // carved stone body — a top-lit gradient for depth
+    const grad = ctx.createLinearGradient(px, py, px, py + s);
+    grad.addColorStop(0, `rgba(126,128,158,${0.9 * lit})`);
+    grad.addColorStop(1, `rgba(66,68,96,${0.9 * lit})`);
+    ctx.fillStyle = grad;
+    roundRect(ctx, px, py, s, s, 6); ctx.fill();
+    // beveled inner edge (chiselled) + dark outer seam
+    ctx.strokeStyle = `rgba(190,192,225,${0.32 * lit})`; ctx.lineWidth = 1.5;
+    roundRect(ctx, px + 2.5, py + 2.5, s - 5, s - 5, 4); ctx.stroke();
+    ctx.strokeStyle = 'rgba(16,16,30,0.55)'; ctx.lineWidth = 1;
+    roundRect(ctx, px, py, s, s, 6); ctx.stroke();
+    // a glowing containment bind-rune etched in the face (pulses; fades as it cracks)
+    const glow = (0.32 + 0.18 * Math.sin(this.time * 2 + x * 1.3 + y)) * Math.max(0.18, frac);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = glow;
+    ctx.strokeStyle = '#8fa6ff'; ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - s * 0.24); ctx.lineTo(cx, cy + s * 0.24);
+    ctx.moveTo(cx, cy - s * 0.06); ctx.lineTo(cx + s * 0.17, cy - s * 0.2);
+    ctx.moveTo(cx, cy + s * 0.06); ctx.lineTo(cx - s * 0.17, cy + s * 0.2);
+    ctx.stroke();
+    ctx.restore();
+    // fractures deepen as it's chewed down
+    if (frac < 0.9) {
+      ctx.strokeStyle = `rgba(10,10,20,${0.4 + 0.4 * (1 - frac)})`; ctx.lineWidth = 1 + (1 - frac);
+      ctx.beginPath(); ctx.moveTo(px + s * 0.34, py + 1); ctx.lineTo(px + s * 0.52, py + s * 0.55); ctx.lineTo(px + s * 0.36, py + s - 1); ctx.stroke();
+      if (frac < 0.55) { ctx.beginPath(); ctx.moveTo(px + s - 1, py + s * 0.4); ctx.lineTo(px + s * 0.56, py + s * 0.5); ctx.lineTo(px + s * 0.8, py + s - 1); ctx.stroke(); }
     }
     // integrity bar while damaged
     if (frac < 0.999) {
