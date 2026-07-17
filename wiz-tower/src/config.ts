@@ -162,8 +162,8 @@ export function groupCost(trait: Trait, count: number): number {
  * compound past the threat. The quadratic term is the difficulty ramp.
  */
 export function budgetFor(wave: number, diff = 3): number {
-  const base = 36 + 16 * wave + 5 * wave * wave; // e.g. w1 57, w5 241, w10 696
-  const diffMul = 0.6 + 0.14 * diff; //             R1 0.74 · R3 1.02 · R5 1.30
+  const base = 34 + 15 * wave + 4 * wave * wave; // e.g. w1 53, w5 209, w10 584
+  const diffMul = 0.62 + 0.13 * diff; //            R1 0.75 · R3 1.01 · R5 1.27
   return Math.round(base * diffMul);
 }
 
@@ -181,12 +181,13 @@ export function bounty(trait: Trait): number {
  *  first-wave air-rush — you get time to tech the counters as the roster opens up. */
 const TRAIT_UNLOCK: Record<Trait, number> = {
   [Trait.Grunt]: 1, [Trait.Swarm]: 1, [Trait.Tank]: 2, [Trait.Runner]: 2,
-  [Trait.Flier]: 3, [Trait.Shielded]: 4, [Trait.Shade]: 5, [Trait.Breaker]: 5, [Trait.Mender]: 6,
+  [Trait.Flier]: 4, [Trait.Shielded]: 5, [Trait.Shade]: 6, [Trait.Breaker]: 6, [Trait.Mender]: 7,
 };
 
-/** Is `trait` available to the attacker on `wave` at `diff`? Higher Rank opens it earlier. */
+/** Is `trait` available to the attacker on `wave` at `diff`? Higher Rank opens it earlier
+ *  (a gentle ±1-wave spread across Ranks, not a swing that makes R5 a first-wave everything). */
 export function traitUnlocked(trait: Trait, wave: number, diff = 3): boolean {
-  return wave >= Math.max(1, TRAIT_UNLOCK[trait] + (3 - diff));
+  return wave >= Math.max(1, TRAIT_UNLOCK[trait] + Math.floor((3 - diff) / 2));
 }
 
 // ---- in-wave player verbs (§2) ----------------------------------------------------

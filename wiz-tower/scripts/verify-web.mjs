@@ -51,8 +51,8 @@ const startedState = await page.evaluate(() => window.wt.game.state);
 const result = await page.evaluate(() => {
   const g = window.wt.game;
   let guard = 0, maxMobs = 0, usedVerb = false, verbOk = false;
-  while (g.state === 'wave' && guard++ < 2000) {
-    g.update(500);
+  while (g.state === 'wave' && guard++ < 40000) {
+    g.update(20); // fine steps so we actually sample mid-wave (short waves resolve fast)
     const live = g.sim.liveMobs().length;
     maxMobs = Math.max(maxMobs, live);
     if (!usedVerb && live > 0) { usedVerb = true; verbOk = g.verb({ kind: 'overcharge', cell: { x: 3, y: 6 } }); }

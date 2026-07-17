@@ -5,9 +5,14 @@
  * school, then spend the rest climbing tiers on central cells. Run: `npm run balance`.
  */
 import { Game, type Opponent } from '../src/game.ts';
-import { Element, N_ELEMENTS } from '../src/element.ts';
+import { Element, N_ELEMENTS, typeMult, STRONG } from '../src/element.ts';
 import { Trait, NodeKind, OccKind, Tier, type Cell } from '../src/types.ts';
 import { fxToFloat } from '../src/fx.ts';
+
+function elementThatBeats(e: Element): Element {
+  for (let c = 0; c < N_ELEMENTS; c++) if (typeMult(c as Element, e) === STRONG) return c as Element;
+  return e;
+}
 
 // A competent maze: wall row 8 except a central gap so ALL ground funnels through a
 // tower-lined corridor; towers cluster around the gap and down to the Core.
@@ -26,12 +31,13 @@ function freeCell(g: Game): Cell | null {
   return null;
 }
 
+/** Build a cheap T1 ward of element `e` at a free cell (wide coverage beats density early). */
 function buildBest(g: Game, e: Element): boolean {
   const pl = g.sim.player;
   if (!pl.attuned[e] && !g.attune(e)) return false;
   const cell = freeCell(g);
   if (!cell) return false;
-  return g.buildTower(cell, e, Tier.T1, NodeKind.Turret); // cheap, wide coverage
+  return g.buildTower(cell, e, Tier.T1, NodeKind.Turret);
 }
 
 function towersOf(g: Game, e: Element): number {
@@ -54,15 +60,18 @@ function autoDefend(g: Game, wave: number): void {
     if (s.group.trait === Trait.Flier) flierBodies += s.group.count;
     if (s.group.trait === Trait.Shade) shade = true;
   }
-  // Proactive teching: raise anti-air ahead of the air roster (fliers unlock ~wave 3), and
-  // scale it up with the threat; add detection once stealth is due.
-  const antiAirWant = wave >= 1 ? Math.min(5, 1 + Math.floor(wave / 2) + Math.ceil(flierBodies / 4)) : 0;
-  ensureCount(g, Element.Sonic, antiAirWant);
-  if (wave >= 2 || shade) ensureCount(g, Element.Light, 1);
-  // Fill the rest with the free starting school so every spare coin becomes coverage.
+  let dom = 0;
+  for (let e = 1; e < N_ELEMENTS; e++) if (counts[e] > counts[dom]) dom = e;
+  const counter = elementThatBeats(dom as Element);
+  // Anti-air ahead of the air roster (fliers ~wave 3); detection once stealth is due.
+  ensureCount(g, Element.Sonic, wave >= 1 ? Math.min(5, 1 + Math.floor(wave / 2) + Math.ceil(flierBodies / 4)) : 0);
+  if (wave >= 2 || shade) ensureCount(g, Element.Light, wave >= 4 ? 2 : 1);
+  // Counter the dominant school for type advantage (attune once we can afford it).
+  if (pl.attuned[counter] || pl.currency > 90) ensureCount(g, counter, Math.min(6, 2 + Math.floor(wave / 2)));
+  // Spend the rest on coverage: counter school (type advantage) if attuned, else free Fire.
+  const fillE = pl.attuned[counter] ? counter : Element.Fire;
   let guard = 0;
-  while (pl.currency > 20 && guard++ < 80) if (!buildBest(g, Element.Fire)) break;
-  void counts;
+  while (pl.currency > 20 && guard++ < 120) if (!buildBest(g, fillE) && !buildBest(g, Element.Fire)) break;
 }
 
 function runCurve(opponent: Opponent, diff: number, maxWaves = 30, trace = false): { reached: number; hp: number[] } {
@@ -81,15 +90,19 @@ function runCurve(opponent: Opponent, diff: number, maxWaves = 30, trace = false
   return { reached: g.state === 'gameover' ? g.highestWave - 1 : maxWaves, hp };
 }
 
-console.log('=== detailed trace: search R3 ===');
-runCurve('search', 3, 30, true);
-
 for (const opp of ['search', 'strategist'] as const) {
-  console.log(`\n=== foe: ${opp} ===`);
+  console.log(`\n=== RANK 3 playthrough vs ${opp} ===`);
+  const { reached } = runCurve(opp, 3, 40, true);
+  console.log(`  → the run reached wave ${reached}.`);
+}
+
+console.log('\n=== curve across ranks ===');
+for (const opp of ['search', 'strategist'] as const) {
+  console.log(`  foe ${opp}:`);
   for (const diff of [1, 3, 5]) {
-    const { reached, hp } = runCurve(opp, diff);
+    const { reached, hp } = runCurve(opp, diff, 40);
     const spark = hp.map((h) => (h > 66 ? '█' : h > 33 ? '▓' : h > 0 ? '░' : '·')).join('');
-    console.log(`  R${diff}: survived ${String(reached).padStart(2)} waves  core ${spark}`);
+    console.log(`    R${diff}: ${String(reached).padStart(2)} waves  core ${spark}`);
   }
 }
 console.log('\n(each block = one wave; █>66  ▓>33  ░>0  ·dead. Want a gradual decline, not flat-full or instant-death.)');
