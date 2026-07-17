@@ -266,7 +266,7 @@ export class GameView {
     };
 
     add(() => { this.tool = { kind: 'wall' }; },
-      (b) => { b.innerHTML = `🧱<small>${WALL_COST}</small>`; b.disabled = this.game.currency < WALL_COST; },
+      (b) => { this.setHTML(b, `🧱<small>${WALL_COST}</small>`); b.disabled = this.game.currency < WALL_COST; },
       () => this.tool?.kind === 'wall');
 
     for (let e = 0; e < N_ELEMENTS; e++) {
@@ -275,13 +275,19 @@ export class GameView {
         () => this.tool?.kind === 'tower' && this.tool.element === el, 'wt-elem');
     }
 
-    add(() => { this.tool = { kind: 'sell' }; }, (b) => { b.innerHTML = '❌'; }, () => this.tool?.kind === 'sell');
+    add(() => { this.tool = { kind: 'sell' }; }, (b) => { this.setHTML(b, '❌'); }, () => this.tool?.kind === 'sell');
 
     const tierBtn = document.createElement('button');
     tierBtn.className = 'wt-tool wt-tier';
     tierBtn.onclick = () => { this.tier = ((this.tier % 3) + 1) as Tier; this.controlsKey = ''; };
     p.appendChild(tierBtn);
-    this.paletteButtons.push({ node: tierBtn, refresh: () => { tierBtn.innerHTML = `<small>tier</small>T${this.tier}`; } });
+    this.paletteButtons.push({ node: tierBtn, refresh: () => { this.setHTML(tierBtn, `<small>tier</small>T${this.tier}`); } });
+  }
+
+  /** Rewrite innerHTML only when it actually changed. Rewriting every frame destroys a
+   *  button's child nodes between a pointer-down and pointer-up, eating the click. */
+  private setHTML(b: HTMLElement & { _h?: string }, html: string): void {
+    if (b._h !== html) { b._h = html; b.innerHTML = html; }
   }
 
   private refreshElementBtn(b: HTMLButtonElement, el: Element): void {
@@ -301,11 +307,11 @@ export class GameView {
         : `Attune ${ELEMENT_NAMES[el]} (${ELEMENT_ARCANA[el]}) — one-time unlock, then build its wards`;
     if (!pl.attuned[el]) {
       const cost = attuneCost(pl.attuneCount);
-      b.innerHTML = `<span class="wt-glyph">${ELEMENT_EMOJI[el]}${badge}</span><small>🔓${cost}</small>`;
+      this.setHTML(b, `<span class="wt-glyph">${ELEMENT_EMOJI[el]}${badge}</span><small>🔓${cost}</small>`);
       b.disabled = this.game.currency < cost || this.game.state !== 'build';
     } else {
       const cost = this.towerPrice(el);
-      b.innerHTML = `<span class="wt-glyph">${ELEMENT_EMOJI[el]}${badge}</span><small>${cost}</small>`;
+      this.setHTML(b, `<span class="wt-glyph">${ELEMENT_EMOJI[el]}${badge}</span><small>${cost}</small>`);
       b.disabled = this.tier > pl.depth[el] + 1 || this.game.currency < cost || this.game.state !== 'build';
     }
   }
