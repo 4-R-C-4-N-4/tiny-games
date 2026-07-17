@@ -71,6 +71,8 @@ export interface Attacker {
   /** The reserve commits fired at each decision point this wave — for the post-wave recap
    *  that makes the feint legible (§4.6). Reset at open(). */
   readonly committed?: Commit[][];
+  /** A short, legible statement of the current plan (L3 Strategist) — shown in the telegraph. */
+  readonly intent?: string;
 }
 
 export type WaveErrorKind = 'syntax' | 'overBudget' | 'badCell' | 'badTiming';

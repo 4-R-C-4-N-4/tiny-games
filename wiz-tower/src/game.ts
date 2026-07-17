@@ -12,13 +12,14 @@ import type { Metrics } from './types.ts';
 import { DEFAULT_CONFIG, VERB_CHARGES, type Config } from './config.ts';
 import { Sim } from './sim.ts';
 import { SearchAttacker, type SearchOptions, type SearchWeights } from './search.ts';
+import { StrategistAttacker } from './strategist.ts';
 import { ModelAttacker, type Weights } from './model.ts';
 import weightsJson from './weights.json';
 import type { Attacker, Opener, Commit } from './wave.ts';
 
 const DISTILLED_WEIGHTS = weightsJson as unknown as Weights;
 
-export type Opponent = 'search' | 'model';
+export type Opponent = 'search' | 'strategist' | 'model';
 
 /** Post-wave recap that makes the feint legible (§4.6). */
 export interface Recap {
@@ -81,12 +82,15 @@ export class Game {
     this.opponent = opts.opponent ?? 'search';
     this.personality = opts.personality ?? 'balanced';
     this.sim = Sim.create(cfg, starting);
-    this.attacker = this.opponent === 'model'
-      ? new ModelAttacker(this.sim, DISTILLED_WEIGHTS)
-      : new SearchAttacker(this.sim, {
-          ...searchOptsForDiff(this.diff, opts.seed ?? 0xd15ea5en),
-          weights: PERSONALITIES[this.personality],
-        });
+    const searchOpts = { ...searchOptsForDiff(this.diff, opts.seed ?? 0xd15ea5en), weights: PERSONALITIES[this.personality] };
+    this.attacker = this.opponent === 'model' ? new ModelAttacker(this.sim, DISTILLED_WEIGHTS)
+      : this.opponent === 'strategist' ? new StrategistAttacker(this.sim, searchOpts)
+        : new SearchAttacker(this.sim, searchOpts);
+  }
+
+  /** The L3 Strategist's stated plan for this wave, if the mind is the foe (else ''). */
+  get attackerIntent(): string {
+    return this.attacker.intent ?? '';
   }
 
   // ---- build phase actions (ignored unless in the build phase) --------------------

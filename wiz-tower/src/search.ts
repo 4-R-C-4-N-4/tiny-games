@@ -29,6 +29,19 @@ export interface SearchWeights {
   tempo: number; // fire misallocation: damage sunk into mobs that leaked anyway
 }
 
+/**
+ * Per-call steering for the search, set by the L3 Strategist to bend candidate generation
+ * and scoring toward a cross-wave plan (favour a flank, hammer a chronic element gap,
+ * escalate air/stealth, or weight economy denial while the player is teching). Null = the
+ * plain L2 search. Multipliers default to 1.
+ */
+export interface WaveBias {
+  colWeightMul?: number[]; //   per entry-column multiplier (flank steering), length w
+  elemWeightMul?: number[]; //  per-element multiplier (gap targeting), length N_ELEMENTS
+  traitBoost?: Partial<Record<Trait, number>>; // e.g. escalate Flier when anti-air stays absent
+  weights?: SearchWeights; //   objective override for this call
+}
+
 export interface SearchOptions {
   seed?: bigint;
   candidates?: number; // how many openers to sample and simulate
@@ -69,6 +82,8 @@ export class SearchAttacker implements Attacker {
   lastPlan: { opener: Opener; score: number } | null = null;
   /** The commits it fired at each decision point this wave (for the recap / distillation). */
   committed: Commit[][] = [];
+  /** Set by the L3 Strategist before open()/commit() to steer this call; null = plain L2. */
+  bias: WaveBias | null = null;
 
   constructor(private readonly sim: Sim, opts: SearchOptions = {}) {
     this.rng = new Rng(opts.seed ?? 0xa11ce5eedn);
@@ -153,10 +168,11 @@ export class SearchAttacker implements Attacker {
   }
 
   private score(m: Metrics): number {
+    const w = this.bias?.weights ?? this.weights;
     return (
-      this.weights.leak * fxToFloat(m.leakedHp) +
-      this.weights.econ * -m.currencyDelta +
-      this.weights.tempo * fxToFloat(m.fireMisalloc)
+      w.leak * fxToFloat(m.leakedHp) +
+      w.econ * -m.currencyDelta +
+      w.tempo * fxToFloat(m.fireMisalloc)
     );
   }
 
@@ -231,7 +247,7 @@ export class SearchAttacker implements Attacker {
         const maxCount = Math.min(TRAIT_MAX_COUNT[Trait.Breaker], Math.floor(budget / cost1));
         if (maxCount < 1) break;
         const count = 1 + this.rng.below(maxCount);
-        const element = this.sampleWeighted(read.effective.map((d) => 1 / (d + 1)));
+        const element = this.sampleWeighted(this.elemWeights(read));
         out.push([{ kind: 'breach', x: gate.x, group: { element, trait: Trait.Breaker, count }, gate }]);
       }
     }
@@ -245,26 +261,37 @@ export class SearchAttacker implements Attacker {
     const trait = this.sampleTrait(airGap, detGap);
     const cost1 = mobStats(trait).cost;
     if (cost1 > budget) return null;
-    const element = this.sampleWeighted(read.effective.map((d) => 1 / (d + 1)));
-    const x = this.sampleWeighted(read.colDps.map((d) => 1 / (d + 1)));
+    const element = this.sampleWeighted(this.elemWeights(read));
+    const x = this.sampleWeighted(this.colWeights(read));
     const cap = Math.min(TRAIT_MAX_COUNT[trait], Math.floor(budget / cost1));
     if (cap < 1) return null;
     const count = 1 + this.rng.below(cap);
     return { x, group: { element, trait, count } };
   }
 
+  /** Prefer elements the player answers weakly, × the Strategist's per-element bias. */
+  private elemWeights(read: BoardRead): number[] {
+    return read.effective.map((d, i) => (1 / (d + 1)) * (this.bias?.elemWeightMul?.[i] ?? 1));
+  }
+  /** Prefer thin columns, × the Strategist's per-column (flank) bias. */
+  private colWeights(read: BoardRead): number[] {
+    return read.colDps.map((d, i) => (1 / (d + 1)) * (this.bias?.colWeightMul?.[i] ?? 1));
+  }
+
   private sampleTrait(airGap: boolean, detGap: boolean): Trait {
+    const boost = this.bias?.traitBoost;
     const w = ALL_TRAITS.map((t) => {
-      if (t === Trait.Flier) return airGap ? 4 : 1;
-      if (t === Trait.Shade) return detGap ? 4 : 1;
-      if (t === Trait.Mender || t === Trait.Breaker) return 0.5; // situational
-      return 1;
+      let base = 1;
+      if (t === Trait.Flier) base = airGap ? 4 : 1;
+      else if (t === Trait.Shade) base = detGap ? 4 : 1;
+      else if (t === Trait.Mender || t === Trait.Breaker) base = 0.5; // situational
+      return base * (boost?.[t] ?? 1);
     });
     return ALL_TRAITS[this.sampleWeighted(w)];
   }
 
   private lowCoverageColumn(read: BoardRead): number {
-    return this.sampleWeighted(read.colDps.map((d) => 1 / (d + 1)));
+    return this.sampleWeighted(this.colWeights(read));
   }
 
   /** Deterministic weighted index using the attacker RNG. */

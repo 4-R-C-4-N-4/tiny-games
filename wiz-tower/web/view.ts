@@ -140,6 +140,7 @@ export class GameView {
     for (let d = 1; d <= 5; d++) chip(String(d), `difficulty ${d}`, () => { this.diffChoice = d; this.newGame(); });
     label('Foe');
     chip('Search', 'Live branching search (L2)', () => { this.opponentChoice = 'search'; this.newGame(); });
+    chip('Mind', 'Cross-wave strategist (L3) — learns your habits', () => { this.opponentChoice = 'strategist'; this.newGame(); });
     chip('Net', 'Distilled tiny net', () => { this.opponentChoice = 'model'; this.newGame(); });
     label('Style');
     const styleLabel: Record<Personality, string> = { balanced: 'Bal', aggressive: 'Agg', economic: 'Eco', bluffy: 'Blf' };
@@ -411,7 +412,8 @@ export class GameView {
   private drawHud(): void {
     const g = this.game;
     this.el.currency.innerHTML = `<b>◈</b> ${g.currency}`;
-    this.el.wavelabel.textContent = `Wave ${g.wave} · R${g.diff} · ${g.opponent === 'model' ? '🧠 net' : '🔍 search'}`;
+    const foe = g.opponent === 'model' ? '🧠 net' : g.opponent === 'strategist' ? '👁 mind' : '🔍 search';
+    this.el.wavelabel.textContent = `Wave ${g.wave} · R${g.diff} · ${foe}`;
     const frac = g.coreHpFraction();
     const fill = this.el.corefill as HTMLElement;
     fill.style.width = Math.round(frac * 100) + '%';
@@ -425,7 +427,8 @@ export class GameView {
     t.classList.remove('wt-scry');
     if (this.game.state === 'build' && this.game.planned) {
       t.style.display = 'block'; t.classList.add('wt-scry');
-      t.innerHTML = '<b>Scried:</b> ' + formatTelegraph(this.game.telegraph, w);
+      const intent = this.game.attackerIntent;
+      t.innerHTML = (intent ? `<i class="wt-intent">${intent}</i>` : '') + '<b>Scried:</b> ' + formatTelegraph(this.game.telegraph, w);
     } else if (this.game.state === 'build' && this.game.lastRecap) {
       t.style.display = 'block';
       t.innerHTML = formatRecap(this.game.lastRecap, w);
