@@ -43,6 +43,7 @@ export class GameView {
 
   // per-frame effect bookkeeping
   private prevMobs = new Map<number, { x: number; y: number; color: string }>();
+  private prevWalls = new Map<number, number>(); // cell index → wall HP (Fx), for breach FX
   private prevCoreHp = 0;
   private fireTimers = new Map<number, number>();
   private moteTimer = 0;
@@ -192,6 +193,8 @@ export class GameView {
     c.innerHTML = `<div class="wt-codex-in">
       <img src="./art/affinity-sigil.svg" alt="Affinity wheel" />
       <p>Each school <b>counters the next</b> around the wheel (1.5×) and is weak to the one before (0.5×). <b>Radiant ⇄ Void</b> answer only each other. Read your foe's colours; conjure against the school they ward weakly.</p>
+      <p class="wt-note"><b>Your wards.</b> Your chosen school (★) is pre-attuned — build its wards freely. Any <i>other</i> school needs a one-time <b>🔓 attunement</b> before you can build it (the price rises with each school you add). Ward badges: <b>↑</b> anti-air · <b>◉</b> detection · <b>~</b> slow · <b>✷</b> splash.</p>
+      <p class="wt-note"><b>Walls.</b> 🧱 walls funnel the ground path (fliers ignore them). They have HP: blocked mobs only chip them, but <b>Gargoyles (Breakers)</b> smash them fast to breach a shortcut — watch the wall's bar.</p>
       <h3>Bestiary</h3>
       <div class="wt-bestiary">${cards.map(([tr, el]) =>
         `<div class="wt-beast"><canvas width="56" height="56"></canvas><div><b>${creatureName(el, tr)}</b><span>${TRAIT_ROLE[tr]}</span></div></div>`).join('')}</div>
@@ -222,6 +225,7 @@ export class GameView {
     this.speed = 1;
     this.effects = new Effects(this.reduced);
     this.prevMobs.clear();
+    this.prevWalls.clear();
     this.fireTimers.clear();
     this.prevCoreHp = fxToFloat(this.game.coreHp());
     this.sizeCanvas();
@@ -288,7 +292,13 @@ export class GameView {
         : flags.slow > 0 ? '<i class="wt-cap slow" title="slow">∼</i>'
           : flags.splash > 0 ? '<i class="wt-cap spl" title="splash">✷</i>' : '';
     b.style.setProperty('--el', ELEMENT_COLOR[el]);
-    b.title = `${ELEMENT_NAMES[el]} ward — ${ELEMENT_ARCANA[el]}${flags.antiAir ? ' · hits fliers' : flags.detection ? ' · reveals shades' : ''}`;
+    const home = el === pl.starting;
+    b.classList.toggle('wt-home', home);
+    b.title = home
+      ? `${ELEMENT_NAMES[el]} — your school (pre-attuned, build freely)`
+      : pl.attuned[el]
+        ? `${ELEMENT_NAMES[el]} ward — ${ELEMENT_ARCANA[el]}${flags.antiAir ? ' · hits fliers' : flags.detection ? ' · reveals shades' : ''}`
+        : `Attune ${ELEMENT_NAMES[el]} (${ELEMENT_ARCANA[el]}) — one-time unlock, then build its wards`;
     if (!pl.attuned[el]) {
       const cost = attuneCost(pl.attuneCount);
       b.innerHTML = `<span class="wt-glyph">${ELEMENT_EMOJI[el]}${badge}</span><small>🔓${cost}</small>`;
@@ -410,6 +420,28 @@ export class GameView {
       this.effects.shockwave(core.x, core.y, '#ff5a4d', Math.min(1.6, (this.prevCoreHp - coreHp) / 6));
     }
     this.prevCoreHp = coreHp;
+
+    // wall breaching: chip sparks while a wall takes damage; a debris burst + shake when it
+    // shatters — so it's visible that mobs are breaking through, not that it "just dissolves".
+    const g0 = sim.grid;
+    const nowWalls = new Map<number, number>();
+    for (let i = 0; i < g0.cells.length; i++) {
+      const occ = g0.cells[i].occ;
+      if (occ.kind !== OccKind.Wall) continue;
+      nowWalls.set(i, occ.hp);
+      const prev = this.prevWalls.get(i);
+      if (prev !== undefined && occ.hp < prev - 1) {
+        const cx = (i % g0.w + 0.5) * CELL, cy = ((i / g0.w | 0) + 0.5) * CELL;
+        this.effects.beam(cx - 4, cy - 4, cx + 4, cy + 4, '#c9c9e0'); // a small stony spark
+      }
+    }
+    if (this.game.state === 'wave') {
+      for (const [i, hp] of this.prevWalls) if (!nowWalls.has(i) && hp > 0) {
+        const cx = (i % g0.w + 0.5) * CELL, cy = ((i / g0.w | 0) + 0.5) * CELL;
+        this.effects.burst(cx, cy, '#a8a8c4', 1.3); this.effects.addShake(3); // wall shattered
+      }
+    }
+    this.prevWalls = nowWalls;
 
     // tower-fire beams (throttled per tower)
     if (this.game.state === 'wave') {
@@ -600,13 +632,20 @@ export class GameView {
   private drawWall(x: number, y: number, frac: number): void {
     const ctx = this.ctx;
     const px = x * CELL + 5, py = y * CELL + 5, s = CELL - 10;
-    ctx.fillStyle = `rgba(140,140,170,${0.25 + 0.5 * Math.max(0.1, frac)})`;
+    ctx.fillStyle = `rgba(140,140,170,${0.3 + 0.55 * Math.max(0.12, frac)})`;
     roundRect(ctx, px, py, s, s, 5); ctx.fill();
     ctx.strokeStyle = 'rgba(200,200,230,0.25)'; ctx.lineWidth = 1;
     roundRect(ctx, px, py, s, s, 5); ctx.stroke();
-    if (frac < 0.66) { // cracks as it's chewed down
-      ctx.strokeStyle = 'rgba(20,20,30,0.6)'; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.moveTo(px + s * 0.3, py); ctx.lineTo(px + s * 0.5, py + s * 0.6); ctx.lineTo(px + s * 0.35, py + s); ctx.stroke();
+    // fracture lines deepen as it's chewed down
+    if (frac < 0.92) {
+      ctx.strokeStyle = `rgba(12,12,22,${0.3 + 0.45 * (1 - frac)})`; ctx.lineWidth = 1 + (1 - frac);
+      ctx.beginPath(); ctx.moveTo(px + s * 0.32, py); ctx.lineTo(px + s * 0.5, py + s * 0.55); ctx.lineTo(px + s * 0.34, py + s); ctx.stroke();
+      if (frac < 0.55) { ctx.beginPath(); ctx.moveTo(px + s, py + s * 0.38); ctx.lineTo(px + s * 0.55, py + s * 0.5); ctx.lineTo(px + s * 0.78, py + s); ctx.stroke(); }
+    }
+    // integrity bar while damaged
+    if (frac < 0.999) {
+      ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(px, py + s + 1, s, 3);
+      ctx.fillStyle = frac > 0.4 ? '#8fd6ff' : '#ff9a4d'; ctx.fillRect(px, py + s + 1, s * frac, 3);
     }
   }
 

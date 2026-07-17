@@ -40,8 +40,8 @@ export const DEFAULT_CONFIG: Omit<Config, 'seed'> & { seed: bigint } = {
 
 // ---- combat / pathing constants (Fx per second where a rate) ----------------------
 
-export const BREAKER_WALL_DPS: Fx = fx(20); // Breakers demolish walls fast (§3.2)
-export const MOB_WALL_DPS: Fx = fx(4); // other blocked mobs chip walls slowly
+export const BREAKER_WALL_DPS: Fx = fx(26); // Breakers demolish a wall in ~1.7s (§3.2)
+export const MOB_WALL_DPS: Fx = fxRatio(3, 2); // other blocked mobs only CHIP at 1.5/s (>0 so a sealed Core still eventually breaches)
 export const MENDER_HEAL_RADIUS: Fx = fx(2); // cell units (euclidean, compared squared)
 export const SPLASH_RADIUS: Fx = fx(1); // splash reaches mobs within 1 cell of the target
 /** Core damage per leaked mob = its point cost (tanks hurt more than swarm bodies). */
@@ -52,7 +52,7 @@ export function leakDamage(trait: Trait): Fx {
 // ---- economy: walls & towers ------------------------------------------------------
 
 export const WALL_COST = 5;
-export const WALL_HP: Fx = fx(30); // basic breakable wall; Earth's tree hardens this later
+export const WALL_HP: Fx = fx(45); // basic breakable wall; Earth's tree hardens this later
 export const REFUND_NUM = 3; // sell refunds 3/5 of build cost, floored
 export const REFUND_DEN = 5;
 

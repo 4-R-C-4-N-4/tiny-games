@@ -600,7 +600,10 @@ export class Sim {
   }
 
   private outcome(): StepOutcome {
-    // §2.11 order: decision point first, then wave-complete, then game-over, else continue.
+    // A shattered Core ends the run immediately — this MUST win over wave-complete, or a
+    // final mob that both leaks the killing blow AND empties the wave would be scored as a
+    // completed wave and the game would carry on into the next build phase.
+    if (this._coreHp <= 0) { this.waveActive = false; return { kind: 'gameOver' }; }
     if (this.nextDecisionIdx < this.decisionTicks.length &&
         this.tick === this.decisionTicks[this.nextDecisionIdx]) {
       this.nextDecisionIdx += 1;
@@ -613,7 +616,6 @@ export class Sim {
       this.waveActive = false;
       return { kind: 'waveComplete', metrics: this.metrics };
     }
-    if (this._coreHp <= 0) return { kind: 'gameOver' };
     if (this.tick >= this.waveMaxTick && this.waveActive) {
       // Safety: mobs always make progress, but never hang the driver.
       this.waveActive = false;

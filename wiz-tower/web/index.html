@@ -92,6 +92,8 @@
     .wt-codex-in { text-align:center; padding:14px 12px; max-width:320px; max-height:100%; overflow-y:auto; }
     .wt-codex-in img { width:180px; height:auto; }
     .wt-codex-in p { color:var(--dim); font-size:11.5px; line-height:1.6; margin:4px 0 8px; }
+    .wt-note { text-align:left; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:7px 9px; font-size:10.5px !important; }
+    .wt-note b { color:var(--ink); }
     .wt-codex-in b { color:var(--ink); }
     .wt-codex-in h3 { font-family:var(--display); color:var(--gold); font-size:15px; letter-spacing:1px; margin:8px 0 8px; }
     .wt-bestiary { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px; }
@@ -119,6 +121,9 @@
       border:1px solid var(--line); border-radius:9px; padding:6px 8px; font-size:16px; cursor:pointer;
       min-width:42px; display:flex; flex-direction:column; align-items:center; gap:1px; transition:.12s; }
     .wt-tool small { font-size:8.5px; color:var(--dim); font-family:var(--mono); text-transform:uppercase; letter-spacing:.5px; }
+    .wt-tool { position:relative; }
+    .wt-home { border-color:color-mix(in srgb, var(--gold) 55%, var(--line)); }
+    .wt-home::after { content:'★'; position:absolute; top:-6px; left:-3px; font-size:9px; color:var(--gold); text-shadow:0 0 4px rgba(255,225,77,.6); }
     .wt-glyph { position:relative; display:inline-block; }
     .wt-cap { position:absolute; top:-5px; right:-9px; font:700 9px var(--sans); font-style:normal; }
     .wt-cap.aa { color:#eaf2ff; } .wt-cap.det { color:#ffe8a3; } .wt-cap.slow { color:#5fd0ff; } .wt-cap.spl { color:#ff9a4d; }
