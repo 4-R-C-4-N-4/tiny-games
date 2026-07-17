@@ -14,13 +14,14 @@ npm install
 npm run dev        # play in the browser
 ```
 
-Pick a **starting element**, **difficulty** (1–5), **foe** (Search or Net), and attacker
-**style**. Build towers and walls on the grid, **Scout** to see the telegraphed opener,
+Pick a **starting element** and **difficulty** (1–5); the shipped foe is the **Mind** (the L3
+cross-wave Strategist). The development foes (L2 Search, distilled Net) and attacker **style**
+live behind the **⚙ Training mode** toggle. Build towers and walls on the grid, **Scout** to see the telegraphed opener,
 counter-build against it, then **Start Wave**. During a wave you get a couple of tactical
 taps (⚡ overcharge, 👁 reveal, 🧱 reinforce). The hidden reserve commits mid-wave where
 you're thin; the post-wave recap shows the feint. Economy and Core HP carry across waves.
 
-## Status — Phases 0–4 complete
+## Status — Phases 0–5 complete
 
 | Phase | What | Highlights |
 |---|---|---|
@@ -30,7 +31,7 @@ you're thin; the post-wave recap shows the feint. Economy and Core HP carry acro
 | **2** | Distilled model | sim-as-teacher leak surface → 10→64→28 MLP (`weights.json`, 23 KB) → JS forward pass `ModelAttacker` |
 | **3** | Close the loop | in-wave verbs, post-wave recap, personality presets, difficulty, one DAgger round |
 | **4** | Ship | static build, relative base, offline service worker, GitHub Pages workflow |
-| **5** | The mind (L3) | a cross-wave Strategist that models your habits and sets traps — steers the search with a per-wave bias |
+| **5** | The mind (L3) | cross-wave Strategist (the **shipped foe**): models your habits, runs a multi-wave feint (bait a flank → strike the flank you thinned), paces to your skill, pre-counters your go-to school — steers the search with a per-wave bias |
 
 **Distilled model quality:** top-1 agreement with the search teacher **45%** vs a 19%
 defense-blind baseline (random 3.6%), **4.5% leak regret** when it disagrees. The action
