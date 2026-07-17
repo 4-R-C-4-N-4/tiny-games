@@ -17,7 +17,11 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + 
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 
 await page.goto(URL, { waitUntil: 'networkidle' });
-await page.waitForFunction(() => window.wt && window.wt.game, null, { timeout: 5000 });
+await page.waitForFunction(() => window.wt, null, { timeout: 5000 });
+// Discipline-select: choose the first class (Fire) and begin the run (default Search foe).
+await page.locator('.wt-class').first().click();
+await page.locator('#begin').click();
+await page.waitForFunction(() => window.wt.game, null, { timeout: 5000 });
 await page.waitForTimeout(300); // let a few RAF frames render the build screen
 
 const initial = await page.evaluate(() => ({ state: window.wt.game.state, wave: window.wt.game.wave, currency: window.wt.game.currency }));
@@ -39,7 +43,7 @@ const afterBuild = await page.evaluate(() => ({ towers: window.wt.game.sim.liveT
 // Scout (telegraph) then Start Wave via the real control buttons.
 await page.getByText('Scry wave').click();
 const telegraph = await page.locator('#telegraph').innerText();
-await page.getByText('Begin').click();
+await page.getByText('▶ Begin').click();
 const startedState = await page.evaluate(() => window.wt.game.state);
 
 // Fast-forward the wave to completion inside the page (exercises the browser bundle's sim),
@@ -58,9 +62,13 @@ const result = await page.evaluate(() => {
 // Back in the build phase, the telegraph area should show the post-wave recap.
 const recapText = await page.locator('#telegraph').innerText();
 
-// Switch to the distilled-net opponent and run a wave with it (exercises the bundled
-// weights.json + JS forward pass in the browser).
+// New run against the distilled-net opponent (exercises the bundled weights.json + JS
+// forward pass): back to the discipline screen, pick the Net foe + Fire, begin.
+await page.locator('#newrun').click();
 await page.getByText('Net', { exact: true }).click();
+await page.locator('.wt-class').first().click();
+await page.locator('#begin').click();
+await page.waitForFunction(() => window.wt.game && window.wt.game.opponent === 'model', null, { timeout: 5000 });
 const modelRun = await page.evaluate(() => {
   const g = window.wt.game;
   g.buildTower({ x: 2, y: 6 }, 0, 2, 0); // Fire T2 turret

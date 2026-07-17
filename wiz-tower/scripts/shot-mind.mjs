@@ -7,10 +7,13 @@ const browser = await chromium.launch({ executablePath: EXE, args: ['--no-sandbo
 const ctx = await browser.newContext({ viewport: { width: 400, height: 960 }, deviceScaleFactor: 2, serviceWorkers: 'block' });
 const page = await ctx.newPage();
 await page.goto('http://localhost:5199/', { waitUntil: 'networkidle' });
-await page.waitForFunction(() => window.wt && window.wt.game);
-
-await page.evaluate(() => { window.wt.diffChoice = 2; });
+await page.waitForFunction(() => window.wt);
+// Discipline-select: Rank 2, Mind foe, Fire discipline, begin.
+await page.locator('.wt-optrow', { hasText: 'Rank' }).getByText('2', { exact: true }).click();
 await page.getByText('Mind', { exact: true }).click();
+await page.locator('.wt-class').first().click();
+await page.locator('#begin').click();
+await page.waitForFunction(() => window.wt.game);
 // One completed wave against a pure-Fire, no-anti-air defense is enough for a read.
 await page.evaluate(() => {
   const g = window.wt.game;

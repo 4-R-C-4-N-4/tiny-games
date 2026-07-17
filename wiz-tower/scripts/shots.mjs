@@ -7,7 +7,12 @@ const browser = await chromium.launch({ executablePath: EXE, args: ['--no-sandbo
 const ctx = await browser.newContext({ viewport: { width: 400, height: 860 }, deviceScaleFactor: 2, serviceWorkers: 'block' });
 const page = await ctx.newPage();
 await page.goto('http://localhost:5199/', { waitUntil: 'networkidle' });
-await page.waitForFunction(() => window.wt && window.wt.game);
+await page.waitForFunction(() => window.wt);
+await page.waitForTimeout(300);
+await page.screenshot({ path: `${DIR}/wt-start.png` }); // the discipline-select screen
+await page.locator('.wt-class').first().click(); // Fire discipline
+await page.locator('#begin').click();
+await page.waitForFunction(() => window.wt.game);
 
 // Build a defense + scry the wave, then shoot the build phase.
 await page.evaluate(() => {

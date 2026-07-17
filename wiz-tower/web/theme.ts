@@ -43,6 +43,17 @@ export const ELEMENT_ARCANA: Record<Element, string> = {
   [Element.Sonic]: 'Resonance', [Element.Zap]: 'Voltaics', [Element.Light]: 'Radiance', [Element.Dark]: 'Umbra',
 };
 
+/** One-line class identity for the discipline-select screen (design §3.3). */
+export const ELEMENT_FLAVOR: Record<Element, string> = {
+  [Element.Fire]: 'Burning ground & splash — melts swarms.',
+  [Element.Ice]: 'Frost that slows — seize the tempo.',
+  [Element.Earth]: 'Wall-mastery — maze them to death.',
+  [Element.Sonic]: 'Disruption — silence menders & shields.',
+  [Element.Zap]: 'Chain lightning — arcs across the field.',
+  [Element.Light]: 'Wards & revelation — bane of the Void.',
+  [Element.Dark]: 'Risk & ruin — turn kills to power.',
+};
+
 /** The conjured-creature archetype each mechanical trait manifests as — the noun. */
 export const TRAIT_CREATURE: Record<Trait, string> = {
   [Trait.Grunt]: 'Wisp', [Trait.Swarm]: 'Sprites', [Trait.Tank]: 'Golem', [Trait.Runner]: 'Hound',

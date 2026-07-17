@@ -11,7 +11,7 @@ import { WALL_COST, WALL_HP, towerCost, tierGateCost, attuneCost } from '../src/
 import { Game, type Opponent, type Personality, type Recap } from '../src/game.ts';
 import type { Opener } from '../src/wave.ts';
 import {
-  ELEMENT_COLOR, ELEMENT_EMOJI, ELEMENT_ARCANA, TRAIT_SHAPE, TRAIT_RADIUS,
+  ELEMENT_COLOR, ELEMENT_EMOJI, ELEMENT_ARCANA, ELEMENT_FLAVOR, TRAIT_SHAPE, TRAIT_RADIUS,
   creatureName, TRAIT_ROLE, type MobShape,
 } from './theme.ts';
 import { Effects } from './effects.ts';
@@ -34,7 +34,8 @@ export class GameView {
   private time = 0;
   private readonly reduced = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   private effects = new Effects(this.reduced);
-  private startingChoice: Element = Element.Fire;
+  private started = false;
+  private classChoice: Element | null = null; // no discipline pre-selected — you must choose
   private diffChoice = 3;
   private opponentChoice: Opponent = 'search';
   private personalityChoice: Personality = 'balanced';
@@ -54,7 +55,7 @@ export class GameView {
 
   constructor(private root: HTMLElement) {
     this.buildDom();
-    this.newGame();
+    this.showStart();
     requestAnimationFrame(this.frame);
   }
 
@@ -66,25 +67,28 @@ export class GameView {
         <header class="wt-top">
           <img class="wt-mark" src="./art/affinity-sigil.svg" alt="" />
           <div class="wt-brand"><span class="wt-title">WIZ<i>·</i>TOWER</span><span class="wt-sub">arcane affinity defense</span></div>
+          <button class="wt-codexbtn" id="newrun" title="New run — choose a discipline" hidden>↺</button>
           <button class="wt-codexbtn" id="codexbtn" title="Affinity codex">✦</button>
         </header>
-        <div class="wt-setup" id="setup"></div>
-        <div class="wt-hud">
-          <span id="currency" class="wt-cur"></span>
-          <div class="wt-core" id="coremeter"><div id="corefill" class="wt-corefill"></div><span id="corelabel"></span></div>
-          <span id="wavelabel" class="wt-wave"></span>
+        <div id="start" class="wt-start"></div>
+        <div id="play" class="wt-play" hidden>
+          <div class="wt-hud">
+            <span id="currency" class="wt-cur"></span>
+            <div class="wt-core" id="coremeter"><div id="corefill" class="wt-corefill"></div><span id="corelabel"></span></div>
+            <span id="wavelabel" class="wt-wave"></span>
+          </div>
+          <div class="wt-board-wrap">
+            <canvas id="board"></canvas>
+            <div id="overlay" class="wt-overlay"></div>
+            <div id="codex" class="wt-codex"></div>
+          </div>
+          <div id="telegraph" class="wt-telegraph"></div>
+          <div id="palette" class="wt-palette"></div>
+          <div id="controls" class="wt-controls"></div>
         </div>
-        <div class="wt-board-wrap">
-          <canvas id="board"></canvas>
-          <div id="overlay" class="wt-overlay"></div>
-          <div id="codex" class="wt-codex"></div>
-        </div>
-        <div id="telegraph" class="wt-telegraph"></div>
-        <div id="palette" class="wt-palette"></div>
-        <div id="controls" class="wt-controls"></div>
       </div>`;
     const byId = (id: string) => this.root.querySelector<HTMLElement>('#' + id)!;
-    for (const id of ['setup', 'currency', 'corefill', 'corelabel', 'wavelabel', 'overlay', 'codex', 'telegraph', 'palette', 'controls']) {
+    for (const id of ['start', 'play', 'currency', 'corefill', 'corelabel', 'wavelabel', 'overlay', 'codex', 'telegraph', 'palette', 'controls']) {
       this.el[id] = byId(id);
     }
     this.canvas = byId('board') as HTMLCanvasElement;
@@ -93,7 +97,86 @@ export class GameView {
     this.canvas.addEventListener('pointermove', (e) => { this.hover = this.cellAt(e); });
     this.canvas.addEventListener('pointerleave', () => { this.hover = null; });
     byId('codexbtn').onclick = () => this.toggleCodex();
-    this.buildSetup();
+    byId('newrun').onclick = () => this.showStart();
+  }
+
+  // ---- discipline-select start screen ---------------------------------------------
+
+  private showStart(): void {
+    this.started = false;
+    this.classChoice = null;
+    this.el.play.hidden = true;
+    (this.root.querySelector('#newrun') as HTMLElement).hidden = true;
+    const s = this.el.start;
+    s.hidden = false;
+    s.innerHTML = `
+      <p class="wt-tag">Bind the wards. Scry the summoner. Hold the Heartstone.</p>
+      <h2 class="wt-h2">Choose your discipline</h2>
+      <div class="wt-classes" id="classes"></div>
+      <div class="wt-startopts" id="startopts"></div>
+      <button class="wt-primary wt-begin" id="begin" disabled>Choose a discipline to begin</button>`;
+    this.buildClassCards();
+    this.buildStartOpts();
+    const begin = s.querySelector<HTMLButtonElement>('#begin')!;
+    begin.onclick = () => { if (this.classChoice !== null) this.startRun(); };
+  }
+
+  private buildClassCards(): void {
+    const wrap = this.el.start.querySelector<HTMLElement>('#classes')!;
+    wrap.innerHTML = '';
+    for (let e = 0; e < N_ELEMENTS; e++) {
+      const el = e as Element;
+      const card = document.createElement('button');
+      card.className = 'wt-class';
+      card.style.setProperty('--el', ELEMENT_COLOR[el]);
+      card.innerHTML = `<canvas width="40" height="40"></canvas>
+        <div class="wt-class-t"><b>${ELEMENT_ARCANA[el]}</b><span>${ELEMENT_NAMES[el]}</span><em>${ELEMENT_FLAVOR[el]}</em></div>`;
+      card.onclick = () => this.chooseClass(el);
+      wrap.appendChild(card);
+      const cv = card.querySelector('canvas')!;
+      const dpr = window.devicePixelRatio || 1;
+      cv.width = 40 * dpr; cv.height = 40 * dpr;
+      const cx = cv.getContext('2d')!;
+      cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      cx.translate(20, 20); cx.shadowColor = ELEMENT_COLOR[el]; cx.shadowBlur = 8;
+      drawElementGlyph(cx, el, 11, ELEMENT_COLOR[el]);
+    }
+  }
+
+  private chooseClass(el: Element): void {
+    this.classChoice = el;
+    for (const c of this.el.start.querySelectorAll('.wt-class')) c.classList.remove('sel');
+    (this.el.start.querySelectorAll('.wt-class')[el] as HTMLElement).classList.add('sel');
+    const begin = this.el.start.querySelector<HTMLButtonElement>('#begin')!;
+    begin.disabled = false;
+    begin.textContent = `Begin as a ${ELEMENT_ARCANA[el]} adept`;
+  }
+
+  private buildStartOpts(): void {
+    const opts = this.el.start.querySelector<HTMLElement>('#startopts')!;
+    opts.innerHTML = '';
+    const group = (label: string, items: [string, string, () => void, boolean][]) => {
+      const row = document.createElement('div'); row.className = 'wt-optrow';
+      const l = document.createElement('span'); l.className = 'wt-lbl'; l.textContent = label; row.appendChild(l);
+      for (const [text, title, on, sel] of items) {
+        const b = document.createElement('button'); b.className = 'wt-chip' + (sel ? ' sel' : ''); b.textContent = text; b.title = title;
+        b.onclick = () => { on(); this.buildStartOpts(); }; row.appendChild(b);
+      }
+      opts.appendChild(row);
+    };
+    group('Rank', ([1, 2, 3, 4, 5] as const).map((d) => [String(d), `difficulty ${d}`, () => { this.diffChoice = d; }, this.diffChoice === d]));
+    group('Foe', ([['Search', 'search'], ['Mind', 'strategist'], ['Net', 'model']] as const).map(([t, o]) =>
+      [t, o === 'search' ? 'Live branching search (L2)' : o === 'strategist' ? 'Cross-wave strategist (L3) — learns your habits' : 'Distilled tiny net', () => { this.opponentChoice = o; }, this.opponentChoice === o]));
+    group('Style', ([['Balanced', 'balanced'], ['Aggressive', 'aggressive'], ['Economic', 'economic'], ['Bluffy', 'bluffy']] as const).map(([t, p]) =>
+      [t, `${p} attacker (search foes)`, () => { this.personalityChoice = p; }, this.personalityChoice === p]));
+  }
+
+  private startRun(): void {
+    this.el.start.hidden = true;
+    this.el.play.hidden = false;
+    (this.root.querySelector('#newrun') as HTMLElement).hidden = false;
+    this.started = true;
+    this.newGame();
   }
 
   private toggleCodex(): void {
@@ -127,30 +210,10 @@ export class GameView {
     c.onclick = (e) => { if (e.target === c) c.style.display = 'none'; };
   }
 
-  private buildSetup(): void {
-    const s = this.el.setup;
-    s.innerHTML = '';
-    const label = (t: string) => { const n = document.createElement('span'); n.textContent = t; n.className = 'wt-lbl'; s.appendChild(n); };
-    const chip = (text: string, title: string, on: () => void) => {
-      const b = document.createElement('button'); b.textContent = text; b.title = title; b.className = 'wt-chip'; b.onclick = on; s.appendChild(b);
-    };
-    label('Attune');
-    for (let e = 0; e < N_ELEMENTS; e++) chip(ELEMENT_EMOJI[e as Element], `${ELEMENT_NAMES[e]} — ${ELEMENT_ARCANA[e as Element]}`, () => { this.startingChoice = e as Element; this.newGame(); });
-    label('Rank');
-    for (let d = 1; d <= 5; d++) chip(String(d), `difficulty ${d}`, () => { this.diffChoice = d; this.newGame(); });
-    label('Foe');
-    chip('Search', 'Live branching search (L2)', () => { this.opponentChoice = 'search'; this.newGame(); });
-    chip('Mind', 'Cross-wave strategist (L3) — learns your habits', () => { this.opponentChoice = 'strategist'; this.newGame(); });
-    chip('Net', 'Distilled tiny net', () => { this.opponentChoice = 'model'; this.newGame(); });
-    label('Style');
-    const styleLabel: Record<Personality, string> = { balanced: 'Bal', aggressive: 'Agg', economic: 'Eco', bluffy: 'Blf' };
-    for (const p of ['balanced', 'aggressive', 'economic', 'bluffy'] as const) chip(styleLabel[p], `${p} attacker (search only)`, () => { this.personalityChoice = p; this.newGame(); });
-  }
-
   private newGame(): void {
     this.seed = (this.seed * 6364136223846793005n + 1442695040888963407n) & ((1n << 64n) - 1n);
     this.game = new Game({
-      starting: this.startingChoice, difficulty: this.diffChoice, seed: this.seed,
+      starting: this.classChoice ?? Element.Fire, difficulty: this.diffChoice, seed: this.seed,
       opponent: this.opponentChoice, personality: this.personalityChoice,
     });
     this.tool = { kind: 'wall' };
@@ -304,8 +367,10 @@ export class GameView {
   // ---- main loop ------------------------------------------------------------------
 
   private frame = (t: number): void => {
+    requestAnimationFrame(this.frame); // keep the loop alive even on the start screen
     const dt = this.lastT ? Math.min(0.05, (t - this.lastT) / 1000) : 0;
     this.lastT = t;
+    if (!this.started || !this.game) return; // nothing to animate until a run begins
     this.time += dt;
     if (this.game.state === 'wave' && this.speed > 0) {
       this.acc += dt * 30 * this.speed;
@@ -318,7 +383,6 @@ export class GameView {
     this.syncEffects(dt);
     this.effects.update(dt);
     this.render();
-    requestAnimationFrame(this.frame);
   };
 
   /** Diff sim state to spawn juice: death shatters, leak shockwaves, tower-fire beams, motes. */
@@ -447,8 +511,8 @@ export class GameView {
     o.style.display = 'flex';
     o.innerHTML = `<div class="wt-go"><h2>The Core is shattered</h2>
       <p>You held <b>${this.game.highestWave - 1}</b> wave${this.game.highestWave - 1 === 1 ? '' : 's'}.</p>
-      <button class="wt-ctl wt-primary" id="restart">Begin anew</button></div>`;
-    o.querySelector<HTMLButtonElement>('#restart')!.onclick = () => this.newGame();
+      <button class="wt-ctl wt-primary" id="restart">Choose a discipline</button></div>`;
+    o.querySelector<HTMLButtonElement>('#restart')!.onclick = () => this.showStart();
   }
 
   // ---- board rendering ------------------------------------------------------------
