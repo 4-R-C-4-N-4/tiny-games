@@ -58,7 +58,7 @@ export const ELEMENT_FLAVOR: Record<Element, string> = {
 export const TRAIT_CREATURE: Record<Trait, string> = {
   [Trait.Grunt]: 'Wisp', [Trait.Swarm]: 'Sprites', [Trait.Tank]: 'Golem', [Trait.Runner]: 'Hound',
   [Trait.Flier]: 'Drake', [Trait.Shade]: 'Wraith', [Trait.Shielded]: 'Sentinel',
-  [Trait.Mender]: 'Acolyte', [Trait.Breaker]: 'Gargoyle',
+  [Trait.Mender]: 'Acolyte', [Trait.Breaker]: 'Gargoyle', [Trait.Warden]: 'Aegis', [Trait.Totem]: 'Herald',
 };
 
 /** One-line bestiary role, in the game's voice. */
@@ -72,6 +72,8 @@ export const TRAIT_ROLE: Record<Trait, string> = {
   [Trait.Shielded]: 'A ward soaks the first hits.',
   [Trait.Mender]: 'Channels healing into nearby summons.',
   [Trait.Breaker]: 'Batters walls to breach your maze.',
+  [Trait.Warden]: 'Shrouds nearby summons — they take less damage.',
+  [Trait.Totem]: 'Rallies nearby summons to move faster.',
 };
 
 /** Full summon name, e.g. "Void Wraith", "Ember Sprites". */
@@ -90,10 +92,12 @@ export const TRAIT_COUNTER: Record<Trait, string> = {
   [Trait.Shielded]: 'a ward soaks its first few hits — high per-hit damage punches through.',
   [Trait.Mender]: 'heals nearby summons — focus it down first, or the wave never dies.',
   [Trait.Breaker]: 'smashes your walls to breach a shortcut — kill it before it opens a lane.',
+  [Trait.Warden]: 'shields the summons around it (they take less damage) — kill the Aegis and the escort folds.',
+  [Trait.Totem]: 'hastes the summons around it — kill the Herald to slow the push back down.',
 };
 
 /** Silhouette shape per trait — the renderer draws these; identity is shape + element glow. */
-export type MobShape = 'wisp' | 'swarm' | 'golem' | 'dart' | 'wing' | 'shade' | 'ward' | 'rune' | 'maul';
+export type MobShape = 'wisp' | 'swarm' | 'golem' | 'dart' | 'wing' | 'shade' | 'ward' | 'rune' | 'maul' | 'aegis' | 'herald';
 
 export const TRAIT_SHAPE: Record<Trait, MobShape> = {
   [Trait.Grunt]: 'wisp',
@@ -105,11 +109,13 @@ export const TRAIT_SHAPE: Record<Trait, MobShape> = {
   [Trait.Shielded]: 'ward',
   [Trait.Mender]: 'rune',
   [Trait.Breaker]: 'maul',
+  [Trait.Warden]: 'aegis',
+  [Trait.Totem]: 'herald',
 };
 
 /** Body radius as a fraction of a cell. */
 export const TRAIT_RADIUS: Record<Trait, number> = {
   [Trait.Grunt]: 0.28, [Trait.Swarm]: 0.16, [Trait.Tank]: 0.42, [Trait.Runner]: 0.26,
   [Trait.Flier]: 0.3, [Trait.Shade]: 0.28, [Trait.Shielded]: 0.32, [Trait.Mender]: 0.3,
-  [Trait.Breaker]: 0.3,
+  [Trait.Breaker]: 0.3, [Trait.Warden]: 0.32, [Trait.Totem]: 0.28,
 };

@@ -21,6 +21,14 @@ type Tool = { kind: 'wall' } | { kind: 'sell' } | { kind: 'tower'; element: Elem
 const CELL = 46; // css px per cell
 const TAU = Math.PI * 2;
 
+/** Buildable tower roles the palette cycles through (§ Phase 6 — composition). */
+const ROLE_ORDER: NodeKind[] = [NodeKind.Turret, NodeKind.Structure, NodeKind.Active];
+const ROLE_META: Record<NodeKind, { icon: string; name: string; hint: string }> = {
+  [NodeKind.Turret]: { icon: '⌖', name: 'Turret', hint: 'Turret — single-target damage' },
+  [NodeKind.Structure]: { icon: '✦', name: 'Pylon', hint: "Pylon — buffs nearby wards' damage (no attack of its own)" },
+  [NodeKind.Active]: { icon: '◈', name: 'Emitter', hint: 'Emitter — a field that debuffs mobs (Ice slows · Light reveals · else weakens)' },
+};
+
 export class GameView {
   private game!: Game;
   private canvas!: HTMLCanvasElement;
@@ -28,6 +36,7 @@ export class GameView {
   private tool: Tool | null = null;
   private verbTool: 'overcharge' | 'reveal' | 'reinforce' | null = null;
   private tier: Tier = Tier.T1;
+  private role: NodeKind = NodeKind.Turret; // Turret (DPS) / Structure=Pylon (ally buff) / Active=Emitter (mob field)
   private speed = 1;
   private acc = 0;
   private lastT = 0;
@@ -289,6 +298,12 @@ export class GameView {
 
     add(() => { this.tool = { kind: 'sell' }; }, (b) => { this.setHTML(b, '❌'); }, () => this.tool?.kind === 'sell');
 
+    const roleBtn = document.createElement('button');
+    roleBtn.className = 'wt-tool wt-role';
+    roleBtn.onclick = () => { this.role = ROLE_ORDER[(ROLE_ORDER.indexOf(this.role) + 1) % ROLE_ORDER.length]; this.controlsKey = ''; };
+    p.appendChild(roleBtn);
+    this.paletteButtons.push({ node: roleBtn, refresh: () => { const m = ROLE_META[this.role]; this.setHTML(roleBtn, `<small>${m.name.toLowerCase()}</small>${m.icon}`); roleBtn.title = m.hint; } });
+
     const tierBtn = document.createElement('button');
     tierBtn.className = 'wt-tool wt-tier';
     tierBtn.onclick = () => { this.tier = ((this.tier % 3) + 1) as Tier; this.controlsKey = ''; };
@@ -304,23 +319,32 @@ export class GameView {
 
   private refreshElementBtn(b: HTMLButtonElement, el: Element): void {
     const pl = this.game.sim.player;
-    const flags = towerStats(el, Tier.T1, NodeKind.Turret).flags;
     const caps: string[] = [];
-    if (flags.antiAir) caps.push('<i class="wt-cap aa" title="anti-air — hits fliers">↑</i>');
-    if (flags.detection) caps.push('<i class="wt-cap det" title="detection — reveals shades">◉</i>');
-    if (flags.slow > 0) caps.push('<i class="wt-cap slow" title="slow">∼</i>');
-    if (flags.splash > 0) caps.push('<i class="wt-cap spl" title="splash">✷</i>');
-    if (flags.disrupt) caps.push('<i class="wt-cap dis" title="disrupt — shatters shields & hushes menders">⊘</i>');
-    if (flags.harvest) caps.push('<i class="wt-cap har" title="harvest — kills pay a bonus bounty">◈</i>');
+    let roleHint: string;
+    if (this.role === NodeKind.Turret) {
+      const flags = towerStats(el, Tier.T1, NodeKind.Turret).flags;
+      if (flags.antiAir) caps.push('<i class="wt-cap aa" title="anti-air — hits fliers">↑</i>');
+      if (flags.detection) caps.push('<i class="wt-cap det" title="detection — reveals shades">◉</i>');
+      if (flags.slow > 0) caps.push('<i class="wt-cap slow" title="slow">∼</i>');
+      if (flags.splash > 0) caps.push('<i class="wt-cap spl" title="splash">✷</i>');
+      if (flags.disrupt) caps.push('<i class="wt-cap dis" title="disrupt — shatters shields & hushes menders">⊘</i>');
+      if (flags.harvest) caps.push('<i class="wt-cap har" title="harvest — kills pay a bonus bounty">◈</i>');
+      roleHint = `${ELEMENT_NAMES[el]} ward — ${ELEMENT_ARCANA[el]}`;
+    } else if (this.role === NodeKind.Structure) {
+      caps.push('<i class="wt-cap buff" title="Pylon — buffs nearby wards">✦</i>');
+      roleHint = `${ELEMENT_NAMES[el]} Pylon — buffs nearby wards' damage`;
+    } else {
+      const field = el === Element.Ice ? 'slow' : el === Element.Light ? 'reveal' : 'weaken';
+      caps.push(`<i class="wt-cap field" title="Emitter — ${field} field">◈</i>`);
+      roleHint = `${ELEMENT_NAMES[el]} Emitter — ${field} field`;
+    }
     const badge = caps.length ? `<span class="wt-caps">${caps.join('')}</span>` : '';
     b.style.setProperty('--el', ELEMENT_COLOR[el]);
     const home = el === pl.starting;
     b.classList.toggle('wt-home', home);
-    b.title = home
-      ? `${ELEMENT_NAMES[el]} — your school (pre-attuned, build freely)`
-      : pl.attuned[el]
-        ? `${ELEMENT_NAMES[el]} ward — ${ELEMENT_ARCANA[el]}${flags.antiAir ? ' · hits fliers' : flags.detection ? ' · reveals shades' : flags.disrupt ? ' · breaks shields & menders' : flags.harvest ? ' · kills → bonus power' : flags.slow > 0 ? ' · slows' : flags.splash > 0 ? ' · splash' : ''}`
-        : `Attune ${ELEMENT_NAMES[el]} (${ELEMENT_ARCANA[el]}) — one-time unlock, then build its wards`;
+    b.title = !pl.attuned[el]
+      ? `Attune ${ELEMENT_NAMES[el]} (${ELEMENT_ARCANA[el]}) — one-time unlock, then build its wards`
+      : roleHint + (home ? ' · your school' : '');
     if (!pl.attuned[el]) {
       const cost = attuneCost(pl.attuneCount);
       this.setHTML(b, `<span class="wt-glyph">${ELEMENT_EMOJI[el]}${badge}</span><small>🔓${cost}</small>`);
@@ -335,7 +359,7 @@ export class GameView {
   private towerPrice(el: Element): number {
     const pl = this.game.sim.player;
     const gate = this.tier > pl.depth[el] ? tierGateCost(el, this.tier, pl.starting) : 0;
-    return towerCost(NodeKind.Turret, this.tier) + gate;
+    return towerCost(this.role, this.tier) + gate;
   }
 
   private onElementTool(el: Element): void {
@@ -360,7 +384,7 @@ export class GameView {
     if (this.game.state !== 'build' || !this.tool) return;
     if (this.tool.kind === 'wall') this.game.buildWall(cell);
     else if (this.tool.kind === 'sell') this.game.sell(cell);
-    else this.game.buildTower(cell, this.tool.element, this.tier, NodeKind.Turret);
+    else this.game.buildTower(cell, this.tool.element, this.tier, this.role);
   }
 
   // ---- controls -------------------------------------------------------------------
@@ -752,8 +776,21 @@ export class GameView {
     const col = ELEMENT_COLOR[t.element];
     const range = fxToFloat(t.range) * CELL;
     const bob = this.reduced ? 0 : Math.sin(this.time * 2 + t.id) * 1.5;
-    // range aura when building
-    if (this.game.state === 'build') {
+    const support = t.aura !== null; // Pylon / Emitter — no attack, project a field instead
+    if (support && t.aura) {
+      // The field footprint is drawn ALWAYS (it's the whole point of a support ward), tinted
+      // by what it does: buff (school colour), slow (frost), vulnerable (ember), detect (radiant).
+      const ar = fxToFloat(t.aura.radius) * CELL;
+      const ac = t.aura.kind === 'slow' ? '#5fd0ff' : t.aura.kind === 'vulnerable' ? '#ff9a4d' : t.aura.kind === 'detect' ? '#ffe8a3' : col;
+      const pulse = this.reduced ? 0 : 0.02 * Math.sin(this.time * 2 + t.id);
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = ac; ctx.globalAlpha = 0.05 + pulse;
+      ctx.beginPath(); ctx.arc(c.x, c.y, ar, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 0.2; ctx.strokeStyle = ac; ctx.lineWidth = 1; ctx.setLineDash([2, 4]);
+      ctx.beginPath(); ctx.arc(c.x, c.y, ar, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+      ctx.restore();
+    } else if (this.game.state === 'build') {
+      // Turret targeting range, shown while building.
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
       ctx.fillStyle = col; ctx.globalAlpha = 0.04;
       ctx.beginPath(); ctx.arc(c.x, c.y, range, 0, TAU); ctx.fill();
@@ -787,20 +824,36 @@ export class GameView {
       ctx.fillStyle = col; ctx.beginPath(); ctx.arc(Math.cos(a) * (rr + 3), Math.sin(a) * (rr + 3), 2.2, 0, TAU); ctx.fill();
     }
     // anti-air: a bright up-chevron badge (+ orbiting rune); detection: a scrying-eye badge.
-    if (t.flags.antiAir) {
+    // (Turret-only — a support ward doesn't fire, so these would mislead.)
+    if (!support && t.flags.antiAir) {
       const a = -this.time * 2.4;
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(Math.cos(a) * (rr + 7), Math.sin(a) * (rr + 7), 1.8, 0, TAU); ctx.fill();
       ctx.strokeStyle = '#eaf2ff'; ctx.lineWidth = 2; ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(-4, -rr - 5); ctx.lineTo(0, -rr - 9); ctx.lineTo(4, -rr - 5); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(-4, -rr - 9); ctx.lineTo(0, -rr - 13); ctx.lineTo(4, -rr - 9); ctx.stroke();
     }
-    if (t.flags.detection) {
+    if (!support && t.flags.detection) {
       const a = this.time * 2;
       ctx.strokeStyle = '#ffe8a3'; ctx.globalAlpha = 0.7; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(0, 0, rr - 3, a, a + 1.1); ctx.stroke();
       ctx.globalAlpha = 1; ctx.lineWidth = 1.4;
       ctx.beginPath(); ctx.moveTo(-5, -rr - 8); ctx.quadraticCurveTo(0, -rr - 12, 5, -rr - 8); ctx.quadraticCurveTo(0, -rr - 4, -5, -rr - 8); ctx.stroke();
       ctx.beginPath(); ctx.arc(0, -rr - 8, 1.4, 0, TAU); ctx.stroke();
+    }
+    // Support-role marker so a Pylon and an Emitter read differently from a Turret at a glance.
+    if (support && t.aura) {
+      if (t.aura.kind === 'buff') {
+        // Pylon: four bright spokes radiating out (it feeds the wards around it).
+        ctx.strokeStyle = '#fff'; ctx.globalAlpha = 0.9; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+        for (let i = 0; i < 4; i++) { const a = this.time * 0.8 + i * TAU / 4; ctx.beginPath(); ctx.moveTo(Math.cos(a) * (rr - 4), Math.sin(a) * (rr - 4)); ctx.lineTo(Math.cos(a) * (rr + 6), Math.sin(a) * (rr + 6)); ctx.stroke(); }
+      } else {
+        // Emitter: an expanding pulse ring, coloured by its field.
+        const ec = t.aura.kind === 'slow' ? '#5fd0ff' : t.aura.kind === 'detect' ? '#ffe8a3' : '#ff9a4d';
+        const ph = this.reduced ? 0.5 : (this.time * 0.7 + t.id) % 1;
+        ctx.globalAlpha = 0.5 * (1 - ph); ctx.strokeStyle = ec; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, rr * (0.4 + ph), 0, TAU); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
     }
     ctx.restore();
   }
@@ -813,6 +866,17 @@ export class GameView {
     const flier = m.flags.flier;
     const bob = this.reduced ? 0 : Math.sin(this.time * 4 + m.id) * (flier ? 3 : 1);
     const lift = flier ? 11 : 0; // fliers hover clearly above their ground shadow
+
+    // Support summons (Warden/Totem) show their aura footprint so you know what to focus.
+    if (m.flags.ward > 0 || m.flags.haste > 0) {
+      const ar = 2 * CELL; // WARD_RADIUS / HASTE_RADIUS = 2 cells
+      const ac = m.flags.ward > 0 ? '#8fd6ff' : '#ffd479';
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.06; ctx.fillStyle = ac;
+      ctx.beginPath(); ctx.arc(x, y, ar, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 0.16; ctx.strokeStyle = ac; ctx.lineWidth = 1; ctx.setLineDash([2, 5]);
+      ctx.beginPath(); ctx.arc(x, y, ar, 0, TAU); ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+    }
 
     ctx.save();
     ctx.translate(x, y + bob - lift);
@@ -1008,6 +1072,25 @@ function paintCreature(
       ctx.save(); ctx.shadowBlur = 0; ctx.fillStyle = DARK_INK; ctx.beginPath(); ctx.arc(0, -r * 0.5, r * 0.26, 0, TAU); ctx.fill(); ctx.restore();
       ctx.save(); ctx.shadowBlur = 0; ctx.globalAlpha *= 0.5; ctx.strokeStyle = '#9fe38a'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(0, -r * 0.5, r * 0.62 + 3 * Math.sin(t * 4), 0, TAU); ctx.stroke(); ctx.restore();
+      break;
+    }
+    case 'aegis': { // a shield-bearer construct — a hex core wrapped in a protective halo
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) { const a = -Math.PI / 2 + i * TAU / 6; ctx[i ? 'lineTo' : 'moveTo'](Math.cos(a) * r * 0.72, Math.sin(a) * r * 0.72); }
+      ctx.closePath(); ctx.fill();
+      eye(0, 0, r * 0.14, true);
+      ctx.save(); ctx.shadowBlur = 0; ctx.globalAlpha *= 0.5; ctx.strokeStyle = '#8fd6ff'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, r + 4 + 2 * Math.sin(t * 3), 0, TAU); ctx.stroke(); ctx.restore();
+      break;
+    }
+    case 'herald': { // an upright totem that rallies the push — chevrons stream upward
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.42, r); ctx.lineTo(-r * 0.42, -r * 0.4); ctx.lineTo(0, -r); ctx.lineTo(r * 0.42, -r * 0.4); ctx.lineTo(r * 0.42, r);
+      ctx.closePath(); ctx.fill();
+      eye(0, -r * 0.15, r * 0.12, true);
+      ctx.save(); ctx.shadowBlur = 0; ctx.globalAlpha *= 0.75; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+      for (let i = 0; i < 2; i++) { const yy = r * 0.4 - ((t * 1.4 + i * 0.5) % 1) * r * 1.3; ctx.beginPath(); ctx.moveTo(-r * 0.5, yy); ctx.lineTo(0, yy - r * 0.32); ctx.lineTo(r * 0.5, yy); ctx.stroke(); }
+      ctx.restore();
       break;
     }
     default: { // 'maul' — a hunched, horned gargoyle
