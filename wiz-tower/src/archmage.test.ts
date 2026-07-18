@@ -5,7 +5,7 @@ import { Element, N_ELEMENTS } from './element.ts';
 import { NodeKind, OccKind } from './types.ts';
 import { DEFAULT_CONFIG } from './config.ts';
 import { archmageBuild, elementThatBeats } from './archmage.ts';
-import { leakSurface, sampleBoard } from './teacher.ts';
+import { leakSurface, adaptiveLeakSurface, sampleBoard } from './teacher.ts';
 
 const cfg = { ...DEFAULT_CONFIG };
 const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
@@ -45,6 +45,20 @@ describe('Archmage — best-practice defender', () => {
     archmageBuild(arch, { budget: 900, foeSchool: Element.Ice, expectAir: true, expectStealth: true, stage: 0.9 });
     const bare = Sim.create(cfg, Element.Fire); bare.syncFields();
     expect(sum(leakSurface(arch))).toBeLessThan(sum(leakSurface(bare)) * 0.5);
+  });
+
+  it('the adaptive probe escalates to keep a strong board discriminative', () => {
+    // A strong defense stops the small fixed probe (little to learn); the adaptive probe
+    // escalates the wave until the board's real weak spot breaks through.
+    const strong = Sim.create(cfg, Element.Zap);
+    archmageBuild(strong, { budget: 700, foeSchool: Element.Ice, expectAir: true, expectStealth: true, stage: 0.8 });
+    const fixedMax = Math.max(...leakSurface(strong)); // base probe (2/column)
+    const a = adaptiveLeakSurface(strong);
+    expect(a.discriminative).toBe(true); //                             it found a real exploit
+    expect(Math.max(...a.surface)).toBeGreaterThanOrEqual(fixedMax); // escalation never finds less
+    expect(Math.max(...a.surface) - Math.min(...a.surface)).toBeGreaterThan(0); // a clear best action, not a flat wall
+    // a bigger probe never leaks LESS than a smaller one (monotone signal)
+    expect(Math.max(...leakSurface(strong, 32))).toBeGreaterThanOrEqual(Math.max(...leakSurface(strong, 2)));
   });
 
   it('is a tougher teaching board than the random scatter it replaces (lower leak surface)', () => {

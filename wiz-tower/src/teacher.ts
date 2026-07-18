@@ -41,6 +41,36 @@ export function leakSurface(sim: Sim, countPerColumn = PROBE_PER_COLUMN): number
   return surface;
 }
 
+/** Probe sizes (bodies per column) the adaptive teacher escalates through. Capped at 16 for
+ *  cost — a board that survives 16/column (112 bodies) is essentially unbeatable by a
+ *  front-wide probe and is dropped as non-discriminative anyway (a flat surface teaches
+ *  nothing), so escalating to 32/64 just burns time on huge waves. */
+export const PROBE_SIZES = [PROBE_PER_COLUMN, 4, 8, 16] as const;
+/** Minimum peak Core damage for a surface to be discriminative (some action must break in). */
+const DISCRIMINATIVE_LEAK = 5;
+
+/**
+ * Adaptive leak surface: escalate the probe size until the WEAKEST-covered actions finally
+ * break through, then stop. A fixed small probe leaves a strong board's surface flat-zero
+ * (nothing to learn — the bug a human expert's board exposed); a fixed huge probe saturates a
+ * weak board (everything leaks, argmax meaningless). Returning the smallest probe at which
+ * anything leaks keeps the surface in the discriminative regime for boards of any strength:
+ * only the board's real gaps light up, everything it covers stays at zero.
+ *
+ * Returns `{ surface, count, discriminative }`. `discriminative` is false only if even the
+ * largest probe barely dents the board (an essentially unbeatable snapshot — drop it, a flat
+ * surface teaches nothing).
+ */
+export function adaptiveLeakSurface(sim: Sim): { surface: number[]; count: number; discriminative: boolean } {
+  let surface: number[] = [];
+  let count: number = PROBE_SIZES[0];
+  for (count of PROBE_SIZES) {
+    surface = leakSurface(sim, count);
+    if (Math.max(...surface) >= DISCRIMINATIVE_LEAK) return { surface, count, discriminative: true };
+  }
+  return { surface, count, discriminative: Math.max(...surface) > 0 };
+}
+
 export interface SampleBoardOptions {
   minTowers?: number;
   maxTowers?: number;

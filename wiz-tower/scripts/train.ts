@@ -15,7 +15,7 @@ import { dirname, join } from 'node:path';
 import { Rng } from '../src/fx.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 import { featurize, N_FEATURES, N_ACTIONS, argmax, forward, type Weights } from '../src/model.ts';
-import { leakSurface, sampleBoard, sampleInducedBoard } from '../src/teacher.ts';
+import { adaptiveLeakSurface, sampleBoard, sampleInducedBoard } from '../src/teacher.ts';
 import { sampleArchmageBoard } from '../src/archmage.ts';
 import { restoreBoard, type BoardSnapshot } from '../src/board-io.ts';
 import type { Sim } from '../src/sim.ts';
@@ -73,22 +73,33 @@ function zerosMat(r: number, c: number): number[][] { return Array.from({ length
 // ---- data ---------------------------------------------------------------------------
 function makeData(n: number, useDagger: boolean, prepend: Sim[] = []): { X: number[][]; Y: number[][] } {
   const X: number[][] = [], Y: number[][] = [];
+  let skipped = 0;
+  // Adaptive probe → per-board [0,1] soft target (probe-size invariant). Skip near-unbeatable
+  // boards whose surface stays flat even under the largest probe — they teach nothing.
+  const add = (sim: Sim): void => {
+    const a = adaptiveLeakSurface(sim);
+    if (!a.discriminative) { skipped++; return; }
+    const mx = Math.max(...a.surface) || 1;
+    X.push(featurize(sim.observe()));
+    Y.push(a.surface.map((v) => v / mx));
+  };
   // Real human boards go in first — the highest-quality "best-practice" teacher data.
-  for (const sim of prepend) { X.push(featurize(sim.observe())); Y.push(leakSurface(sim)); }
-  for (let i = X.length; i < n; i++) {
-    // Half the boards are best-practice ARCHMAGE defenses (maze + counters + synergy) so the
-    // student learns to beat competent play, not noise. The rest are random boards, and — once
-    // a prior exists — DAgger-induced boards the deployed model walks into.
+  for (const sim of prepend) add(sim);
+  // Half the boards are best-practice ARCHMAGE defenses (maze + counters + synergy) so the
+  // student learns to beat competent play, not noise. The rest are random boards, and — once
+  // a prior exists — DAgger-induced boards the deployed model walks into.
+  let guard = 0, next = 200;
+  while (X.length < n && guard++ < n * 5) {
     const r = rng.below(1000) / 1000;
     const sim = r < ARCHMAGE_FRAC
       ? sampleArchmageBoard(rng, DEFAULT_CONFIG)
       : (useDagger && prior && rng.below(1000) / 1000 < DAGGER_FRAC)
         ? sampleInducedBoard(rng, DEFAULT_CONFIG, prior!)
         : sampleBoard(rng, DEFAULT_CONFIG);
-    X.push(featurize(sim.observe()));
-    Y.push(leakSurface(sim));
-    if ((i + 1) % 200 === 0) process.stdout.write(`  generated ${i + 1}/${n} boards\n`);
+    add(sim);
+    if (X.length >= next) { process.stdout.write(`  generated ${X.length}/${n} boards\n`); next += 200; }
   }
+  if (skipped) console.log(`  (skipped ${skipped} near-unbeatable boards — flat surface, nothing to learn)`);
   return { X, Y };
 }
 
