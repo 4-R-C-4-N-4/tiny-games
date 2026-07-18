@@ -28,6 +28,7 @@ import { Element, N_ELEMENTS, ELEMENT_NAMES, typeMult } from './element.ts';
 import { Trait } from './types.ts';
 import type { Observation, DecisionContext } from './types.ts';
 import { SearchAttacker, type SearchOptions, type WaveBias, type SearchWeights } from './search.ts';
+import type { EconHint } from './attacker-economy.ts';
 import type { Attacker, Opener, Commit } from './wave.ts';
 import type { Sim } from './sim.ts';
 
@@ -85,7 +86,11 @@ export class StrategistAttacker implements Attacker {
   open(obs: Observation): { opener: Opener; pool: number } {
     this.observe(obs);
     const plan = this.plan(obs);
-    this.setIntent(plan);
+    // Build order: bank while the player is teching (a lighter wave buys them false comfort),
+    // and unleash the banked hoard as a spike on the strike / when they're clearly at ease.
+    const hint: EconHint = this.techingUp ? 'save' : (this.model!.strikePending || this.model!.comfort > 0.85) ? 'spike' : undefined;
+    this.search.econHint = hint;
+    this.setIntent(plan, hint);
     // The telegraphed opener baits the flank you defend most (a decoy you keep guarding).
     const bias = this.bias(plan, plan.strong, plan.press);
     this.lastOpenerBias = bias;
@@ -194,7 +199,7 @@ export class StrategistAttacker implements Attacker {
     };
   }
 
-  private setIntent(plan: Plan): void {
+  private setIntent(plan: Plan, hint: EconHint): void {
     const m = this.model!;
     const where = ['left', 'centre', 'right'];
     const parts = [`probes your thin ${ELEMENT_NAMES[plan.gap]} ward`];
@@ -205,9 +210,13 @@ export class StrategistAttacker implements Attacker {
     else if (plan.strong !== plan.weak) parts.push(`feints ${where[plan.strong]}, holds for your ${where[plan.weak]}`);
     if (m.comfort > 0.85) parts.push('and presses, sensing you at ease');
     else if (m.comfort < 0.4) parts.push('and circles for the kill');
-    if (this.techingUp) parts.push('starving your bounty as you tech');
+    if (hint === 'spike') parts.push('and unleashes its banked hoard in one massed assault');
+    else if (this.techingUp) parts.push('banking its malice while starving your bounty as you tech');
     this.intent = 'The Adversary ' + parts.join(', ') + '.';
   }
+
+  /** True if last wave released a banked spike — for telemetry / the recap. */
+  get lastWasSpike(): boolean { return this.search.economy.lastWasSpike; }
 }
 
 // ---- helpers ----------------------------------------------------------------------

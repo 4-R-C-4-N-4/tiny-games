@@ -18,6 +18,7 @@ import { Element, N_ELEMENTS, typeMult } from './element.ts';
 import { Trait, type Cell } from './types.ts';
 import type { Observation, DecisionContext, Metrics } from './types.ts';
 import { budgetFor, groupCost, mobStats, traitUnlocked, waveCountScale, waveGroupBonus } from './config.ts';
+import { AttackerEconomy, type EconHint } from './attacker-economy.ts';
 import type { Attacker, Opener, Commit, Spawn, MobGroup, Wave } from './wave.ts';
 import { PlanAttacker } from './wave.ts';
 import type { Sim } from './sim.ts';
@@ -85,6 +86,10 @@ export class SearchAttacker implements Attacker {
   committed: Commit[][] = [];
   /** Set by the L3 Strategist before open()/commit() to steer this call; null = plain L2. */
   bias: WaveBias | null = null;
+  /** Cross-wave build order: bank a lighter wave now, spike a heavier one later. */
+  readonly economy = new AttackerEconomy();
+  /** Strategist-set steer for this wave's economy ('save' / 'spike'); consumed each open(). */
+  econHint: EconHint = undefined;
   private curWave = 1;
   private curDiff = 3;
 
@@ -102,7 +107,9 @@ export class SearchAttacker implements Attacker {
     const wave = obs.wave > 0 ? obs.wave : Math.max(1, this.sim.waveNumber());
     const diff = obs.diff;
     this.curWave = wave; this.curDiff = diff;
-    const budget = budgetFor(wave, diff);
+    // The economy decides how much of this wave's income to actually field (rush vs bank-and-spike).
+    const budget = this.economy.nextAssault(wave, budgetFor(wave, diff), this.econHint);
+    this.econHint = undefined; // consume the strategist's steer
     const pool = Math.round(budget * this.reserveFrac);
     const openerBudget = budget - pool;
     const read = this.readBoard(obs);

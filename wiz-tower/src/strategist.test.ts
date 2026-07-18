@@ -84,6 +84,11 @@ describe('StrategistAttacker (L3 cross-wave mind)', () => {
     expect(r.intents.some((s) => /Fire-heavy wards/.test(s))).toBe(true);
   });
 
+  it('runs a build order — banks malice or unleashes a spike across the run', () => {
+    const r = playMind(2n, 6);
+    expect(r.intents.some((s) => /banked hoard|banking its malice/.test(s))).toBe(true);
+  });
+
   it('runs the gambit: when you reinforce the baited flank, the reserve strikes the flank you thinned', () => {
     // Pile all wards on the RIGHT and keep reinforcing it. The mind feints there, sees the
     // reinforcement, and swings an amplified reserve strike LEFT.
