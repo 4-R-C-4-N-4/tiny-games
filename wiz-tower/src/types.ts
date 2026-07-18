@@ -37,10 +37,12 @@ export enum Trait {
   Shielded = 6,
   Mender = 7,
   Breaker = 8,
+  Warden = 9, // support: projects a damage-reduction aura to nearby summons (escort)
+  Totem = 10, // support: projects a haste aura to nearby summons (the push accelerator)
 }
 
 export const TRAIT_NAMES = [
-  'Grunt', 'Swarm', 'Tank', 'Runner', 'Flier', 'Shade', 'Shielded', 'Mender', 'Breaker',
+  'Grunt', 'Swarm', 'Tank', 'Runner', 'Flier', 'Shade', 'Shielded', 'Mender', 'Breaker', 'Warden', 'Totem',
 ] as const;
 
 /**
@@ -102,16 +104,30 @@ export interface TowerFlags {
   harvest: boolean; // Dark (Umbra): its killing blows pay a bonus bounty (kills → power)
 }
 
+/** A support-role tower's persistent field (Pylon / Emitter). Turrets have none. */
+export type AuraKind =
+  | 'buff' //       Pylon: allied towers in radius deal +amount fraction more damage
+  | 'slow' //       Emitter (Ice): mobs in radius move at (1 - amount) speed
+  | 'vulnerable' // Emitter (most): mobs in radius take +amount fraction more damage
+  | 'detect'; //    Emitter (Light): mobs in radius are revealed (Shades become targetable)
+
+export interface Aura {
+  kind: AuraKind;
+  radius: Fx; // cell units (euclidean, compared squared)
+  amount: Fx; // fractional magnitude (unused for 'detect')
+}
+
 export interface Tower {
   id: TowerId;
   cell: Cell;
   element: Element;
   tier: Tier;
   kind: NodeKind;
-  dps: Fx; // damage per second (scaled by dt at fire time)
+  dps: Fx; // damage per second (scaled by dt at fire time); 0 for support roles (Pylon/Emitter)
   range: Fx; // in cell units
   priority: TargetPriority;
   flags: TowerFlags;
+  aura: Aura | null; // support-role field (Pylon buff / Emitter debuff); null for Turrets
 }
 
 export interface MobFlags {
@@ -119,6 +135,8 @@ export interface MobFlags {
   stealth: boolean; // untargetable unless detection covers it (Shade)
   breaker: boolean; // damages walls to breach
   regen: Fx; // Mender: HP/sec healed to nearby mobs (0 = none)
+  ward: Fx; // Warden: fractional damage reduction granted to nearby summons (0 = none)
+  haste: Fx; // Totem: fractional speed boost granted to nearby summons (0 = none)
 }
 
 export interface Mob {

@@ -56,13 +56,14 @@ const DEFAULT_WEIGHTS: SearchWeights = { leak: 1, econ: 0.3, tempo: 0.05 };
 
 const ALL_TRAITS = [
   Trait.Grunt, Trait.Swarm, Trait.Tank, Trait.Runner,
-  Trait.Flier, Trait.Shade, Trait.Shielded, Trait.Mender, Trait.Breaker,
+  Trait.Flier, Trait.Shade, Trait.Shielded, Trait.Mender, Trait.Breaker, Trait.Warden, Trait.Totem,
 ] as const;
 
 /** Soft per-trait cap on group size, so budgets aren't blown on one absurd stack. */
 const TRAIT_MAX_COUNT: Record<Trait, number> = {
   [Trait.Grunt]: 8, [Trait.Swarm]: 12, [Trait.Tank]: 3, [Trait.Runner]: 8,
   [Trait.Flier]: 6, [Trait.Shade]: 5, [Trait.Shielded]: 5, [Trait.Mender]: 3, [Trait.Breaker]: 4,
+  [Trait.Warden]: 2, [Trait.Totem]: 2, // force multipliers — a couple per push, not a stack
 };
 
 type BoardRead = {
@@ -291,7 +292,7 @@ export class SearchAttacker implements Attacker {
       let base = 1;
       if (t === Trait.Flier) base = airGap ? 4 : 1;
       else if (t === Trait.Shade) base = detGap ? 4 : 1;
-      else if (t === Trait.Mender || t === Trait.Breaker) base = 0.5; // situational
+      else if (t === Trait.Mender || t === Trait.Breaker || t === Trait.Warden || t === Trait.Totem) base = 0.5; // situational support
       return base * (boost?.[t] ?? 1);
     });
     return ALL_TRAITS[this.sampleWeighted(w)];

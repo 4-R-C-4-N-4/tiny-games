@@ -8,7 +8,7 @@
  */
 import { fx, fxRatio, fxMul, FX_ONE, type Fx } from './fx.ts';
 import { Element } from './element.ts';
-import { Trait, Tier, NodeKind, TargetPriority, type TowerFlags, type MobFlags } from './types.ts';
+import { Trait, Tier, NodeKind, TargetPriority, type TowerFlags, type MobFlags, type Aura } from './types.ts';
 
 // ---- global sim config ------------------------------------------------------------
 
@@ -43,6 +43,10 @@ export const DEFAULT_CONFIG: Omit<Config, 'seed'> & { seed: bigint } = {
 export const BREAKER_WALL_DPS: Fx = fx(26); // Breakers demolish a wall in ~1.7s (§3.2)
 export const MOB_WALL_DPS: Fx = fxRatio(3, 2); // other blocked mobs only CHIP at 1.5/s (>0 so a sealed Core still eventually breaches)
 export const MENDER_HEAL_RADIUS: Fx = fx(2); // cell units (euclidean, compared squared)
+export const WARD_RADIUS: Fx = fx(2); //   Warden's protective aura reach
+export const HASTE_RADIUS: Fx = fx(2); //  Totem's haste aura reach
+export const PYLON_RADIUS: Fx = fx(2); //  Pylon's ally-buff aura reach
+export const EMITTER_RADIUS: Fx = fx(2); //Emitter's mob-debuff field reach
 export const SPLASH_RADIUS: Fx = fx(1); // splash reaches mobs within 1 cell of the target
 /** Core damage per leaked mob = its point cost (tanks hurt more than swarm bodies). */
 export function leakDamage(trait: Trait): Fx {
@@ -88,11 +92,12 @@ export function attuneCost(extraCount: number): number {
 
 const DPS_TIER_BASE: Record<Tier, Fx> = { [Tier.T1]: fx(8), [Tier.T2]: fx(16), [Tier.T3]: fx(28) };
 const RANGE_TIER: Record<Tier, Fx> = { [Tier.T1]: fxRatio(3, 2), [Tier.T2]: fx(2), [Tier.T3]: fxRatio(5, 2) };
-// kind DPS factor as an Fx fraction: turrets shoot, structures chip, actives passive-idle.
+// kind DPS factor as an Fx fraction. Turrets shoot; the support roles deal NO direct damage
+// and instead project an aura (Pylon buffs allies, Emitter debuffs mobs).
 const KIND_DPS_FRAC: Record<NodeKind, Fx> = {
   [NodeKind.Turret]: fx(1),
-  [NodeKind.Structure]: fxRatio(2, 5),
-  [NodeKind.Active]: 0,
+  [NodeKind.Structure]: 0, // Pylon
+  [NodeKind.Active]: 0, //    Emitter
 };
 
 export interface TowerStats {
@@ -100,6 +105,22 @@ export interface TowerStats {
   range: Fx;
   flags: TowerFlags;
   priority: TargetPriority;
+  aura: Aura | null;
+}
+
+/** The field a support role projects. Pylon amps allied towers; Emitter debuffs mobs,
+ *  flavoured by element (Ice slows, Light reveals, everything else marks vulnerable). */
+export function towerAura(element: Element, tier: Tier, kind: NodeKind): Aura | null {
+  const t = tier; // 1..3 — auras strengthen with tier
+  if (kind === NodeKind.Structure) {
+    return { kind: 'buff', radius: PYLON_RADIUS, amount: fxRatio(15 + 10 * t, 100) }; // +25% … +45% ally damage
+  }
+  if (kind === NodeKind.Active) {
+    if (element === Element.Ice) return { kind: 'slow', radius: EMITTER_RADIUS, amount: fxRatio(20 + 10 * t, 100) }; // 30%…50% slow
+    if (element === Element.Light) return { kind: 'detect', radius: EMITTER_RADIUS + (FX_ONE >> 1), amount: 0 }; // reveal field
+    return { kind: 'vulnerable', radius: EMITTER_RADIUS, amount: fxRatio(10 + 5 * t, 100) }; // +15%…+25% damage taken
+  }
+  return null;
 }
 
 export function towerStats(element: Element, tier: Tier, kind: NodeKind): TowerStats {
@@ -116,7 +137,7 @@ export function towerStats(element: Element, tier: Tier, kind: NodeKind): TowerS
     harvest: element === Element.Dark,
   };
   const priority = flags.antiAir ? TargetPriority.Flying : TargetPriority.First;
-  return { dps, range, flags, priority };
+  return { dps, range, flags, priority, aura: towerAura(element, tier, kind) };
 }
 
 // ---- mob stats by trait (element only decides matchup, not base stats) -------------
@@ -138,7 +159,7 @@ export function mobStats(trait: Trait): MobStats {
     speed: fxRatio(speed[0], speed[1]),
     cost,
     shieldHits,
-    flags: { flier: false, stealth: false, breaker: false, regen: 0, ...flags },
+    flags: { flier: false, stealth: false, breaker: false, regen: 0, ward: 0, haste: 0, ...flags },
   });
   switch (trait) {
     case Trait.Grunt: return base(20, [1, 1], 4);
@@ -150,6 +171,9 @@ export function mobStats(trait: Trait): MobStats {
     case Trait.Shielded: return base(20, [9, 10], 7, {}, 3);
     case Trait.Mender: return base(24, [4, 5], 8, { regen: fxRatio(2, 1) });
     case Trait.Breaker: return base(14, [7, 10], 5, { breaker: true });
+    // Support summons: fragile-ish, slow, valuable to focus — they multiply a whole push.
+    case Trait.Warden: return base(28, [7, 10], 8, { ward: fxRatio(35, 100) }); //  -35% dmg to nearby allies
+    case Trait.Totem: return base(22, [7, 10], 7, { haste: fxRatio(40, 100) }); //  +40% speed to nearby allies
   }
 }
 
@@ -218,7 +242,8 @@ export function harvestBonus(trait: Trait): number {
  *  first-wave air-rush — you get time to tech the counters as the roster opens up. */
 const TRAIT_UNLOCK: Record<Trait, number> = {
   [Trait.Grunt]: 1, [Trait.Swarm]: 1, [Trait.Tank]: 2, [Trait.Runner]: 2,
-  [Trait.Flier]: 4, [Trait.Shielded]: 5, [Trait.Shade]: 6, [Trait.Breaker]: 6, [Trait.Mender]: 7,
+  [Trait.Flier]: 4, [Trait.Shielded]: 5, [Trait.Totem]: 5, [Trait.Shade]: 6, [Trait.Breaker]: 6,
+  [Trait.Warden]: 7, [Trait.Mender]: 7,
 };
 
 /** Is `trait` available to the attacker on `wave` at `diff`? Higher Rank opens it earlier

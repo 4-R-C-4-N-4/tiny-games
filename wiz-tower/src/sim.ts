@@ -22,7 +22,7 @@ import {
 import {
   type Config, WALL_COST, WALL_HP, refund, towerCost, towerStats, mobStats,
   BREAKER_WALL_DPS, MOB_WALL_DPS, MENDER_HEAL_RADIUS, SPLASH_RADIUS, leakDamage, budgetFor, bounty, harvestBonus,
-  waveMobScale, waveLeakScale,
+  waveMobScale, waveLeakScale, WARD_RADIUS, HASTE_RADIUS,
   VERB_RADIUS, OVERCHARGE_MULT, OVERCHARGE_SECS, REVEAL_SECS, REINFORCE_HP,
 } from './config.ts';
 import type { Opener, Commit } from './wave.ts';
@@ -203,7 +203,7 @@ export class Sim {
     const id = this.freeTowerIds.pop() ?? this.towers.length;
     const tower: Tower = {
       id, cell, element: e, tier, kind,
-      dps: stats.dps, range: stats.range, priority: stats.priority, flags: stats.flags,
+      dps: stats.dps, range: stats.range, priority: stats.priority, flags: stats.flags, aura: stats.aura,
     };
     if (id === this.towers.length) this.towers.push(tower);
     else this.towers[id] = tower;
@@ -418,7 +418,14 @@ export class Sim {
     for (const m of this.mobs) {
       if (!m.alive) continue;
       m.breachCell = null;
-      const budget = fxMul(fxMul(m.speed, this.cfg.dt), m.slowMul);
+      // Strongest slow wins (tower-applied this-tick slow vs a standing Emitter slow field);
+      // a Totem's haste aura then speeds the survivor back up.
+      let mult = m.slowMul;
+      const fieldSlow = this.fieldSlowMul(m.pos);
+      if (fieldSlow < mult) mult = fieldSlow;
+      let budget = fxMul(fxMul(m.speed, this.cfg.dt), mult);
+      const haste = this.mobHaste(m.pos);
+      if (haste > 0) budget = fxMul(budget, FX_ONE + haste);
       m.slowMul = FX_ONE; // slow lasts exactly one tick; slow towers re-apply in §2.7
 
       if (m.flags.flier) {
@@ -494,10 +501,13 @@ export class Sim {
 
   private towersFire(): void {
     for (const t of this.towers) {
-      if (!t) continue;
+      if (!t || t.dps <= 0) continue; // support roles (Pylon/Emitter) don't fire — they project auras
       const target = this.acquire(t);
       if (!target) continue;
       let base = fxMul(t.dps, this.cfg.dt);
+      // Pylon buff: allied turrets standing in a Pylon's aura hit harder.
+      const buff = this.pylonBuff(t.cell);
+      if (buff !== FX_ONE) base = fxMul(base, buff);
       // Overcharge verb: towers inside an active zone fire much harder.
       if (this.effects.length && this.effectActive('overcharge', cellCenter(t.cell))) {
         base = fxMul(base, OVERCHARGE_MULT);
@@ -520,7 +530,7 @@ export class Sim {
    *  Reveal verb zone covering the mob). */
   private canHit(t: Tower, m: Mob): boolean {
     if (m.flags.flier && !t.flags.antiAir) return false;
-    if (m.flags.stealth && !t.flags.detection && !this.effectActive('reveal', m.pos)) return false;
+    if (m.flags.stealth && !t.flags.detection && !this.effectActive('reveal', m.pos) && !this.fieldDetect(m.pos)) return false;
     return true;
   }
 
@@ -562,7 +572,11 @@ export class Sim {
       if (t.flags.disrupt) m.shieldHits = 0; // ...but Resonance shatters the whole ward and rings on through
       else { m.shieldHits -= 1; return; }
     }
-    const dmg = fxMul(rawDamage, typeMult(t.element, m.element));
+    let dmg = fxMul(rawDamage, typeMult(t.element, m.element));
+    const vuln = this.fieldVuln(m.pos); //   Emitter (vulnerable) field amplifies incoming damage
+    if (vuln !== FX_ONE) dmg = fxMul(dmg, vuln);
+    const ward = this.mobWard(m.pos); //     Warden aura soaks a fraction of it
+    if (ward > 0) dmg = fxMul(dmg, FX_ONE - ward);
     const hpBefore = m.hp;
     const applied = dmg > hpBefore ? hpBefore : dmg;
     m.hp -= dmg;
@@ -611,6 +625,73 @@ export class Sim {
         }
       }
     }
+  }
+
+  // ---- support-role auras: tower Pylon/Emitter fields + mob Warden/Totem auras ---------
+
+  /** Damage multiplier on a turret from Pylon buff auras covering its cell (FX_ONE = none). */
+  private pylonBuff(cell: Cell): Fx {
+    const c = cellCenter(cell);
+    let mul = FX_ONE;
+    for (const t of this.towers) {
+      if (!t || !t.aura || t.aura.kind !== 'buff') continue;
+      if (dist2(cellCenter(t.cell), c) <= fxMul(t.aura.radius, t.aura.radius)) mul += t.aura.amount;
+    }
+    return mul;
+  }
+
+  /** Damage-taken multiplier on a mob from Emitter 'vulnerable' fields over its position. */
+  private fieldVuln(p: Pos): Fx {
+    let mul = FX_ONE;
+    for (const t of this.towers) {
+      if (!t || !t.aura || t.aura.kind !== 'vulnerable') continue;
+      if (dist2(cellCenter(t.cell), p) <= fxMul(t.aura.radius, t.aura.radius)) mul += t.aura.amount;
+    }
+    return mul;
+  }
+
+  /** Movement multiplier from the strongest Emitter 'slow' field over a position (FX_ONE = none). */
+  private fieldSlowMul(p: Pos): Fx {
+    let mul = FX_ONE;
+    for (const t of this.towers) {
+      if (!t || !t.aura || t.aura.kind !== 'slow') continue;
+      if (dist2(cellCenter(t.cell), p) <= fxMul(t.aura.radius, t.aura.radius)) {
+        const m = FX_ONE - t.aura.amount;
+        if (m < mul) mul = m;
+      }
+    }
+    return mul;
+  }
+
+  /** Is a position inside an Emitter 'detect' field (Shades revealed, like a Reveal verb)? */
+  private fieldDetect(p: Pos): boolean {
+    for (const t of this.towers) {
+      if (!t || !t.aura || t.aura.kind !== 'detect') continue;
+      if (dist2(cellCenter(t.cell), p) <= fxMul(t.aura.radius, t.aura.radius)) return true;
+    }
+    return false;
+  }
+
+  /** Strongest Warden damage-reduction fraction covering a position (0 = none). */
+  private mobWard(p: Pos): Fx {
+    const r2 = fxMul(WARD_RADIUS, WARD_RADIUS);
+    let best = 0;
+    for (const w of this.mobs) {
+      if (!w.alive || w.flags.ward <= 0) continue;
+      if (dist2(w.pos, p) <= r2 && w.flags.ward > best) best = w.flags.ward;
+    }
+    return best;
+  }
+
+  /** Strongest Totem haste fraction covering a position (0 = none). */
+  private mobHaste(p: Pos): Fx {
+    const r2 = fxMul(HASTE_RADIUS, HASTE_RADIUS);
+    let best = 0;
+    for (const t of this.mobs) {
+      if (!t.alive || t.flags.haste <= 0) continue;
+      if (dist2(t.pos, p) <= r2 && t.flags.haste > best) best = t.flags.haste;
+    }
+    return best;
   }
 
   private killMob(m: Mob): void {
