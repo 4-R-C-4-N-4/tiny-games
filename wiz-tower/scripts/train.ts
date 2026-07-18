@@ -16,9 +16,11 @@ import { Rng } from '../src/fx.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 import { featurize, N_FEATURES, N_ACTIONS, argmax, forward, type Weights } from '../src/model.ts';
 import { leakSurface, sampleBoard, sampleInducedBoard } from '../src/teacher.ts';
+import { sampleArchmageBoard } from '../src/archmage.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const N_TRAIN = 1600;
+const ARCHMAGE_FRAC = 0.5; // fraction of training boards drawn from the best-practice Archmage
 const N_TEST = 350;
 const H = 64;
 const EPOCHS = 80;
@@ -54,8 +56,15 @@ function zerosMat(r: number, c: number): number[][] { return Array.from({ length
 function makeData(n: number, useDagger: boolean): { X: number[][]; Y: number[][] } {
   const X: number[][] = [], Y: number[][] = [];
   for (let i = 0; i < n; i++) {
-    const induced = useDagger && prior && rng.below(1000) / 1000 < DAGGER_FRAC;
-    const sim = induced ? sampleInducedBoard(rng, DEFAULT_CONFIG, prior!) : sampleBoard(rng, DEFAULT_CONFIG);
+    // Half the boards are best-practice ARCHMAGE defenses (maze + counters + synergy) so the
+    // student learns to beat competent play, not noise. The rest are random boards, and — once
+    // a prior exists — DAgger-induced boards the deployed model walks into.
+    const r = rng.below(1000) / 1000;
+    const sim = r < ARCHMAGE_FRAC
+      ? sampleArchmageBoard(rng, DEFAULT_CONFIG)
+      : (useDagger && prior && rng.below(1000) / 1000 < DAGGER_FRAC)
+        ? sampleInducedBoard(rng, DEFAULT_CONFIG, prior!)
+        : sampleBoard(rng, DEFAULT_CONFIG);
     X.push(featurize(sim.observe()));
     Y.push(leakSurface(sim));
     if ((i + 1) % 200 === 0) process.stdout.write(`  generated ${i + 1}/${n} boards\n`);
