@@ -3,3 +3,7 @@ dist/
 *.log
 .DS_Store
 dist/
+
+# Phase 6: human run logs + dumped training dataset (generated/user data)
+data/*.json
+data/runs/*.json

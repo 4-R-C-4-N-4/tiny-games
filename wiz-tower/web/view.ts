@@ -15,6 +15,7 @@ import {
   creatureName, TRAIT_ROLE, TRAIT_CREATURE, TRAIT_COUNTER, type MobShape,
 } from './theme.ts';
 import { Effects } from './effects.ts';
+import { RunRecorder, downloadRunLog } from './runlog.ts';
 
 type Tool = { kind: 'wall' } | { kind: 'sell' } | { kind: 'tower'; element: Element };
 
@@ -37,6 +38,8 @@ export class GameView {
   private verbTool: 'overcharge' | 'reveal' | 'reinforce' | null = null;
   private tier: Tier = Tier.T1;
   private role: NodeKind = NodeKind.Turret; // Turret (DPS) / Structure=Pylon (ally buff) / Active=Emitter (mob field)
+  readonly recorder = new RunRecorder(); // logs each wave's board + outcome for training
+  private wasWave = false; // to detect a wave→build/gameover transition and record the outcome
   private speed = 1;
   private acc = 0;
   private lastT = 0;
@@ -248,6 +251,8 @@ export class GameView {
     this.prevMobs.clear();
     this.prevWalls.clear();
     this.fireTimers.clear();
+    this.recorder.reset(); // fresh run → fresh log
+    this.wasWave = false;
     this.prevCoreHp = fxToFloat(this.game.coreHp());
     this.sizeCanvas();
     this.buildPalette();
@@ -399,7 +404,7 @@ export class GameView {
     c.innerHTML = '';
     if (g.state === 'build') {
       const plan = this.btn(g.planned ? '👁 Re-scry' : '👁 Scry wave', () => g.planWave());
-      const start = this.btn('▶ Begin', () => g.startWave());
+      const start = this.btn('▶ Begin', () => { this.recorder.onWaveStart(g); g.startWave(); });
       start.classList.add('wt-primary');
       c.append(plan, start);
     } else if (g.state === 'wave') {
@@ -441,6 +446,10 @@ export class GameView {
     } else {
       this.acc = 0;
     }
+    // Record the wave's outcome the instant it ends (wave → build or gameover).
+    const isWave = this.game.state === 'wave';
+    if (this.wasWave && !isWave) this.recorder.onWaveEnd(this.game);
+    this.wasWave = isWave;
     this.syncEffects(dt);
     this.effects.update(dt);
     this.render();
@@ -606,8 +615,16 @@ export class GameView {
     o.style.display = 'flex';
     o.innerHTML = `<div class="wt-go"><h2>The Core is shattered</h2>
       <p>You held <b>${this.game.highestWave - 1}</b> wave${this.game.highestWave - 1 === 1 ? '' : 's'}.</p>
-      <button class="wt-ctl wt-primary" id="restart">Choose a discipline</button></div>`;
+      <button class="wt-ctl wt-primary" id="restart">Choose a discipline</button>
+      <button class="wt-ctl wt-export" id="exportrun" title="Download this run as training data (${this.recorder.count} waves)">⬇ Export run log</button></div>`;
     o.querySelector<HTMLButtonElement>('#restart')!.onclick = () => this.showStart();
+    o.querySelector<HTMLButtonElement>('#exportrun')!.onclick = () => this.exportRun();
+  }
+
+  /** Download the current run's training log. Exposed as `window.wt.exportRun()` so you can
+   *  grab a strong run before the Core falls, not only at game-over. */
+  exportRun(): void {
+    if (this.game) downloadRunLog(this.recorder.build(this.game));
   }
 
   // ---- board rendering ------------------------------------------------------------

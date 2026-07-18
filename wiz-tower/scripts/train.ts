@@ -9,7 +9,7 @@
  *
  * Run: `npm run train`.  Mirrors the POC recipe, now on the spatial sim.
  */
-import { writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { Rng } from '../src/fx.ts';
@@ -17,8 +17,26 @@ import { DEFAULT_CONFIG } from '../src/config.ts';
 import { featurize, N_FEATURES, N_ACTIONS, argmax, forward, type Weights } from '../src/model.ts';
 import { leakSurface, sampleBoard, sampleInducedBoard } from '../src/teacher.ts';
 import { sampleArchmageBoard } from '../src/archmage.ts';
+import { restoreBoard, type BoardSnapshot } from '../src/board-io.ts';
+import type { Sim } from '../src/sim.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+/** Load HUMAN boards from exported run logs (data/runs/*.json) — the best player sets a
+ *  higher bar than the Archmage, so these are premium teacher boards. */
+function loadHumanBoards(): Sim[] {
+  const dir = join(HERE, '..', 'data', 'runs');
+  if (!existsSync(dir)) return [];
+  const boards: Sim[] = [];
+  for (const f of readdirSync(dir)) {
+    if (!f.endsWith('.json')) continue;
+    try {
+      const log = JSON.parse(readFileSync(join(dir, f), 'utf8')) as { records?: { board?: BoardSnapshot }[] };
+      for (const rec of log.records ?? []) if (rec.board) boards.push(restoreBoard(DEFAULT_CONFIG, rec.board));
+    } catch { /* skip malformed logs */ }
+  }
+  return boards;
+}
 const N_TRAIN = 1600;
 const ARCHMAGE_FRAC = 0.5; // fraction of training boards drawn from the best-practice Archmage
 const N_TEST = 350;
@@ -53,9 +71,11 @@ function zeros(n: number): number[] { return new Array(n).fill(0); }
 function zerosMat(r: number, c: number): number[][] { return Array.from({ length: r }, () => zeros(c)); }
 
 // ---- data ---------------------------------------------------------------------------
-function makeData(n: number, useDagger: boolean): { X: number[][]; Y: number[][] } {
+function makeData(n: number, useDagger: boolean, prepend: Sim[] = []): { X: number[][]; Y: number[][] } {
   const X: number[][] = [], Y: number[][] = [];
-  for (let i = 0; i < n; i++) {
+  // Real human boards go in first — the highest-quality "best-practice" teacher data.
+  for (const sim of prepend) { X.push(featurize(sim.observe())); Y.push(leakSurface(sim)); }
+  for (let i = X.length; i < n; i++) {
     // Half the boards are best-practice ARCHMAGE defenses (maze + counters + synergy) so the
     // student learns to beat competent play, not noise. The rest are random boards, and — once
     // a prior exists — DAgger-induced boards the deployed model walks into.
@@ -72,9 +92,15 @@ function makeData(n: number, useDagger: boolean): { X: number[][]; Y: number[][]
   return { X, Y };
 }
 
+const humanBoards = loadHumanBoards();
+console.log(humanBoards.length ? `Loaded ${humanBoards.length} HUMAN boards from data/runs/ — premium teacher data.` : 'No human run logs in data/runs/ yet (play + Export run log to add some).');
 console.log(`Generating ${N_TRAIN + N_TEST} boards (teacher = search over the real sim)…`);
-const { X: Xtr, Y: Ytr } = makeData(N_TRAIN, true); //  train: mix in induced boards (DAgger)
-const { X: Xte, Y: Yte } = makeData(N_TEST, false); // test: fixed random distribution
+const { X: Xtr, Y: Ytr } = makeData(N_TRAIN, true, humanBoards); // train: human boards first, then the mix + DAgger
+const { X: Xte, Y: Yte } = makeData(N_TEST, false); //             test: fixed random distribution
+
+// Dump the dataset (the "DA") so it can be inspected / reused, not just thrown away.
+writeFileSync(join(HERE, '..', 'data', 'dataset.json'), JSON.stringify({ features: Xtr, labels: Ytr, humanBoards: humanBoards.length, n: Xtr.length }));
+console.log(`Wrote data/dataset.json (${Xtr.length} boards × ${N_FEATURES} features → ${N_ACTIONS} leak targets).`);
 
 // standardize inputs; scale targets to ~unit (argmax-invariant), like the POC
 const mu = zeros(N_FEATURES), sd = zeros(N_FEATURES);
