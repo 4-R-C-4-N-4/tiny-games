@@ -52,22 +52,23 @@ describe('SearchAttacker (L1 open-loop)', () => {
   });
 
   it('exploits the anti-air gap: out-leaks a ground baseline on the same defense', () => {
-    // Search plays its chosen wave.
+    // Search plays its chosen wave. Wave 4 — fliers are unlocked, so the anti-air gap is real
+    // (and buffed Fire now burns ground to nothing, making the air lane the only way through).
     const sSearch = groundOnlyDefense();
-    sSearch.prepareWave(2, 3);
+    sSearch.prepareWave(4, 3);
     const atk = new SearchAttacker(sSearch, { seed: 7n, topK: 1, candidates: 32 });
-    const mSearch = playWave(sSearch, atk, 2, 3);
+    const mSearch = playWave(sSearch, atk, 4, 3);
 
     // Baseline: a naive all-ground wave of comparable budget vs an identical defense.
     const sBase = groundOnlyDefense();
-    const budget = budgetFor(2);
+    const budget = budgetFor(4);
     const count = Math.floor(budget / 4); // Fire grunts, cost 4 each
     const baseWave: Wave = {
       budget, diff: 3,
       opener: [{ t: 0, x: 3, group: { element: Element.Fire, trait: Trait.Grunt, count } }],
       reserve: { pool: 0, points: [] },
     };
-    const mBase = playWave(sBase, new PlanAttacker(baseWave), 2, 3);
+    const mBase = playWave(sBase, new PlanAttacker(baseWave), 4, 3);
 
     // The ground baseline gets shot down; the search finds the air lane and leaks more.
     expect(mSearch.leakedHp).toBeGreaterThan(mBase.leakedHp);

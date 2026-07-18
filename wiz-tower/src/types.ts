@@ -102,6 +102,9 @@ export interface TowerFlags {
   slow: Fx; // movement multiplier applied on hit (0 = none)
   disrupt: boolean; // Sonic (Resonance): shatters shields on hit & silences Menders in range
   harvest: boolean; // Dark (Umbra): its killing blows pay a bonus bounty (kills → power)
+  burn: Fx; //        Fire (Pyromancy): fraction of dps applied as a lingering burn DoT (0 = none)
+  wallAmp: Fx; //     Earth (Geomancy): damage bonus per adjacent wall (0 = none)
+  ramp: Fx; //        Dark (Umbra): permanent damage bonus per kill this tower lands (0 = none)
 }
 
 /** A support-role tower's persistent field (Pylon / Emitter). Turrets have none. */
@@ -128,6 +131,7 @@ export interface Tower {
   priority: TargetPriority;
   flags: TowerFlags;
   aura: Aura | null; // support-role field (Pylon buff / Emitter debuff); null for Turrets
+  kills: number; //    lifetime kills this tower has landed (drives Umbra's damage ramp)
 }
 
 export interface MobFlags {
@@ -155,6 +159,9 @@ export interface Mob {
   damageTaken: Fx; // running total, for the fire-misallocation metric on leak
   breachCell: Cell | null; // wall this mob is attacking this tick (set in move phase, blocked mobs)
   lastHitElement: Element | null; // element of the last ward to damage it (for Dark's harvest bounty)
+  lastHitTower: TowerId; // id of the last ward to damage it, or -1 (for Umbra's kill-ramp credit)
+  burnDps: Fx; //          active Fire burn damage-per-second (0 = not burning)
+  burnTicks: number; //    remaining ticks of burn
 }
 
 // ---- player in-wave verbs (§2 tap-light counterplay) ------------------------------

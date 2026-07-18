@@ -22,7 +22,7 @@ import {
 import {
   type Config, WALL_COST, WALL_HP, refund, towerCost, towerStats, mobStats,
   BREAKER_WALL_DPS, MOB_WALL_DPS, MENDER_HEAL_RADIUS, SPLASH_RADIUS, leakDamage, budgetFor, bounty, harvestBonus,
-  waveMobScale, waveLeakScale, WARD_RADIUS, HASTE_RADIUS,
+  waveMobScale, waveLeakScale, WARD_RADIUS, HASTE_RADIUS, BURN_SECS, EARTH_WALL_CAP, DARK_RAMP_CAP,
   VERB_RADIUS, OVERCHARGE_MULT, OVERCHARGE_SECS, REVEAL_SECS, REINFORCE_HP,
 } from './config.ts';
 import type { Opener, Commit } from './wave.ts';
@@ -203,7 +203,7 @@ export class Sim {
     const id = this.freeTowerIds.pop() ?? this.towers.length;
     const tower: Tower = {
       id, cell, element: e, tier, kind,
-      dps: stats.dps, range: stats.range, priority: stats.priority, flags: stats.flags, aura: stats.aura,
+      dps: stats.dps, range: stats.range, priority: stats.priority, flags: stats.flags, aura: stats.aura, kills: 0,
     };
     if (id === this.towers.length) this.towers.push(tower);
     else this.towers[id] = tower;
@@ -373,7 +373,8 @@ export class Sim {
         pos: { x: center.x + jx, y: center.y + jy },
         hp, maxHp: hp, speed: st.speed,
         flags: { ...st.flags }, shieldHits: st.shieldHits,
-        entryX: x, alive: true, slowMul: FX_ONE, damageTaken: 0, breachCell: null, lastHitElement: null,
+        entryX: x, alive: true, slowMul: FX_ONE, damageTaken: 0, breachCell: null,
+        lastHitElement: null, lastHitTower: -1, burnDps: 0, burnTicks: 0,
       };
       if (id === this.mobs.length) this.mobs.push(mob);
       else this.mobs[id] = mob;
@@ -393,6 +394,7 @@ export class Sim {
     this.applyBreachDamage(); // §2.5
     if (this.mazeDirty) this.syncFields(); // §2.6 (recompute once)
     this.towersFire(); // §2.7 (typing × shield × splash × slow, dpsUtil)
+    this.tickBurns(); // §2.7b Pyromancy burn DoT
     this.resolveDeaths(); // §2.8 (bounty → currency)
     this.menderRegen(); // §2.9
     // §2.10 metrics accumulate inline in the phases above.
@@ -505,6 +507,15 @@ export class Sim {
       const target = this.acquire(t);
       if (!target) continue;
       let base = fxMul(t.dps, this.cfg.dt);
+      // Geomancy: an Earth ward channels through the stone — +30% damage per adjacent wall.
+      if (t.flags.wallAmp > 0) {
+        const walls = Math.min(EARTH_WALL_CAP, this.adjacentWalls(t.cell));
+        if (walls > 0) base = fxMul(base, FX_ONE + fxMul(t.flags.wallAmp, walls << FX_SHIFT));
+      }
+      // Umbra: a Void ward grows in ruin — +6% damage per kill it has landed (capped).
+      if (t.flags.ramp > 0 && t.kills > 0) {
+        base = fxMul(base, FX_ONE + fxMul(t.flags.ramp, Math.min(DARK_RAMP_CAP, t.kills) << FX_SHIFT));
+      }
       // Pylon buff: allied turrets standing in a Pylon's aura hit harder.
       const buff = this.pylonBuff(t.cell);
       if (buff !== FX_ONE) base = fxMul(base, buff);
@@ -581,7 +592,12 @@ export class Sim {
     const applied = dmg > hpBefore ? hpBefore : dmg;
     m.hp -= dmg;
     m.damageTaken += applied;
-    if (applied > 0) m.lastHitElement = t.element; // for Umbra's harvest bounty on the killing blow
+    if (applied > 0) { m.lastHitElement = t.element; m.lastHitTower = t.id; } // credit the ward (harvest bounty + ramp)
+    // Pyromancy: a primary Fire hit sets the mob alight — a burn DoT that lingers/refreshes.
+    if (!isSplash && t.flags.burn > 0) {
+      m.burnDps = fxMul(t.dps, t.flags.burn);
+      m.burnTicks = this.secToTick(BURN_SECS);
+    }
     this.metrics.dpsUtil[t.element] += applied;
     if (dmg > hpBefore) this.metrics.overkill += dmg - hpBefore;
     if (t.flags.slow > 0 && !isSplash) {
@@ -591,6 +607,29 @@ export class Sim {
     }
   }
 
+  /** Pyromancy's lingering burn: a per-tick DoT independent of range, typing, or shields. */
+  private tickBurns(): void {
+    for (const m of this.mobs) {
+      if (!m.alive || m.burnTicks <= 0) continue;
+      const dmg = fxMul(m.burnDps, this.cfg.dt);
+      m.damageTaken += dmg > m.hp ? m.hp : dmg;
+      m.hp -= dmg;
+      this.metrics.dpsUtil[Element.Fire] += dmg > 0 ? dmg : 0; // burn is Fire's damage
+      m.burnTicks -= 1;
+    }
+  }
+
+  /** Orthogonally-adjacent wall count for a tower cell (drives Geomancy's wall-amp). */
+  private adjacentWalls(cell: Cell): number {
+    const g = this.grid;
+    let n = 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const x = cell.x + dx, y = cell.y + dy;
+      if (x >= 0 && y >= 0 && x < g.w && y < g.h && g.cells[y * g.w + x].occ.kind === OccKind.Wall) n++;
+    }
+    return n;
+  }
+
   private resolveDeaths(): void {
     for (const m of this.mobs) {
       if (!m.alive || m.hp > 0) continue;
@@ -598,6 +637,8 @@ export class Sim {
       const b = bounty(m.trait) + (m.lastHitElement === Element.Dark ? harvestBonus(m.trait) : 0);
       this.player.currency += b;
       this.metrics.currencyDelta += b;
+      // …and that Void ward grows in ruin: the killing tower gains a permanent damage stack.
+      if (m.lastHitTower >= 0) { const kt = this.towers[m.lastHitTower]; if (kt && kt.flags.ramp > 0) kt.kills += 1; }
       this.killMob(m);
     }
   }
