@@ -110,16 +110,16 @@ describe('shielded, slow, splash, mender', () => {
     if (m) expect(m.shieldHits).toBeLessThan(start);
   });
 
-  it('an Ice turret slows a mob, delaying its leak vs an equal vanilla (Earth) turret', () => {
-    // Same DPS tier, but Ice adds slow → the mob should take longer to reach the Core. Earth
-    // with no adjacent walls is the clean no-perk control (Fire now burns, so it isn't neutral).
+  it('an Ice turret slows a mob, delaying its leak vs an equal vanilla (Sonic) turret', () => {
+    // Same DPS tier, but Ice adds slow → the mob should take longer to reach the Core. Sonic vs
+    // a ground Light Tank is the clean no-perk control (Fire burns, Earth is now a wall).
     const slow = Sim.create(cfg, Element.Ice);
     slow.buildTower({ x: 3, y: 8 }, Element.Ice, Tier.T1, NodeKind.Turret);
     slow.spawnGroup(3, Element.Light, Trait.Tank, 1); // Light: neutral to both, isolates slow
     const tSlow = runUntil(slow, (s) => s.coreHp() < fx(100));
 
-    const fast = Sim.create(cfg, Element.Earth);
-    fast.buildTower({ x: 3, y: 8 }, Element.Earth, Tier.T1, NodeKind.Turret); // no walls adjacent → plain DPS
+    const fast = Sim.create(cfg, Element.Sonic);
+    fast.buildTower({ x: 3, y: 8 }, Element.Sonic, Tier.T1, NodeKind.Turret); // anti-air/disrupt idle vs a ground Tank → plain DPS
     fast.spawnGroup(3, Element.Light, Trait.Tank, 1);
     const tFast = runUntil(fast, (s) => s.coreHp() < fx(100));
     expect(tSlow).toBeGreaterThan(tFast);

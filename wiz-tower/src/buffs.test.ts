@@ -11,17 +11,17 @@ const stepN = (s: Sim, n: number) => { for (let i = 0; i < n; i++) s.step(); };
 const runUntil = (s: Sim, done: (s: Sim) => boolean, max = 2000) => { let n = 0; while (n < max && !done(s)) { s.step(); n++; } return n; };
 
 describe('Fire (Pyromancy) — burning DoT', () => {
-  it('burns for more total damage than an equal non-burn (Earth) ward', () => {
+  it('burns for more total damage than an equal non-burn (Sonic) ward', () => {
     const fire = Sim.create(cfg, Element.Fire);
     fire.buildTower({ x: 3, y: 1 }, Element.Fire, Tier.T2, NodeKind.Turret);
-    fire.spawnGroup(3, Element.Light, Trait.Tank, 1); // Light: neutral to both Fire and Earth
+    fire.spawnGroup(3, Element.Light, Trait.Tank, 1); // Light: neutral to both; a ground mob so Sonic's perks are inert
 
-    const earth = Sim.create(cfg, Element.Earth);
-    earth.buildTower({ x: 3, y: 1 }, Element.Earth, Tier.T2, NodeKind.Turret); // no adjacent walls → vanilla
-    earth.spawnGroup(3, Element.Light, Trait.Tank, 1);
+    const plain = Sim.create(cfg, Element.Sonic); // Sonic vs a ground Light Tank = plain DPS (anti-air/disrupt idle)
+    plain.buildTower({ x: 3, y: 1 }, Element.Sonic, Tier.T2, NodeKind.Turret);
+    plain.spawnGroup(3, Element.Light, Trait.Tank, 1);
 
-    stepN(fire, 70); stepN(earth, 70);
-    expect(hpOf(fire, Trait.Tank)).toBeLessThan(hpOf(earth, Trait.Tank));
+    stepN(fire, 70); stepN(plain, 70);
+    expect(hpOf(fire, Trait.Tank)).toBeLessThan(hpOf(plain, Trait.Tank));
   });
 
   it('keeps burning after the ward is gone', () => {
@@ -38,20 +38,29 @@ describe('Fire (Pyromancy) — burning DoT', () => {
   });
 });
 
-describe('Earth (Geomancy) — wall channeling', () => {
-  it('an Earth ward hits harder with adjacent walls', () => {
-    const walled = Sim.create(cfg, Element.Earth);
-    walled.buildTower({ x: 3, y: 1 }, Element.Earth, Tier.T2, NodeKind.Turret);
-    walled.buildWall({ x: 2, y: 1 }); walled.buildWall({ x: 4, y: 1 }); // 2 adjacent walls, OFF the column-3 path
-    walled.syncFields();
-    walled.spawnGroup(3, Element.Light, Trait.Tank, 1);
+describe('Earth (Geomancy) — wards are walls', () => {
+  it('an Earth turret blocks the lane like a wall; a normal ward does not', () => {
+    const s = Sim.create(cfg, Element.Earth);
+    s.buildTower({ x: 3, y: 6 }, Element.Earth, Tier.T1, NodeKind.Turret); // Earth ward = wall
+    s.attune(Element.Sonic);
+    s.buildTower({ x: 4, y: 6 }, Element.Sonic, Tier.T1, NodeKind.Turret); // a normal ward
+    s.syncFields();
+    expect(s.grid.blocks({ x: 3, y: 6 })).toBe(true);
+    expect(s.grid.blocks({ x: 4, y: 6 })).toBe(false);
+  });
 
-    const bare = Sim.create(cfg, Element.Earth);
-    bare.buildTower({ x: 3, y: 1 }, Element.Earth, Tier.T2, NodeKind.Turret);
-    bare.spawnGroup(3, Element.Light, Trait.Tank, 1);
-
-    stepN(walled, 70); stepN(bare, 70);
-    expect(hpOf(walled, Trait.Tank)).toBeLessThan(hpOf(bare, Trait.Tank));
+  it('an Earth turret is breachable — a blocked mob demolishes it', () => {
+    const s = Sim.create(cfg, Element.Earth);
+    s.player.currency = 5000;
+    for (let x = 0; x < 7; x++) s.buildTower({ x, y: 8 }, Element.Earth, Tier.T1, NodeKind.Turret); // seal the row → mobs must breach
+    s.syncFields();
+    const gate = s.liveTowers().find((t) => t.cell.x === 3)!;
+    gate.wallHp = fx(0.5); // pre-weaken the centre ward so the breach lands quickly
+    const before = s.liveTowers().length;
+    s.spawnGroup(3, Element.Light, Trait.Tank, 2); // tanks reach the wall and chew through it
+    runUntil(s, (s) => s.liveTowers().length < before, 4000);
+    expect(s.liveTowers().length).toBeLessThan(before); // the breached Earth ward was demolished
+    expect(s.metricsSnapshot().breaches).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -99,12 +108,14 @@ describe('Radiance (Light) — purge', () => {
 
 describe('Earth (Geomancy) — Breaker bane', () => {
   it('an Earth ward shatters a Breaker far faster than a vanilla ward', () => {
+    // Turret at column 2 (off the Breaker's column 3) so the Earth ward SHOOTS the breaker without
+    // blocking its path — isolating the Breaker-bane from the new wall behaviour.
     const earth = Sim.create(cfg, Element.Earth);
-    earth.buildTower({ x: 3, y: 1 }, Element.Earth, Tier.T2, NodeKind.Turret); // no adjacent walls → isolates the Breaker bane
+    earth.buildTower({ x: 2, y: 1 }, Element.Earth, Tier.T2, NodeKind.Turret);
     earth.spawnGroup(3, Element.Light, Trait.Breaker, 1); // Light: neutral typing to both
 
     const plain = Sim.create(cfg, Element.Sonic); // Sonic T2: neutral to Light, and its perks (anti-air/disrupt) don't touch a ground Breaker
-    plain.buildTower({ x: 3, y: 1 }, Element.Sonic, Tier.T2, NodeKind.Turret);
+    plain.buildTower({ x: 2, y: 1 }, Element.Sonic, Tier.T2, NodeKind.Turret);
     plain.spawnGroup(3, Element.Light, Trait.Breaker, 1);
 
     stepN(earth, 20); stepN(plain, 20);

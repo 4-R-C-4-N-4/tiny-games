@@ -217,7 +217,7 @@ export class GameView {
     c.innerHTML = `<div class="wt-codex-in">
       <img src="./art/affinity-sigil.svg" alt="Affinity wheel" />
       <p>Each school <b>counters the next</b> around the wheel (1.5×) and is weak to the one before (0.5×). <b>Radiant ⇄ Void</b> answer only each other. Read your foe's colours; conjure against the school they ward weakly.</p>
-      <p class="wt-note"><b>Your wards.</b> Your chosen school (★) is pre-attuned — build its wards freely. Any <i>other</i> school needs a one-time <b>🔓 attunement</b> before you can build it (the price rises with each school you add). Ward badges: <b>↑</b> anti-air · <b>◉</b> detection · <b>~</b> slow · <b>✷</b> splash · <b>⊘</b> disrupt (breaks shields &amp; hushes menders) · <b>◈</b> harvest (kills pay bonus power) · <b>🜂</b> burn (lingering fire DoT) · <b>▦</b> wall-channel (+30% per adjacent wall) · <b>⇑</b> ruin (gains damage per kill) · <b>❂</b> purge (nullifies support auras &amp; heals).</p>
+      <p class="wt-note"><b>Your wards.</b> Your chosen school (★) is pre-attuned — build its wards freely. Any <i>other</i> school needs a one-time <b>🔓 attunement</b> before you can build it (the price rises with each school you add). Ward badges: <b>↑</b> anti-air · <b>◉</b> detection · <b>~</b> slow · <b>✷</b> splash · <b>⊘</b> disrupt (breaks shields &amp; hushes menders) · <b>◈</b> harvest (kills pay bonus power) · <b>🜂</b> burn (lingering fire DoT) · <b>▦</b> wall (Earth wards block the lane &amp; shoot; breachable) · <b>⇑</b> ruin (gains damage per kill) · <b>❂</b> purge (nullifies support auras &amp; heals).</p>
       <p class="wt-note"><b>Walls.</b> 🧱 walls funnel the ground path (fliers ignore them). They have HP: blocked mobs only chip them, but <b>Gargoyles (Breakers)</b> smash them fast to breach a shortcut — watch the wall's bar.</p>
       <h3>Bestiary</h3>
       <div class="wt-bestiary">${cards.map(([tr, el]) =>
@@ -327,7 +327,9 @@ export class GameView {
     const caps: string[] = [];
     let roleHint: string;
     if (this.role === NodeKind.Turret) {
-      const flags = towerStats(el, Tier.T1, NodeKind.Turret).flags;
+      const stats = towerStats(el, Tier.T1, NodeKind.Turret);
+      const flags = stats.flags;
+      if (stats.wallHp > 0) caps.push('<i class="wt-cap wall" title="wall — this ward blocks the lane like a wall AND shoots (breachable); +60% vs Breakers">▦</i>');
       if (flags.antiAir) caps.push('<i class="wt-cap aa" title="anti-air — hits fliers">↑</i>');
       if (flags.detection) caps.push('<i class="wt-cap det" title="detection — reveals shades">◉</i>');
       if (flags.slow > 0) caps.push('<i class="wt-cap slow" title="slow">∼</i>');
@@ -336,7 +338,6 @@ export class GameView {
       if (flags.harvest) caps.push('<i class="wt-cap har" title="harvest — kills pay a bonus bounty">◈</i>');
       if (flags.purge) caps.push('<i class="wt-cap purge" title="purge — nullifies Warden/Totem auras & Mender heals in range">❂</i>');
       if (flags.burn > 0) caps.push('<i class="wt-cap burn" title="burn — a lingering fire DoT that keeps damaging after the shot">🜂</i>');
-      if (flags.wallAmp > 0) caps.push('<i class="wt-cap wall" title="wall-channeling — +30% damage per adjacent wall; and shatters Breakers (+60%)">▦</i>');
       if (flags.ramp > 0) caps.push('<i class="wt-cap ramp" title="ruin — this ward gains damage with every kill it lands">⇑</i>');
       roleHint = `${ELEMENT_NAMES[el]} ward — ${ELEMENT_ARCANA[el]}`;
     } else if (this.role === NodeKind.Structure) {
@@ -797,6 +798,23 @@ export class GameView {
     const col = ELEMENT_COLOR[t.element];
     const range = fxToFloat(t.range) * CELL;
     const bob = this.reduced ? 0 : Math.sin(this.time * 2 + t.id) * 1.5;
+    // Earth ward: it IS a wall — draw the carved stone block it sits in, with an integrity bar.
+    if (t.wallHp > 0) {
+      const frac = fxToFloat(t.wallHp) / fxToFloat(WALL_HP);
+      const lit = 0.55 + 0.45 * Math.max(0.15, Math.min(1, frac));
+      const px = t.cell.x * CELL + 4, py = t.cell.y * CELL + 4, s = CELL - 8;
+      ctx.save();
+      const g = ctx.createLinearGradient(px, py, px, py + s);
+      g.addColorStop(0, `rgba(120,150,110,${0.85 * lit})`);
+      g.addColorStop(1, `rgba(70,96,66,${0.85 * lit})`);
+      ctx.fillStyle = g; roundRect(ctx, px, py, s, s, 6); ctx.fill();
+      ctx.strokeStyle = 'rgba(16,30,16,0.55)'; ctx.lineWidth = 1; roundRect(ctx, px, py, s, s, 6); ctx.stroke();
+      if (frac < 0.999) {
+        ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(px, py + s + 1, s, 3);
+        ctx.fillStyle = frac > 0.4 ? '#8fce77' : '#ff9a4d'; ctx.fillRect(px, py + s + 1, s * Math.max(0, frac), 3);
+      }
+      ctx.restore();
+    }
     const support = t.aura !== null; // Boon / Hex — no attack, project a field instead
     if (support && t.aura) {
       // The field footprint is drawn ALWAYS (it's the whole point of a support ward), tinted

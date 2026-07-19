@@ -84,7 +84,7 @@ export const enum OccKind {
 export type Occupant =
   | { kind: OccKind.Empty }
   | { kind: OccKind.Wall; hp: Fx }
-  | { kind: OccKind.Tower; tower: TowerId }
+  | { kind: OccKind.Tower; tower: TowerId; wall?: boolean } // `wall` = an Earth ward: blocks pathing like a wall
   | { kind: OccKind.Core }
   | { kind: OccKind.Spawn };
 
@@ -104,7 +104,6 @@ export interface TowerFlags {
   harvest: boolean; // Dark (Umbra): its killing blows pay a bonus bounty (kills → power)
   purge: boolean; //  Light (Radiance): nullifies support auras (Warden/Totem) & Mender heals in range
   burn: Fx; //        Fire (Pyromancy): fraction of dps applied as a lingering burn DoT (0 = none)
-  wallAmp: Fx; //     Earth (Geomancy): damage bonus per adjacent wall (0 = none)
   ramp: Fx; //        Dark (Umbra): permanent damage bonus per kill this tower lands (0 = none)
   breakerBane: Fx; // Earth (Geomancy): bonus damage vs Breakers — shatters them before they breach (0 = none)
 }
@@ -132,8 +131,9 @@ export interface Tower {
   range: Fx; // in cell units
   priority: TargetPriority;
   flags: TowerFlags;
-  aura: Aura | null; // support-role field (Pylon buff / Emitter debuff); null for Turrets
+  aura: Aura | null; // support-role field (Boon buff / Hex debuff); null for Turrets
   kills: number; //    lifetime kills this tower has landed (drives Umbra's damage ramp)
+  wallHp: Fx; //       Earth (Geomancy) ward: current HP as a wall (blocks & is breachable); 0 = not a wall
 }
 
 export interface MobFlags {

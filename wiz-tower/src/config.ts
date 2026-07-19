@@ -43,7 +43,6 @@ export const DEFAULT_CONFIG: Omit<Config, 'seed'> & { seed: bigint } = {
 export const BREAKER_WALL_DPS: Fx = fx(26); // Breakers demolish a wall in ~1.7s (§3.2)
 export const MOB_WALL_DPS: Fx = fxRatio(3, 2); // other blocked mobs only CHIP at 1.5/s (>0 so a sealed Core still eventually breaches)
 export const BURN_SECS: Fx = fx(2); // Fire's burn DoT lingers this long, refreshed on each hit
-export const EARTH_WALL_CAP = 4; //   Geomancy counts at most this many adjacent walls (+30% each)
 export const DARK_RAMP_CAP = 20; //   Umbra's ramp caps here (+6%/kill → up to +120% damage)
 export const MENDER_HEAL_RADIUS: Fx = fx(2); // cell units (euclidean, compared squared)
 export const WARD_RADIUS: Fx = fx(2); //   Warden's protective aura reach
@@ -109,6 +108,7 @@ export interface TowerStats {
   flags: TowerFlags;
   priority: TargetPriority;
   aura: Aura | null;
+  wallHp: Fx; // Earth Turret: acts as a wall with this much HP (blocks + breachable); 0 otherwise
 }
 
 /** The field a support role projects. Pylon amps allied towers; Emitter debuffs mobs,
@@ -144,12 +144,13 @@ export function towerStats(element: Element, tier: Tier, kind: NodeKind): TowerS
     // Pyromancy burns (lingering DoT); Geomancy channels through adjacent walls; Umbra's wards
     // grow in ruin, gaining damage with every kill they land.
     burn: element === Element.Fire ? fxRatio(1, 2) : 0, //     50% of dps as a 2s burn
-    wallAmp: element === Element.Earth ? fxRatio(3, 10) : 0, // +30% damage per adjacent wall
     ramp: element === Element.Dark ? fxRatio(6, 100) : 0, //   +6% damage per kill landed
     breakerBane: element === Element.Earth ? fxRatio(3, 5) : 0, // +60% damage vs Breakers (Geomancy's nemesis)
   };
   const priority = flags.antiAir ? TargetPriority.Flying : TargetPriority.First;
-  return { dps, range, flags, priority, aura: towerAura(element, tier, kind) };
+  // Geomancy: an Earth Turret IS a wall — it blocks the lane and is breachable (Boons/Hexes don't).
+  const wallHp = element === Element.Earth && kind === NodeKind.Turret ? WALL_HP : 0;
+  return { dps, range, flags, priority, aura: towerAura(element, tier, kind), wallHp };
 }
 
 // ---- mob stats by trait (element only decides matchup, not base stats) -------------

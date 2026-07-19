@@ -59,7 +59,9 @@ export class Grid {
 
   /** Walls block; everything else (towers included) is passable. */
   blocks(c: Cell): boolean {
-    return this.cells[this.idx(c)].occ.kind === OccKind.Wall;
+    const occ = this.cells[this.idx(c)].occ;
+    // Walls block; so do Earth wards (Geomancy towers that double as walls).
+    return occ.kind === OccKind.Wall || (occ.kind === OccKind.Tower && occ.wall === true);
   }
 
   isEmpty(c: Cell): boolean {

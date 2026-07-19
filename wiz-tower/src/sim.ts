@@ -22,7 +22,7 @@ import {
 import {
   type Config, WALL_COST, WALL_HP, refund, towerCost, towerStats, mobStats,
   BREAKER_WALL_DPS, MOB_WALL_DPS, MENDER_HEAL_RADIUS, SPLASH_RADIUS, leakDamage, budgetFor, bounty, harvestBonus,
-  waveMobScale, waveLeakScale, WARD_RADIUS, HASTE_RADIUS, BURN_SECS, EARTH_WALL_CAP, DARK_RAMP_CAP,
+  waveMobScale, waveLeakScale, WARD_RADIUS, HASTE_RADIUS, BURN_SECS, DARK_RAMP_CAP,
   VERB_RADIUS, OVERCHARGE_MULT, OVERCHARGE_SECS, REVEAL_SECS, REINFORCE_HP,
 } from './config.ts';
 import type { Opener, Commit } from './wave.ts';
@@ -203,12 +203,14 @@ export class Sim {
     const id = this.freeTowerIds.pop() ?? this.towers.length;
     const tower: Tower = {
       id, cell, element: e, tier, kind,
-      dps: stats.dps, range: stats.range, priority: stats.priority, flags: stats.flags, aura: stats.aura, kills: 0,
+      dps: stats.dps, range: stats.range, priority: stats.priority, flags: stats.flags, aura: stats.aura, kills: 0, wallHp: stats.wallHp,
     };
     if (id === this.towers.length) this.towers.push(tower);
     else this.towers[id] = tower;
-    this.grid.setOcc(cell, { kind: OccKind.Tower, tower: id });
-    return true; // towers never affect pathing → no maze recompute
+    const isWall = stats.wallHp > 0; // an Earth ward doubles as a wall
+    this.grid.setOcc(cell, { kind: OccKind.Tower, tower: id, wall: isWall });
+    if (isWall) this.mazeDirty = true; // it blocks the lane → recompute the maze
+    return true;
   }
 
   buildWall(cell: Cell): boolean {
@@ -239,9 +241,19 @@ export class Sim {
         this.freeTowerIds.push(occ.tower);
       }
       this.grid.setOcc(cell, { kind: OccKind.Empty });
+      if (occ.wall) this.mazeDirty = true; // an Earth ward was part of the maze
       return true;
     }
     return false;
+  }
+
+  /** Demolish a tower (breached Earth ward): free its slot and clear its cell. */
+  private destroyTower(id: TowerId): void {
+    const t = this.towers[id];
+    if (!t) return;
+    this.towers[id] = null;
+    this.freeTowerIds.push(id);
+    this.grid.setOcc(t.cell, { kind: OccKind.Empty });
   }
 
   // ================================================================================
@@ -487,16 +499,18 @@ export class Sim {
       if (!m.alive || !m.breachCell) continue;
       const wallCell = m.breachCell;
       const occ = this.grid.get(wallCell).occ;
-      if (occ.kind !== OccKind.Wall) continue; // already gone
       const wdps = m.flags.breaker ? BREAKER_WALL_DPS : MOB_WALL_DPS;
       const dmg = fxMul(wdps, this.cfg.dt);
-      const hp = occ.hp - dmg;
-      if (hp <= 0) {
-        this.grid.setOcc(wallCell, { kind: OccKind.Empty });
-        this.mazeDirty = true;
-        this.metrics.breaches += 1;
-      } else {
-        this.grid.setOcc(wallCell, { kind: OccKind.Wall, hp });
+      if (occ.kind === OccKind.Wall) {
+        const hp = occ.hp - dmg;
+        if (hp <= 0) { this.grid.setOcc(wallCell, { kind: OccKind.Empty }); this.mazeDirty = true; this.metrics.breaches += 1; }
+        else this.grid.setOcc(wallCell, { kind: OccKind.Wall, hp });
+      } else if (occ.kind === OccKind.Tower && occ.wall) {
+        // An Earth ward being breached: chew its wall HP, and demolish the tower when it fails.
+        const t = this.towers[occ.tower];
+        if (!t) continue;
+        t.wallHp -= dmg;
+        if (t.wallHp <= 0) { this.destroyTower(occ.tower); this.mazeDirty = true; this.metrics.breaches += 1; }
       }
     }
   }
@@ -507,11 +521,6 @@ export class Sim {
       const target = this.acquire(t);
       if (!target) continue;
       let base = fxMul(t.dps, this.cfg.dt);
-      // Geomancy: an Earth ward channels through the stone — +30% damage per adjacent wall.
-      if (t.flags.wallAmp > 0) {
-        const walls = Math.min(EARTH_WALL_CAP, this.adjacentWalls(t.cell));
-        if (walls > 0) base = fxMul(base, FX_ONE + fxMul(t.flags.wallAmp, walls << FX_SHIFT));
-      }
       // Umbra: a Void ward grows in ruin — +6% damage per kill it has landed (capped).
       if (t.flags.ramp > 0 && t.kills > 0) {
         base = fxMul(base, FX_ONE + fxMul(t.flags.ramp, Math.min(DARK_RAMP_CAP, t.kills) << FX_SHIFT));
@@ -619,17 +628,6 @@ export class Sim {
       this.metrics.dpsUtil[Element.Fire] += dmg > 0 ? dmg : 0; // burn is Fire's damage
       m.burnTicks -= 1;
     }
-  }
-
-  /** Orthogonally-adjacent wall count for a tower cell (drives Geomancy's wall-amp). */
-  private adjacentWalls(cell: Cell): number {
-    const g = this.grid;
-    let n = 0;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-      const x = cell.x + dx, y = cell.y + dy;
-      if (x >= 0 && y >= 0 && x < g.w && y < g.h && g.cells[y * g.w + x].occ.kind === OccKind.Wall) n++;
-    }
-    return n;
   }
 
   private resolveDeaths(): void {
@@ -792,10 +790,11 @@ export class Sim {
         buildable: this.grid.cells[i].buildable, distCore: this.fields.costWalled[i],
       };
     }
-    // Wall HP channel.
+    // Wall HP channel (plain walls + Earth wards, which double as breachable walls).
     for (let i = 0; i < w * h; i++) {
       const occ = this.grid.cells[i].occ;
       if (occ.kind === OccKind.Wall) cells[i].wallHp = occ.hp;
+      else if (occ.kind === OccKind.Tower && occ.wall) { const t = this.towers[occ.tower]; if (t) cells[i].wallHp = t.wallHp; }
     }
     // Coverage: each tower contributes its DPS to every cell within range.
     for (const t of this.towers) {
