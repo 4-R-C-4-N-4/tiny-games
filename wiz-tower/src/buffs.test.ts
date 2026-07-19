@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Sim } from './sim.ts';
 import { Element } from './element.ts';
 import { Trait, Tier, NodeKind } from './types.ts';
+import { fx } from './fx.ts';
 import { DEFAULT_CONFIG } from './config.ts';
 
 const cfg = { ...DEFAULT_CONFIG };
@@ -51,6 +52,48 @@ describe('Earth (Geomancy) — wall channeling', () => {
 
     stepN(walled, 70); stepN(bare, 70);
     expect(hpOf(walled, Trait.Tank)).toBeLessThan(hpOf(bare, Trait.Tank));
+  });
+});
+
+describe('Radiance (Light) — purge', () => {
+  it('purges a Warden — its ward no longer protects the escort', () => {
+    // Turret (col 2) shoots the grunt (col 3); Warden rides col 4 warding the grunt. A Light
+    // ward at col 5 covers the Warden (not the grunt) → the ward is purged.
+    const purged = Sim.create(cfg, Element.Fire);
+    purged.buildTower({ x: 2, y: 1 }, Element.Fire, Tier.T1, NodeKind.Turret);
+    purged.attune(Element.Light);
+    purged.buildTower({ x: 5, y: 1 }, Element.Light, Tier.T1, NodeKind.Turret); // covers the Warden, not the grunt
+    purged.spawnGroup(3, Element.Light, Trait.Grunt, 1);
+    purged.spawnGroup(4, Element.Light, Trait.Warden, 1);
+
+    const warded = Sim.create(cfg, Element.Fire); // no Light → Warden's aura intact
+    warded.buildTower({ x: 2, y: 1 }, Element.Fire, Tier.T1, NodeKind.Turret);
+    warded.spawnGroup(3, Element.Light, Trait.Grunt, 1);
+    warded.spawnGroup(4, Element.Light, Trait.Warden, 1);
+
+    for (let i = 0; i < 24; i++) { purged.step(); warded.step(); }
+    expect(hpOf(purged, Trait.Grunt)).toBeLessThan(hpOf(warded, Trait.Grunt)); // purge stripped the protection
+  });
+
+  it('purges a Mender — it cannot heal in a Light ward\'s range', () => {
+    // Control: no purge → the Mender heals a wounded Flier (untouchable — no anti-air anywhere).
+    const ctl = Sim.create(cfg, Element.Fire);
+    ctl.spawnGroup(3, Element.Fire, Trait.Flier, 1);
+    ctl.spawnGroup(3, Element.Fire, Trait.Mender, 1);
+    ctl.step();
+    const cF = ctl.liveMobs().find((m) => m.trait === Trait.Flier)!;
+    cF.hp = fx(1); const cBefore = cF.hp; ctl.step();
+    expect(cF.hp).toBeGreaterThan(cBefore);
+
+    // Purge: a Light ward over the spawn silences the Mender (it can't reach the flier: no anti-air).
+    const pur = Sim.create(cfg, Element.Light);
+    expect(pur.buildTower({ x: 3, y: 1 }, Element.Light, Tier.T2, NodeKind.Turret)).toBe(true);
+    pur.spawnGroup(3, Element.Fire, Trait.Flier, 1);
+    pur.spawnGroup(3, Element.Fire, Trait.Mender, 1);
+    pur.step();
+    const pF = pur.liveMobs().find((m) => m.trait === Trait.Flier)!;
+    pF.hp = fx(1); const pBefore = pF.hp; pur.step();
+    expect(pF.hp).toBe(pBefore); // not healed
   });
 });
 

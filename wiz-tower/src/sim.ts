@@ -654,11 +654,21 @@ export class Sim {
     return false;
   }
 
+  /** Is `p` inside a Radiance ward's range? A support caster here has its enchantment purged
+   *  (Warden shield-aura / Totem haste-aura / Mender heal all nullified). */
+  private inPurgeAura(p: Pos): boolean {
+    for (const t of this.towers) {
+      if (!t || !t.flags.purge) continue;
+      if (dist2(cellCenter(t.cell), p) <= fxMul(t.range, t.range)) return true;
+    }
+    return false;
+  }
+
   private menderRegen(): void {
     const r2 = fxMul(MENDER_HEAL_RADIUS, MENDER_HEAL_RADIUS);
     for (const healer of this.mobs) {
       if (!healer.alive || healer.flags.regen <= 0) continue;
-      if (this.inDisruptAura(healer.pos)) continue; // Resonance silences the healer's channel
+      if (this.inDisruptAura(healer.pos) || this.inPurgeAura(healer.pos)) continue; // Resonance hushes / Radiance purges the healer
       const heal = fxMul(healer.flags.regen, this.cfg.dt);
       for (const m of this.mobs) {
         if (!m.alive || m.hp >= m.maxHp) continue;
@@ -720,7 +730,7 @@ export class Sim {
     const r2 = fxMul(WARD_RADIUS, WARD_RADIUS);
     let best = 0;
     for (const w of this.mobs) {
-      if (!w.alive || w.flags.ward <= 0) continue;
+      if (!w.alive || w.flags.ward <= 0 || this.inPurgeAura(w.pos)) continue; // Radiance purges the Warden's ward
       if (dist2(w.pos, p) <= r2 && w.flags.ward > best) best = w.flags.ward;
     }
     return best;
@@ -731,7 +741,7 @@ export class Sim {
     const r2 = fxMul(HASTE_RADIUS, HASTE_RADIUS);
     let best = 0;
     for (const t of this.mobs) {
-      if (!t.alive || t.flags.haste <= 0) continue;
+      if (!t.alive || t.flags.haste <= 0 || this.inPurgeAura(t.pos)) continue; // Radiance purges the Totem's haste
       if (dist2(t.pos, p) <= r2 && t.flags.haste > best) best = t.flags.haste;
     }
     return best;

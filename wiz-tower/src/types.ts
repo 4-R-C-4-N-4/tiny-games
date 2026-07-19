@@ -102,6 +102,7 @@ export interface TowerFlags {
   slow: Fx; // movement multiplier applied on hit (0 = none)
   disrupt: boolean; // Sonic (Resonance): shatters shields on hit & silences Menders in range
   harvest: boolean; // Dark (Umbra): its killing blows pay a bonus bounty (kills → power)
+  purge: boolean; //  Light (Radiance): nullifies support auras (Warden/Totem) & Mender heals in range
   burn: Fx; //        Fire (Pyromancy): fraction of dps applied as a lingering burn DoT (0 = none)
   wallAmp: Fx; //     Earth (Geomancy): damage bonus per adjacent wall (0 = none)
   ramp: Fx; //        Dark (Umbra): permanent damage bonus per kill this tower lands (0 = none)

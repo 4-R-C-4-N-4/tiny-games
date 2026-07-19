@@ -50,7 +50,7 @@ export const ELEMENT_FLAVOR: Record<Element, string> = {
   [Element.Earth]: 'Wall-mastery — maze them to death.',
   [Element.Sonic]: 'Disruption — silence menders & shields.',
   [Element.Zap]: 'Chain lightning — arcs across the field.',
-  [Element.Light]: 'Wards & revelation — bane of the Void.',
+  [Element.Light]: 'Revelation & purification — reveal the unseen, burn off enchantments.',
   [Element.Dark]: 'Risk & ruin — turn kills to power.',
 };
 
@@ -90,10 +90,10 @@ export const TRAIT_COUNTER: Record<Trait, string> = {
   [Trait.Flier]: 'flies over walls — ONLY anti-air wards (↑ Sonic/Zap) can touch it.',
   [Trait.Shade]: 'unseen until a detector reveals it — a ◉ Light or Dark ward, a Light Hex field, or the Reveal (👁) tap.',
   [Trait.Shielded]: 'a ward soaks its first few hits — high per-hit damage punches through.',
-  [Trait.Mender]: 'heals nearby summons — focus it down first, or the wave never dies.',
+  [Trait.Mender]: 'heals nearby summons — a Sonic or Light ward silences it; else focus it down or the wave never dies.',
   [Trait.Breaker]: 'smashes your walls to breach a shortcut — Earth (Geomancy) wards shatter them; else kill it before it opens a lane.',
-  [Trait.Warden]: 'shields the summons around it (they take less damage) — kill the Aegis and the escort folds.',
-  [Trait.Totem]: 'hastes the summons around it — kill the Herald to slow the push back down.',
+  [Trait.Warden]: 'shields the summons around it — kill the Aegis, or a Light (Radiance) ward purges its ward and the escort folds.',
+  [Trait.Totem]: 'hastes the summons around it — kill the Herald, or a Light ward purges its haste to slow the push down.',
 };
 
 /** Silhouette shape per trait — the renderer draws these; identity is shape + element glow. */

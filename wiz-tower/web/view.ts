@@ -217,7 +217,7 @@ export class GameView {
     c.innerHTML = `<div class="wt-codex-in">
       <img src="./art/affinity-sigil.svg" alt="Affinity wheel" />
       <p>Each school <b>counters the next</b> around the wheel (1.5×) and is weak to the one before (0.5×). <b>Radiant ⇄ Void</b> answer only each other. Read your foe's colours; conjure against the school they ward weakly.</p>
-      <p class="wt-note"><b>Your wards.</b> Your chosen school (★) is pre-attuned — build its wards freely. Any <i>other</i> school needs a one-time <b>🔓 attunement</b> before you can build it (the price rises with each school you add). Ward badges: <b>↑</b> anti-air · <b>◉</b> detection · <b>~</b> slow · <b>✷</b> splash · <b>⊘</b> disrupt (breaks shields &amp; hushes menders) · <b>◈</b> harvest (kills pay bonus power) · <b>🜂</b> burn (lingering fire DoT) · <b>▦</b> wall-channel (+30% per adjacent wall) · <b>⇑</b> ruin (gains damage per kill).</p>
+      <p class="wt-note"><b>Your wards.</b> Your chosen school (★) is pre-attuned — build its wards freely. Any <i>other</i> school needs a one-time <b>🔓 attunement</b> before you can build it (the price rises with each school you add). Ward badges: <b>↑</b> anti-air · <b>◉</b> detection · <b>~</b> slow · <b>✷</b> splash · <b>⊘</b> disrupt (breaks shields &amp; hushes menders) · <b>◈</b> harvest (kills pay bonus power) · <b>🜂</b> burn (lingering fire DoT) · <b>▦</b> wall-channel (+30% per adjacent wall) · <b>⇑</b> ruin (gains damage per kill) · <b>❂</b> purge (nullifies support auras &amp; heals).</p>
       <p class="wt-note"><b>Walls.</b> 🧱 walls funnel the ground path (fliers ignore them). They have HP: blocked mobs only chip them, but <b>Gargoyles (Breakers)</b> smash them fast to breach a shortcut — watch the wall's bar.</p>
       <h3>Bestiary</h3>
       <div class="wt-bestiary">${cards.map(([tr, el]) =>
@@ -334,6 +334,7 @@ export class GameView {
       if (flags.splash > 0) caps.push('<i class="wt-cap spl" title="splash">✷</i>');
       if (flags.disrupt) caps.push('<i class="wt-cap dis" title="disrupt — shatters shields & hushes menders">⊘</i>');
       if (flags.harvest) caps.push('<i class="wt-cap har" title="harvest — kills pay a bonus bounty">◈</i>');
+      if (flags.purge) caps.push('<i class="wt-cap purge" title="purge — nullifies Warden/Totem auras & Mender heals in range">❂</i>');
       if (flags.burn > 0) caps.push('<i class="wt-cap burn" title="burn — a lingering fire DoT that keeps damaging after the shot">🜂</i>');
       if (flags.wallAmp > 0) caps.push('<i class="wt-cap wall" title="wall-channeling — +30% damage per adjacent wall; and shatters Breakers (+60%)">▦</i>');
       if (flags.ramp > 0) caps.push('<i class="wt-cap ramp" title="ruin — this ward gains damage with every kill it lands">⇑</i>');

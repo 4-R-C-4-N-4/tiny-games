@@ -139,6 +139,8 @@ export function towerStats(element: Element, tier: Tier, kind: NodeKind): TowerS
     // Resonance shatters wards & hushes healers; Umbra harvests power from its own kills.
     disrupt: element === Element.Sonic,
     harvest: element === Element.Dark,
+    purge: element === Element.Light, // Radiance burns enchantments off the support summons
+
     // Pyromancy burns (lingering DoT); Geomancy channels through adjacent walls; Umbra's wards
     // grow in ruin, gaining damage with every kill they land.
     burn: element === Element.Fire ? fxRatio(1, 2) : 0, //     50% of dps as a 2s burn
