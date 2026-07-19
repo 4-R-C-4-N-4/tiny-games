@@ -194,11 +194,11 @@ Generate concept sprites with an image model, then hand-clean in Aseprite (or co
 
 ## Build Order (suggested)
 
-1. Anchor sets + teacher labeling script → train scoring head on the 3090
-2. Static page: input box, live 4-bar preview, health bars (placeholder art)
-3. Duel loop vs. one random-policy enemy
-4. Fatigue + wards + mana
-5. Character draft screen (Self-Naming Rite)
-6. Archetype × theme floor generator, Threshold screen, boss policy ladder, The Mirror
+1. ~~Anchor sets + teacher labeling script → train scoring head~~ **DONE** — `train/` pipeline: 80k-word vocab (GloVe ∩ wordfreq ∩ dictionary), ~3.8k words labeled by local qwen3:8b teacher, distilled MLP head (val MAE ≈ 1.0/10), packed with anchor centroids into `web/public/lexicon.bin` (8.5MB). See `train/README.md`.
+2. ~~Static page: input box, live 4-bar preview, health bars~~ **DONE**
+3. ~~Duel loop vs. one random-policy enemy~~ **DONE** (the Necromancer)
+4. ~~Fatigue + wards + mana~~ **DONE** — fatigue now runs on true embedding cosine, calibrated (synonyms ≈ 0.7-1, unrelated ≈ 0)
+5. Character draft screen (Self-Naming Rite) — stat anchors already ship in lexicon.bin
+6. Archetype × theme floor generator, Threshold screen, boss policy ladder, The Mirror — theme anchors already ship in lexicon.bin
 7. Pixel art pass: enemy base sprites + palette-swap system, player back-sprite, battle framing, compose/theater mobile layouts
 8. Juice: channel-coded spell VFX, grimoire UI, True Name generator

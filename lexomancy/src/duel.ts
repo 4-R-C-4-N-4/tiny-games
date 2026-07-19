@@ -116,9 +116,10 @@ export class Duel {
   private fatigue(actor: Combatant, word: string): number {
     let worst = 0;
     actor.recent.slice(0, FATIGUE_WINDOW).forEach((prev, age) => {
-      // Cubed so near-synonyms sting but merely same-channel words survive.
+      // Squared so near-synonyms sting while loosely-related words survive.
+      // (similarity() is already calibrated: synonyms ≈ 0.7-1, unrelated ≈ 0.)
       const sim = this.scorer.similarity(word, prev);
-      worst = Math.max(worst, sim * sim * sim * FATIGUE_RECENCY[age]);
+      worst = Math.max(worst, sim * sim * FATIGUE_RECENCY[age]);
     });
     return Math.max(MIN_EFFECTIVENESS, 1 - FATIGUE_DEPTH * worst);
   }

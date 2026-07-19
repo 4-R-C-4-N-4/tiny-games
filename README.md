@@ -22,6 +22,16 @@ size of the model behind it.
 
 ## Games
 
+### 📖 lexomancy — a war of words *(in progress)*
+
+A word-spell roguelike duel: type any English word and a client-side model scores it live
+across four channels (damage / hex / ward / heal). Vocabulary depth is literally power —
+rare words hit harder, and semantic fatigue punishes repeating yourself, so erudition is
+the build. The scorer is **80k int8 PCA-reduced GloVe embeddings + a distilled MLP head**
+(~8MB, trained against a local-LLM teacher; pipeline in `lexomancy/train/`), sharing one
+`Scorer` interface with the duel engine so enemies cast through the same model the player
+does. Design doc: [`lexomancy/docs/`](lexomancy/docs/lexomancy-design-doc.md).
+
 ### 🧙 wiz-tower — adversarial tower defense
 
 A mobile-first, vertical tower-defense game where the attacking waves are generated live by a
@@ -75,6 +85,11 @@ grammar).
 
 ```
 tiny-games/
+├── lexomancy/          # word-spell roguelike duel (in progress)
+│   ├── src/            # headless duel engine + scorers (stub and distilled model)
+│   ├── web/            # portrait battle stage, live spell preview, lexicon.bin asset
+│   ├── train/          # reusable distillation pipeline: vocab → teacher labels → head → pack
+│   └── docs/           # design doc
 ├── wiz-tower/          # the first game — adversarial tower defense
 │   ├── src/            # deterministic sim + attacker tiers (search, strategist, distilled net)
 │   ├── web/            # Canvas renderer, DOM HUD, start screen, theming

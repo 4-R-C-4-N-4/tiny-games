@@ -1,0 +1,81 @@
+{
+  "_comment": "Hand-authored anchor wordsets. Channels seed the teacher rubric and eval sanity checks; stats power the Self-Naming Rite; themes power floor domains/taboos and palette generation. Each anchor ships as the centroid of its words' embeddings.",
+  "channels": {
+    "damage": [
+      "strike", "burn", "blade", "shatter", "inferno", "wound", "crush", "smite",
+      "blast", "rend", "pierce", "scorch", "cleave", "ruin", "slay", "impale",
+      "detonate", "sunder", "maul", "incinerate"
+    ],
+    "hex": [
+      "curse", "poison", "wither", "blight", "drain", "corrupt", "weaken", "plague",
+      "venom", "malice", "rot", "taint", "sap", "afflict", "doom", "sicken",
+      "pestilence", "miasma", "bane", "torment"
+    ],
+    "ward": [
+      "shield", "wall", "guard", "barrier", "mirror", "armor", "bulwark", "aegis",
+      "refuge", "bastion", "fortress", "veil", "deflect", "parry", "rampart",
+      "sanctuary", "carapace", "palisade", "shelter", "warden"
+    ],
+    "heal": [
+      "heal", "mend", "soothe", "restore", "bloom", "balm", "renew", "nourish",
+      "cradle", "blessing", "cure", "salve", "comfort", "revive", "flourish",
+      "gentle", "warmth", "remedy", "solace", "rejuvenate"
+    ]
+  },
+  "stats": {
+    "ferocity": [
+      "ruthless", "burning", "savage", "fierce", "wrathful", "relentless", "feral",
+      "blazing", "brutal", "furious", "merciless", "rabid", "vicious", "untamed"
+    ],
+    "guile": [
+      "cunning", "veiled", "sly", "subtle", "shadowed", "crafty", "serpentine",
+      "secretive", "devious", "elusive", "wily", "masked", "treacherous", "oblique"
+    ],
+    "stone": [
+      "patient", "unyielding", "steadfast", "enduring", "immovable", "rooted",
+      "stalwart", "firm", "solid", "resolute", "stubborn", "granite", "abiding",
+      "unshakable"
+    ],
+    "grace": [
+      "gentle", "verdant", "kind", "serene", "flowing", "tender", "luminous",
+      "merciful", "calm", "nurturing", "soft", "radiant", "compassionate", "mild"
+    ],
+    "resonance": [
+      "learned", "ancient", "strange", "arcane", "lettered", "curious", "echoing",
+      "attuned", "eldritch", "scholarly", "obscure", "esoteric", "haunted", "deep"
+    ]
+  },
+  "extras": [
+    "ossify", "susurrus", "immolate", "conflagration", "sepulchre", "panacea",
+    "bulwark", "malediction", "aegis", "wraith", "marrow", "crypt", "husk",
+    "gloom", "blight", "smite", "wither", "balm", "mend", "hex"
+  ],
+  "themes": {
+    "bone": ["bone", "skull", "marrow", "skeleton", "femur", "rib", "spine", "ivory", "ossuary", "relic", "grave", "dust"],
+    "tide": ["tide", "wave", "ocean", "brine", "current", "undertow", "foam", "drown", "abyss", "salt", "moon", "shore"],
+    "ash": ["ash", "ember", "cinder", "soot", "smolder", "char", "smoke", "pyre", "furnace", "coal", "scorched", "ruin"],
+    "clockwork": ["gear", "spring", "cog", "pendulum", "brass", "escapement", "wind", "tick", "mechanism", "automaton", "ratchet", "chime"],
+    "honey": ["honey", "hive", "nectar", "amber", "swarm", "comb", "sweet", "sting", "pollen", "wax", "drone", "queen"],
+    "frost": ["frost", "ice", "snow", "glacier", "shiver", "hail", "sleet", "freeze", "crystal", "winter", "numb", "brittle"],
+    "storm": ["storm", "thunder", "lightning", "gale", "tempest", "squall", "cloud", "downpour", "hurricane", "wind", "static", "strike"],
+    "garden": ["garden", "bloom", "root", "vine", "petal", "seed", "orchard", "moss", "fern", "blossom", "thorn", "loam"],
+    "venom": ["venom", "fang", "serpent", "toxin", "viper", "scorpion", "sting", "poison", "coil", "scale", "hiss", "paralysis"],
+    "choir": ["choir", "hymn", "chant", "psalm", "voice", "harmony", "bell", "anthem", "chorus", "litany", "organ", "echo"],
+    "iron": ["iron", "steel", "anvil", "forge", "hammer", "ingot", "rust", "chain", "rivet", "ore", "temper", "slag"],
+    "moth": ["moth", "wing", "dust", "lamp", "cocoon", "flutter", "silk", "nocturne", "flame", "velvet", "antenna", "pale"],
+    "blood": ["blood", "vein", "artery", "pulse", "crimson", "wound", "heart", "sacrifice", "iron", "throb", "clot", "bleed"],
+    "salt": ["salt", "brine", "preserve", "crust", "desert", "tear", "crystal", "barren", "bitter", "dried", "shore", "white"],
+    "root": ["root", "tuber", "soil", "burrow", "deep", "tangle", "anchor", "fungus", "loam", "worm", "buried", "grip"],
+    "lantern": ["lantern", "wick", "glow", "beacon", "candle", "flicker", "oil", "halo", "gleam", "vigil", "warmth", "dark"],
+    "silk": ["silk", "thread", "weave", "loom", "gossamer", "spider", "veil", "ribbon", "shroud", "seam", "unravel", "soft"],
+    "plague": ["plague", "pox", "fever", "quarantine", "boil", "miasma", "rat", "shroud", "pallor", "contagion", "wither", "toll"],
+    "dream": ["dream", "sleep", "vision", "lull", "reverie", "phantom", "veil", "drift", "somnolent", "haze", "wake", "omen"],
+    "hunger": ["hunger", "famine", "maw", "devour", "gnaw", "appetite", "starve", "feast", "teeth", "empty", "craving", "swallow"],
+    "glass": ["glass", "shard", "pane", "prism", "splinter", "transparent", "fragile", "lens", "gleam", "crack", "vitreous", "reflection"],
+    "ruin": ["ruin", "rubble", "collapse", "decay", "remnant", "toppled", "crumble", "forgotten", "moss", "hollow", "wreck", "silence"],
+    "starlight": ["star", "constellation", "nebula", "comet", "orbit", "twinkle", "void", "celestial", "meteor", "zenith", "aurora", "distant"],
+    "ember": ["ember", "spark", "kindle", "glow", "hearth", "flare", "warmth", "ignite", "crackle", "stoke", "blaze", "dying"],
+    "mirror": ["mirror", "reflection", "double", "reverse", "twin", "surface", "silver", "gaze", "echo", "image", "symmetry", "shatter"],
+    "thunder": ["thunder", "rumble", "boom", "peal", "shockwave", "roar", "tremor", "clap", "deafening", "distant", "warning", "sky"]
+  }
+}

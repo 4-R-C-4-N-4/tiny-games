@@ -2,3 +2,10 @@ node_modules/
 dist/
 *.log
 .DS_Store
+
+# training pipeline: venv + large derived intermediates (rebuildable from
+# ~/.cache/lexomancy sources); labels.jsonl and head.npz are committed on purpose
+train/.venv/
+train/data/embeddings.f32.npy
+train/data/reduced.npz
+__pycache__/

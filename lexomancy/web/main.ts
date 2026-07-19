@@ -1,10 +1,14 @@
 import { Duel, type Combatant, type DuelEvent } from '../src/duel.ts';
+import { ModelScorer } from '../src/model-scorer.ts';
 import { NECROMANCER } from '../src/opponents.ts';
 import { StubScorer } from '../src/stub-scorer.ts';
-import { CHANNELS } from '../src/types.ts';
+import { CHANNELS, type Scorer } from '../src/types.ts';
 
-const scorer = new StubScorer();
 const ENEMY_TURN_DELAY_MS = 750;
+
+// The real lexicon loads async (~7MB, cached). Until it lands — or if it
+// can't — the stub keeps the game playable.
+let scorer: Scorer = new StubScorer();
 
 const $ = <T extends HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -25,6 +29,26 @@ let enemyThinking = false;
 function newDuel(): Duel {
   // Non-deterministic seed is fine at the app boundary; the engine stays pure.
   return new Duel(scorer, NECROMANCER, (Math.random() * 2 ** 31) | 0);
+}
+
+function setLexiconStatus(text: string): void {
+  $('floor-rule').textContent = text;
+}
+
+async function loadLexicon(): Promise<void> {
+  setLexiconStatus('the lexicon awakens…');
+  try {
+    const model = await ModelScorer.fromUrl('./lexicon.bin');
+    scorer = model;
+    duel = newDuel();
+    log.replaceChildren();
+    renderCombatants();
+    renderPreview();
+    setLexiconStatus(`${(model.wordCount / 1000).toFixed(0)}k words known — speak`);
+  } catch (err) {
+    console.warn('lexicon unavailable, staying on stub scorer', err);
+    setLexiconStatus('practice grounds — stub lexicon');
+  }
 }
 
 function rarityLabel(r: number): string {
@@ -147,3 +171,4 @@ $('restart-btn').addEventListener('click', () => {
 
 renderCombatants();
 renderPreview();
+void loadLexicon();

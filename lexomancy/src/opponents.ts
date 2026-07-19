@@ -22,7 +22,7 @@ export const NECROMANCER: OpponentDef = {
     'rot',
     'wither',
     'curse',
-    'ossify',
+    'ossuary',
     'sepulchre',
   ],
 };
