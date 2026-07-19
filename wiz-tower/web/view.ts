@@ -27,7 +27,7 @@ const ROLE_ORDER: NodeKind[] = [NodeKind.Turret, NodeKind.Structure, NodeKind.Ac
 const ROLE_META: Record<NodeKind, { icon: string; name: string; hint: string }> = {
   [NodeKind.Turret]: { icon: '⌖', name: 'Turret', hint: 'Turret — single-target damage' },
   [NodeKind.Structure]: { icon: '✦', name: 'Boon', hint: "Boon — empowers nearby wards' damage (no attack of its own)" },
-  [NodeKind.Active]: { icon: '◈', name: 'Ward', hint: 'Ward — a protective field that weakens mobs (Ice slows · Light reveals · else weakens)' },
+  [NodeKind.Active]: { icon: '◈', name: 'Hex', hint: 'Hex — a curse-field that weakens the mobs passing through (Ice slows · Light reveals · else weakens)' },
 };
 
 export class GameView {
@@ -37,7 +37,7 @@ export class GameView {
   private tool: Tool | null = null;
   private verbTool: 'overcharge' | 'reveal' | 'reinforce' | null = null;
   private tier: Tier = Tier.T1;
-  private role: NodeKind = NodeKind.Turret; // Turret (DPS) / Structure=Boon (ally buff) / Active=Ward (mob field)
+  private role: NodeKind = NodeKind.Turret; // Turret (DPS) / Structure=Boon (ally buff) / Active=Hex (mob field)
   readonly recorder = new RunRecorder(); // logs each wave's board + outcome for training
   private wasWave = false; // to detect a wave→build/gameover transition and record the outcome
   private speed = 1;
@@ -343,8 +343,8 @@ export class GameView {
       roleHint = `${ELEMENT_NAMES[el]} Boon — empowers nearby wards' damage`;
     } else {
       const field = el === Element.Ice ? 'slow' : el === Element.Light ? 'reveal' : 'weaken';
-      caps.push(`<i class="wt-cap field" title="Ward — ${field} field">◈</i>`);
-      roleHint = `${ELEMENT_NAMES[el]} Ward — ${field} field`;
+      caps.push(`<i class="wt-cap field" title="Hex — ${field} field">◈</i>`);
+      roleHint = `${ELEMENT_NAMES[el]} Hex — ${field} field`;
     }
     const badge = caps.length ? `<span class="wt-caps">${caps.join('')}</span>` : '';
     b.style.setProperty('--el', ELEMENT_COLOR[el]);
@@ -796,7 +796,7 @@ export class GameView {
     const col = ELEMENT_COLOR[t.element];
     const range = fxToFloat(t.range) * CELL;
     const bob = this.reduced ? 0 : Math.sin(this.time * 2 + t.id) * 1.5;
-    const support = t.aura !== null; // Boon / Ward — no attack, project a field instead
+    const support = t.aura !== null; // Boon / Hex — no attack, project a field instead
     if (support && t.aura) {
       // The field footprint is drawn ALWAYS (it's the whole point of a support ward), tinted
       // by what it does: buff (school colour), slow (frost), vulnerable (ember), detect (radiant).
@@ -860,14 +860,14 @@ export class GameView {
       ctx.beginPath(); ctx.moveTo(-5, -rr - 8); ctx.quadraticCurveTo(0, -rr - 12, 5, -rr - 8); ctx.quadraticCurveTo(0, -rr - 4, -5, -rr - 8); ctx.stroke();
       ctx.beginPath(); ctx.arc(0, -rr - 8, 1.4, 0, TAU); ctx.stroke();
     }
-    // Support-role marker so a Boon and a Ward read differently from a Turret at a glance.
+    // Support-role marker so a Boon and a Hex read differently from a Turret at a glance.
     if (support && t.aura) {
       if (t.aura.kind === 'buff') {
         // Boon: four bright spokes radiating out (it feeds the wards around it).
         ctx.strokeStyle = '#fff'; ctx.globalAlpha = 0.9; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
         for (let i = 0; i < 4; i++) { const a = this.time * 0.8 + i * TAU / 4; ctx.beginPath(); ctx.moveTo(Math.cos(a) * (rr - 4), Math.sin(a) * (rr - 4)); ctx.lineTo(Math.cos(a) * (rr + 6), Math.sin(a) * (rr + 6)); ctx.stroke(); }
       } else {
-        // Ward: an expanding pulse ring, coloured by its field.
+        // Hex: an expanding pulse ring, coloured by its field.
         const ec = t.aura.kind === 'slow' ? '#5fd0ff' : t.aura.kind === 'detect' ? '#ffe8a3' : '#ff9a4d';
         const ph = this.reduced ? 0.5 : (this.time * 0.7 + t.id) % 1;
         ctx.globalAlpha = 0.5 * (1 - ph); ctx.strokeStyle = ec; ctx.lineWidth = 2;
