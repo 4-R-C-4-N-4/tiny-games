@@ -29,7 +29,10 @@ jobs:
           cache: npm
           cache-dependency-path: wiz-tower/package-lock.json
       - run: npm ci
-      - run: npm run build
+      - run: npm run typecheck
+      # `single` runs vite build + inlines everything into dist/wiz-tower.html
+      # (self-contained), alongside the normal dist/index.html PWA build.
+      - run: npm run single
       - uses: actions/upload-pages-artifact@v3
         with:
           path: wiz-tower/dist
