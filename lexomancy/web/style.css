@@ -83,8 +83,108 @@ body {
 }
 
 .sprite {
-  font-size: 3.5rem;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6));
+}
+
+.combatant {
+  position: relative;
+}
+
+.pixel-sprite {
+  display: block;
+  image-rendering: pixelated;
+}
+
+#player .pixel-sprite {
+  width: 5.5rem;
+}
+
+#enemy .pixel-sprite {
+  width: 6.5rem;
+}
+
+/* ---------- VFX ---------- */
+
+.vfx-burst {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--vfx-color) 0%, transparent 65%);
+  pointer-events: none;
+  animation: burst 0.45s ease-out forwards;
+}
+
+@keyframes burst {
+  from { transform: scale(0.3); opacity: 0.95; }
+  to { transform: scale(2.4); opacity: 0; }
+}
+
+.vfx-float {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.85rem;
+  font-weight: bold;
+  text-shadow: 0 1px 3px #000;
+  pointer-events: none;
+  animation: floatUp 0.9s ease-out forwards;
+}
+
+@keyframes floatUp {
+  from { transform: translate(-50%, 0); opacity: 1; }
+  to { transform: translate(-50%, -2.2rem); opacity: 0; }
+}
+
+.shaking {
+  animation: shake 0.35s;
+}
+
+@keyframes shake {
+  0%, 100% { translate: 0 0; }
+  25% { translate: -4px 0; }
+  50% { translate: 4px 0; }
+  75% { translate: -2px 0; }
+}
+
+/* ---------- sprite gallery (?gallery) ---------- */
+
+#gallery {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+#gallery h1 {
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+}
+
+.gallery-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+}
+
+.gallery-label {
+  width: 6.5rem;
+  font-size: 0.8rem;
+  color: var(--ink-dim);
+}
+
+.gallery-row figure {
+  text-align: center;
+}
+
+.gallery-row figcaption {
+  font-size: 0.6rem;
+  color: var(--ink-dim);
+  margin-top: 0.3rem;
 }
 
 .nameplate {

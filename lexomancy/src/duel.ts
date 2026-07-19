@@ -1,4 +1,5 @@
 import { evaluateWord, fatigueRecency, type FloorSpec, type FloorWordEffect } from './floors.ts';
+import type { SpriteArt } from './sprites.ts';
 import { NEUTRAL_STATS, type Stats } from './stats.ts';
 import type { Scorer, SpellProfile } from './types.ts';
 
@@ -10,6 +11,7 @@ export type Policy = 'random' | 'counter' | 'exploit' | 'mirror';
 export interface OpponentDef {
   name: string;
   sprite: string;
+  art: SpriteArt;
   maxHp: number;
   words: string[];
   /** The difficulty ladder is policy intelligence, not stat inflation. */

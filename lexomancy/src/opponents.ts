@@ -7,6 +7,7 @@ import type { OpponentDef } from './duel.ts';
 export const NECROMANCER: OpponentDef = {
   name: 'The Necromancer',
   sprite: '💀',
+  art: 'necromancer',
   maxHp: 55,
   policy: 'random',
   words: [
@@ -18,6 +19,7 @@ export const NECROMANCER: OpponentDef = {
 export const HIEROPHANT: OpponentDef = {
   name: 'The Hierophant',
   sprite: '🕯️',
+  art: 'hierophant',
   maxHp: 60,
   policy: 'random',
   words: [
@@ -30,6 +32,7 @@ export const HIEROPHANT: OpponentDef = {
 export const STORM_CALLER: OpponentDef = {
   name: 'The Storm-Caller',
   sprite: '🌩️',
+  art: 'stormcaller',
   maxHp: 50,
   policy: 'random',
   words: [
@@ -46,6 +49,7 @@ export function makeMirror(history: string[]): OpponentDef {
   return {
     name: 'The Mirror',
     sprite: '🪞',
+    art: 'mirror',
     maxHp: 70,
     policy: 'mirror',
     words: [...new Set(history)],

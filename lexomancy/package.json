@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "preview": "vite preview --port 5299 --strictPort"
+    "preview": "vite preview --port 5299 --strictPort",
+    "single": "vite build && node scripts/bundle-single.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

@@ -1,10 +1,13 @@
-import { Duel, type Combatant, type DuelEvent, type CastPreview } from '../src/duel.ts';
+import { Duel, type Combatant, type DuelEvent, type CastPreview, type OpponentDef } from '../src/duel.ts';
 import { THEME_HUES } from '../src/floors.ts';
 import { ModelScorer } from '../src/model-scorer.ts';
 import { SpireRun } from '../src/run.ts';
+import { enemyPalette, playerPalette, type SpriteArt } from '../src/sprites.ts';
 import { dominantStat, type StatName } from '../src/stats.ts';
 import { StubScorer } from '../src/stub-scorer.ts';
-import { CHANNELS, type Scorer } from '../src/types.ts';
+import { CHANNELS, type Channel, type Scorer } from '../src/types.ts';
+import { renderGallery } from './gallery.ts';
+import { spriteCanvas } from './sprite-render.ts';
 
 // Thin shell over SpireRun: the run machine is headless; this file only
 // renders phases and forwards input.
@@ -98,11 +101,29 @@ function statusLine(c: Combatant): string {
   return parts.join('  ');
 }
 
+function currentThemeHue(): number {
+  const floor = run.currentFloorSafe();
+  return floor ? THEME_HUES[floor.theme] : 260;
+}
+
+function setSprite(holder: HTMLElement, art: SpriteArt | null): void {
+  if (!art) {
+    holder.replaceChildren();
+    return;
+  }
+  const canvas =
+    art === 'player'
+      ? spriteCanvas('player', playerPalette(dominantStat(run.stats)))
+      : spriteCanvas(art, enemyPalette(art, currentThemeHue()));
+  if (holder.firstChild !== canvas) holder.replaceChildren(canvas);
+}
+
 function renderCombatants(): void {
   const duel = run.duel;
-  const boss = run.phase === 'duel' && duel ? duel.opponent : run.currentBossSafe();
+  const boss: OpponentDef | null = run.phase === 'duel' && duel ? duel.opponent : run.currentBossSafe();
   $('enemy-name').textContent = boss?.name ?? '…';
-  $('enemy-sprite').textContent = boss?.sprite ?? '';
+  setSprite($('enemy-sprite'), boss?.art ?? null);
+  setSprite($('player-sprite'), 'player');
   const enemy = duel?.enemy;
   $('enemy-hp').style.width = enemy ? `${(100 * enemy.hp) / enemy.maxHp}%` : '100%';
   $('enemy-status').textContent = enemy ? statusLine(enemy) : '';
@@ -262,8 +283,74 @@ $('enter-btn').addEventListener('click', () => {
 
 // ---------- duel ----------
 
+// ---------- VFX ----------
+
+const CHANNEL_COLORS: Record<Channel, string> = {
+  damage: '#e5484d',
+  hex: '#9d5ce5',
+  ward: '#4d9de5',
+  heal: '#4dc47f',
+};
+
+function combatantEl(actor: string): HTMLElement {
+  return actor === 'player' ? $('player') : $('enemy');
+}
+
+function otherEl(actor: string): HTMLElement {
+  return actor === 'player' ? $('enemy') : $('player');
+}
+
+function vfxBurst(target: HTMLElement, color: string): void {
+  const b = document.createElement('div');
+  b.className = 'vfx-burst';
+  b.style.setProperty('--vfx-color', color);
+  target.appendChild(b);
+  b.addEventListener('animationend', () => b.remove());
+}
+
+function vfxFloat(target: HTMLElement, text: string, color: string): void {
+  const f = document.createElement('div');
+  f.className = 'vfx-float';
+  f.style.color = color;
+  f.textContent = text;
+  target.appendChild(f);
+  f.addEventListener('animationend', () => f.remove());
+}
+
+function vfxShake(target: HTMLElement): void {
+  target.classList.remove('shaking');
+  void target.offsetWidth; // restart the animation
+  target.classList.add('shaking');
+}
+
+function playCastVfx(e: DuelEvent): void {
+  if (e.kind === 'drain') {
+    vfxFloat(combatantEl(e.actor), `−${e.drain} ☠`, CHANNEL_COLORS.hex);
+    return;
+  }
+  if (e.kind === 'echo') {
+    vfxFloat(combatantEl(e.actor), `−${e.damage} ⟲`, CHANNEL_COLORS.damage);
+    vfxShake(combatantEl(e.actor));
+    return;
+  }
+  if (e.kind !== 'cast') return;
+  const dominant = scorer.knows(e.word) ? scorer.score(e.word).dominant : 'damage';
+  const target = e.tabooed ? combatantEl(e.actor) : otherEl(e.actor);
+  vfxBurst(target, CHANNEL_COLORS[dominant]);
+  if (e.damage > 0) {
+    vfxFloat(target, `−${e.damage}`, CHANNEL_COLORS.damage);
+    vfxShake(target);
+  }
+  if (e.hexApplied > 0) vfxFloat(target, `☠ +${e.hexApplied}`, CHANNEL_COLORS.hex);
+  if (e.healed > 0) vfxFloat(combatantEl(e.actor), `+${e.healed}`, CHANNEL_COLORS.heal);
+  if (e.wardGained > 0) vfxFloat(combatantEl(e.actor), `🛡 +${e.wardGained}`, CHANNEL_COLORS.ward);
+}
+
 function showEvents(events: DuelEvent[]): void {
-  for (const e of events) pushLog(describe(e));
+  for (const e of events) {
+    pushLog(describe(e));
+    playCastVfx(e);
+  }
 }
 
 form.addEventListener('submit', (e) => {
@@ -308,9 +395,22 @@ function startRun(): void {
 }
 
 async function boot(): Promise<void> {
+  if (new URLSearchParams(location.search).has('gallery')) {
+    renderGallery();
+    return;
+  }
   $('floor-rule').textContent = 'the lexicon awakens…';
   try {
-    scorer = await ModelScorer.fromUrl('./lexicon.bin');
+    const embedded = (globalThis as { LEXICON_B64?: string }).LEXICON_B64;
+    if (embedded) {
+      // Single-file build: the lexicon rides inside the page as base64.
+      const raw = atob(embedded);
+      const bytes = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+      scorer = ModelScorer.fromBuffer(bytes.buffer);
+    } else {
+      scorer = await ModelScorer.fromUrl('./lexicon.bin');
+    }
   } catch (err) {
     console.warn('lexicon unavailable, staying on stub scorer', err);
   }
