@@ -11,7 +11,7 @@ import type { StatName } from './stats.ts';
 //   w  pale detail
 
 export type SpriteGrid = readonly string[];
-export type SpriteArt = 'necromancer' | 'hierophant' | 'stormcaller' | 'mirror' | 'player';
+export type SpriteArt = 'necromancer' | 'hierophant' | 'stormcaller' | 'dragon' | 'mirror' | 'player';
 
 export const GRIDS: Record<SpriteArt, SpriteGrid> = {
   necromancer: [
@@ -86,29 +86,57 @@ export const GRIDS: Record<SpriteArt, SpriteGrid> = {
     '..m...................',
     '..m...................',
   ],
+  dragon: [
+    '....o................o....',
+    '...oao....o....o....oao...',
+    '...oaao....oooo....oaao...',
+    '..oaaao...oppppo...oaaao..',
+    '..oaaao..opgppgpo..oaaao..',
+    '.oaaaao..oppppppo..oaaaao.',
+    '.oaaaao...owwwwo...oaaaao.',
+    '.oaaaaoo..owwwwo..ooaaaao.',
+    'oaaaaaopo.oppppo.opoaaaaao',
+    'oaaaaaoppoppppppoppoaaaaao',
+    '.oaaaoppppppppppppppoaaao.',
+    '.oaaopppwwwwwwwwwwppoaao..',
+    '..ooopppwwwwwwwwwwpppooo..',
+    '...opppwwppppppwwpppppo...',
+    '...oppppwwwwwwwwwwppppo...',
+    '....opppppwwwwwwpppppo....',
+    '.....opppppppppppppo......',
+    '....oppppo.oppo.oppppo....',
+    '....oppo..opppppo..oppo...',
+    '.....oo..opppppppo...oo...',
+    '.........opppppppppo......',
+    '..........ooopppppppo.....',
+    '..............oopppppo....',
+    '................oooooo....',
+  ],
+  // Not a looking-glass: your reflection stepped out of one. Hooded double,
+  // shard-flanked; palette takes the PLAYER's dominant-stat hue at runtime.
   mirror: [
-    '.......oaaaaaao.......',
-    '.....oaaoooooaaao.....',
-    '....oaowwwwwwwoao.....',
-    '...oaowwgwwwwwwoao....',
-    '...oaowgwwwwPwwoao....',
-    '..oaowwgwwwwwPwwoao...',
-    '..oaowgwwwwwwwPwoao...',
-    '..oaowwwwPPwwwwwoao...',
-    '..oaowwwwPPPwwwwoao...',
-    '..oaowwwPPPPPwwwoao...',
-    '..oaowwwwPPPwwwwoao...',
-    '..oaowwwwPPPwwwgoao...',
-    '..oaowwwwPPPwwgwoao...',
-    '...oaowwPPPPPwwoao....',
-    '...oaowwwwwwwwwoao....',
-    '....oaowwwwwwwoao.....',
-    '.....oaaoooooaao......',
-    '.......oaaaaao........',
-    '........omamo.........',
-    '........omamo.........',
-    '......oomamamoo.......',
-    '.....oaaaaaaaaao......',
+    '.....g......oo......g...',
+    '....ga.....oppo.....ag..',
+    '.....g....oppppo....g...',
+    '.........opPPPPpo.......',
+    '........opPooooPpo......',
+    '........opogoogopo......',
+    '........opoooooopo......',
+    '..a......oppooppo......a',
+    '.ag....oppppppppppo...ga',
+    '..a...oppapppppppapo..a.',
+    '.....opppaapppaapppo....',
+    '.....oPpppppaappppPo....',
+    '....oppppagggapppppo....',
+    '....oPpppaggggppppPo....',
+    '..g.opppppppppppppppo...',
+    '..a.oPppppppppppppPo....',
+    '....opppppppppppppo.....',
+    '....oPpppppppppppPo.....',
+    '.....opppppppppppo..a...',
+    '.....ooooooooooooo.g....',
+    '...................a....',
+    '........................',
   ],
   // Seen from behind, lower foreground — your build on your back.
   player: [
@@ -154,7 +182,8 @@ const CLASS_BASE: Record<Exclude<SpriteArt, 'player'>, { p: string; P: string; b
   necromancer: { p: 'hsl(268 22% 34%)', P: 'hsl(268 26% 24%)', b: '#ddd4c2', w: '#e8e2f4' },
   hierophant: { p: 'hsl(44 26% 68%)', P: 'hsl(44 22% 52%)', b: '#2a2438', w: '#f4eede' },
   stormcaller: { p: 'hsl(215 32% 30%)', P: 'hsl(215 34% 21%)', b: '#d9cfc0', w: '#e8f0f4' },
-  mirror: { p: 'hsl(210 12% 40%)', P: 'hsl(230 18% 30%)', b: '#c8c2d4', w: 'hsl(200 22% 74%)' },
+  dragon: { p: 'hsl(140 30% 30%)', P: 'hsl(140 34% 20%)', b: '#ddd4c2', w: '#dcc27e' },
+  mirror: { p: 'hsl(250 14% 30%)', P: 'hsl(250 18% 20%)', b: '#c8c2d4', w: '#e8e2f4' },
 };
 
 /** Enemy palette: class base + theme-hue accent/glow. */

@@ -20,7 +20,7 @@ export function renderGallery(): void {
   root.appendChild(h);
 
   const enemies: Array<Exclude<SpriteArt, 'player'>> = [
-    'necromancer', 'hierophant', 'stormcaller', 'mirror',
+    'necromancer', 'hierophant', 'stormcaller', 'dragon', 'mirror',
   ];
   for (const art of enemies) {
     const row = document.createElement('div');

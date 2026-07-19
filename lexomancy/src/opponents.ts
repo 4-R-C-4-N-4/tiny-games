@@ -42,7 +42,19 @@ export const STORM_CALLER: OpponentDef = {
   ],
 };
 
-export const ROSTER: OpponentDef[] = [NECROMANCER, HIEROPHANT, STORM_CALLER];
+export const WYRM: OpponentDef = {
+  name: 'The Wyrm',
+  sprite: '🐉',
+  art: 'dragon',
+  maxHp: 65,
+  policy: 'random',
+  words: [
+    'dragon', 'flame', 'fang', 'talon', 'scale', 'wing', 'hoard', 'smoke',
+    'cavern', 'roar', 'serpent', 'molten', 'greed', 'inferno', 'ember',
+  ],
+};
+
+export const ROSTER: OpponentDef[] = [NECROMANCER, HIEROPHANT, STORM_CALLER, WYRM];
 
 /** The Summit: casts exclusively from the player's own run history. */
 export function makeMirror(history: string[]): OpponentDef {

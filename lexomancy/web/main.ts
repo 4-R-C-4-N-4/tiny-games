@@ -2,7 +2,7 @@ import { Duel, type Combatant, type DuelEvent, type CastPreview, type OpponentDe
 import { THEME_HUES } from '../src/floors.ts';
 import { ModelScorer } from '../src/model-scorer.ts';
 import { SpireRun } from '../src/run.ts';
-import { enemyPalette, playerPalette, type SpriteArt } from '../src/sprites.ts';
+import { STAT_HUES, enemyPalette, playerPalette, type SpriteArt } from '../src/sprites.ts';
 import { dominantStat, type StatName } from '../src/stats.ts';
 import { StubScorer } from '../src/stub-scorer.ts';
 import { CHANNELS, type Channel, type Scorer } from '../src/types.ts';
@@ -111,10 +111,12 @@ function setSprite(holder: HTMLElement, art: SpriteArt | null): void {
     holder.replaceChildren();
     return;
   }
+  // The Mirror is your reflection — it wears YOUR dominant-stat color.
+  const hue = art === 'mirror' ? STAT_HUES[dominantStat(run.stats)] : currentThemeHue();
   const canvas =
     art === 'player'
       ? spriteCanvas('player', playerPalette(dominantStat(run.stats)))
-      : spriteCanvas(art, enemyPalette(art, currentThemeHue()));
+      : spriteCanvas(art, enemyPalette(art, hue));
   if (holder.firstChild !== canvas) holder.replaceChildren(canvas);
 }
 
