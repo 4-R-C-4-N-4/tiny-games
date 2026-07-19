@@ -42,6 +42,7 @@ const afterBuild = await page.evaluate(() => ({ towers: window.wt.game.sim.liveT
 
 // Scout (telegraph) then Start Wave via the real control buttons.
 await page.getByText('Scry wave').click();
+await page.waitForTimeout(150); // let the next render frame paint the scry brief
 const telegraph = await page.locator('#telegraph').innerText();
 await page.getByText('▶ Begin').click();
 const startedState = await page.evaluate(() => window.wt.game.state);

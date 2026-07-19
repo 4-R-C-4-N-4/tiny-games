@@ -49,8 +49,8 @@ export class GameView {
   private started = false;
   private classChoice: Element | null = null; // no discipline pre-selected — you must choose
   private diffChoice = 3;
-  private opponentChoice: Opponent = 'strategist'; // the Mind (L3) is the shipped foe
-  private trainingMode = false; // reveals the dev foes (L2 search, distilled net) + attacker style
+  private opponentChoice: Opponent = 'model'; // the distilled Net (the learned adversary) is the default foe
+  private trainingMode = false; // reveals the alternate foes (L2 search, L3 mind) + attacker style
   private personalityChoice: Personality = 'balanced';
   private seed = 1n;
 

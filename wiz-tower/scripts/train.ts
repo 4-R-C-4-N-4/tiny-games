@@ -57,6 +57,12 @@ let prior: Weights | null = null;
 if (existsSync(WEIGHTS_PATH)) {
   try { prior = JSON.parse(readFileSync(WEIGHTS_PATH, 'utf8')) as Weights; } catch { prior = null; }
 }
+// A prior from a DIFFERENT architecture (e.g. after widening the action/feature space) can't be
+// used to induce boards — its forward pass would mismatch the new featurize. Bootstrap fresh.
+if (prior && (prior.W1?.length !== N_FEATURES || prior.b2?.length !== N_ACTIONS)) {
+  console.log('Prior weights have a different architecture — bootstrapping fresh (no DAgger this round).');
+  prior = null;
+}
 console.log(prior ? `DAgger round: mixing ${Math.round(DAGGER_FRAC * 100)}% model-induced boards.` : 'Bootstrap round: random boards only.');
 
 // ---- Gaussian init via Box–Muller on the seeded RNG (deterministic training) --------
