@@ -59,9 +59,12 @@ function freeTowerCell(sim: Sim): Cell | null {
 export interface ArchmageInfo {
   budget?: number; //       currency to spend this build (static board gen); else use current
   foeSchool?: Element; //   the school this defense expects to face → build its counter as DPS
-  expectAir?: boolean; //   raise anti-air (Sonic)
-  expectStealth?: boolean; //raise detection (Light)
+  expectAir?: boolean; //   raise anti-air
+  expectStealth?: boolean; //raise detection
   stage?: number; //        0..1 development level → tier ceiling + synergy pieces
+  core?: Element; //        DPS-core school (else the counter of foeSchool, or starting)
+  antiAir?: Element; //     which anti-air school to raise (Sonic default; Zap is the alternative)
+  detector?: Element; //    which detection school (Light default; Dark also sees the dark)
 }
 
 /** Play one best-practice build phase on `sim`. Deterministic (the build order is fixed). */
@@ -82,7 +85,9 @@ export function archmageBuild(sim: Sim, info: ArchmageInfo = {}): void {
   }
   sim.syncFields();
 
-  const counter = info.foeSchool !== undefined ? elementThatBeats(info.foeSchool) : pl.starting;
+  const core = info.core ?? (info.foeSchool !== undefined ? elementThatBeats(info.foeSchool) : pl.starting);
+  const antiAir = info.antiAir ?? Element.Sonic;
+  const detector = info.detector ?? Element.Light;
   const place = (e: Element, tier: Tier, kind: NodeKind = NodeKind.Turret): boolean => {
     if (!pl.attuned[e] && !sim.attune(e)) return false;
     const cell = freeTowerCell(sim);
@@ -94,22 +99,22 @@ export function archmageBuild(sim: Sim, info: ArchmageInfo = {}): void {
   const ensure = (e: Element, n: number, tier: Tier): void => { let g = 0; while (turrets(e) < n && g++ < 14) if (!place(e, tier)) break; };
 
   const aaTier = Math.min(tierCap, Tier.T2) as Tier;
-  // 2. DPS core FIRST — the counter school, guaranteed, so coverage never starves damage.
-  ensure(counter, 3, tierCap);
-  // 3. Coverage that can't be exploited — anti-air (Sonic also hits ground), then detection.
-  if (info.expectAir) ensure(Element.Sonic, Math.round(2 + 2 * stage), aaTier); //     up to 4
-  if (info.expectStealth) ensure(Element.Light, Math.round(1 + stage), Tier.T2); //    up to 2
-  // 4. Synergy — a slow Emitter over the killbox: everything crawls under sustained fire.
+  // 2. DPS core FIRST — guaranteed, so coverage never starves damage.
+  ensure(core, 3, tierCap);
+  // 3. Coverage that can't be exploited — anti-air (also hits ground), then detection.
+  if (info.expectAir) ensure(antiAir, Math.round(2 + 2 * stage), aaTier); //     up to 4
+  if (info.expectStealth) ensure(detector, Math.round(1 + stage), Tier.T2); //   up to 2
+  // 4. Synergy — a slow Hex over the killbox: everything crawls under sustained fire.
   if (stage > 0.4 && pl.currency > 30) place(Element.Ice, Tier.T1, NodeKind.Active);
   // 5. Deepen the DPS core to the budget's ceiling.
-  ensure(counter, 6, tierCap);
-  // 6. Synergy — a Pylon amping the turret cluster.
-  if (stage > 0.5 && pl.currency > 20) place(counter, tierCap, NodeKind.Structure);
-  // 7. Synergy — a vulnerable Emitter for extra amp once well-developed.
+  ensure(core, 6, tierCap);
+  // 6. Synergy — a Boon amping the turret cluster.
+  if (stage > 0.5 && pl.currency > 20) place(core, tierCap, NodeKind.Structure);
+  // 7. Synergy — a vulnerable Hex for extra amp once well-developed.
   if (stage > 0.7 && pl.currency > 30) place(Element.Fire, Tier.T1, NodeKind.Active);
-  // 8. Spend the rest on counter-school coverage until broke.
+  // 8. Spend the rest on core-school coverage until broke.
   let g = 0;
-  while (pl.currency > 20 && g++ < 60) if (!place(counter, tierCap)) break;
+  while (pl.currency > 20 && g++ < 60) if (!place(core, tierCap)) break;
 
   sim.syncFields();
 }
@@ -131,6 +136,39 @@ export function sampleArchmageBoard(rng: Rng, cfg: Config): Sim {
     expectAir: chance(0.3 + 0.45 * stage),
     expectStealth: chance(0.2 + 0.45 * stage),
     stage,
+  });
+  return sim;
+}
+
+/** The wheel (each element beats the next; Fire wraps to Sonic). Light/Dark are off-wheel. */
+const WHEEL = [Element.Sonic, Element.Earth, Element.Zap, Element.Ice, Element.Fire];
+function wheelNeighbors(e: Element): Element[] {
+  const i = WHEEL.indexOf(e);
+  return i < 0 ? [] : [WHEEL[(i + 4) % 5], WHEEL[(i + 1) % 5]];
+}
+
+/**
+ * A "meta" optimal build (the shape real strong play converges to): an ANTI-AIR wheel school
+ * (Sonic or Zap) + one of its wheel NEIGHBOURS (matchup breadth) + a UTILITY school (Light or
+ * Dark, for detection/purge/harvest). Randomising the anti-air, the neighbour, the utility, the
+ * DPS core, and the stage spans ~a dozen distinct coverage arcs — so the board's WEAK SEAM (the
+ * teacher's best-attack) varies widely, which is exactly what the distribution was missing
+ * (it kept collapsing onto one answer). These stay strong/principled, just diverse.
+ */
+export function sampleMetaBoard(rng: Rng, cfg: Config): Sim {
+  const antiAir = rng.below(2) === 0 ? Element.Sonic : Element.Zap;
+  const nbrs = wheelNeighbors(antiAir);
+  const neighbor = nbrs[rng.below(nbrs.length)];
+  const detector = rng.below(2) === 0 ? Element.Light : Element.Dark;
+  const core = rng.below(3) === 0 ? antiAir : neighbor; // usually the neighbour, sometimes the anti-air
+  const budget = 300 + rng.below(900);
+  const stage = Math.min(1, budget / 1000);
+  const chance = (p: number) => rng.below(1000) / 1000 < p;
+  const sim = Sim.create(cfg, antiAir); // start attuned to the anti-air school
+  archmageBuild(sim, {
+    budget, core, antiAir, detector, stage,
+    expectAir: true, //                                    the archetype always carries anti-air
+    expectStealth: chance(0.35 + 0.5 * stage), //          detection coverage varies → varied stealth gaps
   });
   return sim;
 }

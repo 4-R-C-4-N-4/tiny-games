@@ -16,7 +16,7 @@ import { Rng } from '../src/fx.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 import { featurize, N_FEATURES, N_ACTIONS, argmax, forward, type Weights } from '../src/model.ts';
 import { adaptiveLeakSurface, sampleBoard, sampleInducedBoard } from '../src/teacher.ts';
-import { sampleArchmageBoard } from '../src/archmage.ts';
+import { sampleArchmageBoard, sampleMetaBoard } from '../src/archmage.ts';
 import { restoreBoard, type BoardSnapshot } from '../src/board-io.ts';
 import type { Sim } from '../src/sim.ts';
 
@@ -38,7 +38,8 @@ function loadHumanBoards(): Sim[] {
   return boards;
 }
 const N_TRAIN = 1600;
-const ARCHMAGE_FRAC = 0.5; // fraction of training boards drawn from the best-practice Archmage
+const META_FRAC = 0.45; //     diverse "meta" optimal builds (anti-air + wheel-neighbour + Light/Dark)
+const ARCHMAGE_FRAC = 0.25; // best-practice Archmage (counter-a-random-foe walls)
 const N_TEST = 350;
 const H = 64;
 const EPOCHS = 80;
@@ -91,11 +92,13 @@ function makeData(n: number, useDagger: boolean, prepend: Sim[] = []): { X: numb
   let guard = 0, next = 200;
   while (X.length < n && guard++ < n * 5) {
     const r = rng.below(1000) / 1000;
-    const sim = r < ARCHMAGE_FRAC
-      ? sampleArchmageBoard(rng, DEFAULT_CONFIG)
-      : (useDagger && prior && rng.below(1000) / 1000 < DAGGER_FRAC)
-        ? sampleInducedBoard(rng, DEFAULT_CONFIG, prior!)
-        : sampleBoard(rng, DEFAULT_CONFIG);
+    const sim = r < META_FRAC
+      ? sampleMetaBoard(rng, DEFAULT_CONFIG) //                        diverse optimal builds (spans the wheel)
+      : r < META_FRAC + ARCHMAGE_FRAC
+        ? sampleArchmageBoard(rng, DEFAULT_CONFIG) //                  best-practice counter walls
+        : (useDagger && prior && rng.below(1000) / 1000 < DAGGER_FRAC)
+          ? sampleInducedBoard(rng, DEFAULT_CONFIG, prior!) //         DAgger: boards the model walks into
+          : sampleBoard(rng, DEFAULT_CONFIG); //                       random scatter (broad coverage)
     add(sim);
     if (X.length >= next) { process.stdout.write(`  generated ${X.length}/${n} boards\n`); next += 200; }
   }
