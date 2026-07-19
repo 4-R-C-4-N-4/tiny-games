@@ -88,7 +88,7 @@ export const TRAIT_COUNTER: Record<Trait, string> = {
   [Trait.Tank]: 'immense vigour — needs sustained fire or a killbox of wards.',
   [Trait.Runner]: 'very fast — slow it (~ Ice) or line the lane with wards.',
   [Trait.Flier]: 'flies over walls — ONLY anti-air wards (↑ Sonic/Zap) can touch it.',
-  [Trait.Shade]: 'invisible to wards until you cast Reveal (👁) or field detection (◉ Light).',
+  [Trait.Shade]: 'unseen until a detector reveals it — a ◉ Light or Dark ward, a Light Hex field, or the Reveal (👁) tap.',
   [Trait.Shielded]: 'a ward soaks its first few hits — high per-hit damage punches through.',
   [Trait.Mender]: 'heals nearby summons — focus it down first, or the wave never dies.',
   [Trait.Breaker]: 'smashes your walls to breach a shortcut — kill it before it opens a lane.',

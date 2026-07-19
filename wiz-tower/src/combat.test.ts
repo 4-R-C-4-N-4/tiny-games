@@ -88,6 +88,13 @@ describe('trait gates: flier needs anti-air, shade needs detection', () => {
     seer.spawnGroup(3, Element.Dark, Trait.Shade, 1);
     runUntil(seer, (s) => s.liveMobs().length === 0);
     expect(seer.coreHp()).toBe(fx(100));
+
+    // Umbra has second sight too — a Dark ward sees the Void's own Wraiths (no Light needed).
+    const umbra = Sim.create(cfg, Element.Dark);
+    umbra.buildTower({ x: 3, y: 5 }, Element.Dark, Tier.T2, NodeKind.Turret);
+    umbra.spawnGroup(3, Element.Fire, Trait.Shade, 1);
+    runUntil(umbra, (s) => s.liveMobs().length === 0);
+    expect(umbra.coreHp()).toBe(fx(100));
   });
 });
 

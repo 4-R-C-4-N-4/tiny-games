@@ -132,7 +132,8 @@ export function towerStats(element: Element, tier: Tier, kind: NodeKind): TowerS
   const flags: TowerFlags = {
     // §3.3: Sonic/Zap style nodes hit fliers; Light reveals (detection); Fire/Zap splash; Ice slows.
     antiAir: element === Element.Sonic || element === Element.Zap,
-    detection: element === Element.Light,
+    detection: element === Element.Light || element === Element.Dark, // Radiance reveals; Umbra sees in the dark
+
     splash: element === Element.Fire ? fxRatio(1, 2) : element === Element.Zap ? fxRatio(1, 3) : 0,
     slow: element === Element.Ice ? fxRatio(1, 2) : 0,
     // Resonance shatters wards & hushes healers; Umbra harvests power from its own kills.
