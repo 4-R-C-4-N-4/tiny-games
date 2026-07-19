@@ -1,4 +1,4 @@
-name: Deploy wiz-tower to Pages
+name: Deploy games to Pages
 
 on:
   push:
@@ -19,8 +19,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -28,7 +28,8 @@ jobs:
 
       # ── Build each game into _site/<game>/ ─────────────────────────────
       # Every game deploys side-by-side under its own path, so they never
-      # collide. To add a game: copy this 4-step block, change the dir name.
+      # collide. To add a game: copy this block, change the dir name, and give
+      # the game a game.json (name/rune/tagline/note) — it feeds games.json.
       # `single` emits dist/<game>.html (self-contained) + dist/index.html (PWA).
       - run: npm ci
         working-directory: wiz-tower
@@ -36,10 +37,25 @@ jobs:
         working-directory: wiz-tower
       - run: npm run single
         working-directory: wiz-tower
-      - run: mkdir -p _site/wiz-tower && cp -r wiz-tower/dist/. _site/wiz-tower/
+      - run: mkdir -p _site/wiz-tower && cp -r wiz-tower/dist/. _site/wiz-tower/ && cp wiz-tower/game.json _site/wiz-tower/game.json
       # ───────────────────────────────────────────────────────────────────
 
-      # Auto-generated landing page that lists whatever games are in _site/.
+      # games.json — machine-readable manifest built from each game's game.json,
+      # so consumers (e.g. the ARCANA site) render the game list with zero edits.
+      - name: Games manifest
+        run: |
+          : > /tmp/games.ndjson
+          for meta in _site/*/game.json; do
+            [ -f "$meta" ] || continue
+            slug=$(basename "$(dirname "$meta")")
+            jq -c --arg slug "$slug" \
+              '{slug:$slug, file:(.file // ($slug+".html")), name, rune, tagline, note}' \
+              "$meta" >> /tmp/games.ndjson
+          done
+          jq -s '.' /tmp/games.ndjson > _site/games.json
+          cat _site/games.json
+
+      # Auto-generated landing page listing whatever games are in _site/.
       - name: Games index
         run: |
           exec > _site/index.html
@@ -52,7 +68,7 @@ jobs:
             printf '<p><a href="%s/" style="color:#c4a35a;font-size:1.3rem;text-decoration:none">%s &rsaquo;</a></p>\n' "$g" "$g"; done
           echo '<p><a href="https://github.com/4-R-C-4-N-4/tiny-games" style="color:#6d6857">source on GitHub</a></p></main>'
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
@@ -64,4 +80,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
