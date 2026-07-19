@@ -588,6 +588,8 @@ export class Sim {
     if (vuln !== FX_ONE) dmg = fxMul(dmg, vuln);
     const ward = this.mobWard(m.pos); //     Warden aura soaks a fraction of it
     if (ward > 0) dmg = fxMul(dmg, FX_ONE - ward);
+    // Geomancy's nemesis: Earth wards shatter Breakers before they can breach a wall.
+    if (t.flags.breakerBane > 0 && m.trait === Trait.Breaker) dmg = fxMul(dmg, FX_ONE + t.flags.breakerBane);
     const hpBefore = m.hp;
     const applied = dmg > hpBefore ? hpBefore : dmg;
     m.hp -= dmg;

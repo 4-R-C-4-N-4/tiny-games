@@ -54,6 +54,21 @@ describe('Earth (Geomancy) — wall channeling', () => {
   });
 });
 
+describe('Earth (Geomancy) — Breaker bane', () => {
+  it('an Earth ward shatters a Breaker far faster than a vanilla ward', () => {
+    const earth = Sim.create(cfg, Element.Earth);
+    earth.buildTower({ x: 3, y: 1 }, Element.Earth, Tier.T2, NodeKind.Turret); // no adjacent walls → isolates the Breaker bane
+    earth.spawnGroup(3, Element.Light, Trait.Breaker, 1); // Light: neutral typing to both
+
+    const plain = Sim.create(cfg, Element.Sonic); // Sonic T2: neutral to Light, and its perks (anti-air/disrupt) don't touch a ground Breaker
+    plain.buildTower({ x: 3, y: 1 }, Element.Sonic, Tier.T2, NodeKind.Turret);
+    plain.spawnGroup(3, Element.Light, Trait.Breaker, 1);
+
+    stepN(earth, 20); stepN(plain, 20);
+    expect(hpOf(earth, Trait.Breaker)).toBeLessThan(hpOf(plain, Trait.Breaker));
+  });
+});
+
 describe('Umbra (Dark) — kill ramp', () => {
   it('a Dark ward accrues kills', () => {
     const s = Sim.create(cfg, Element.Dark);

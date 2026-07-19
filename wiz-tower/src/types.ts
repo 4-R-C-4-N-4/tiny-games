@@ -105,6 +105,7 @@ export interface TowerFlags {
   burn: Fx; //        Fire (Pyromancy): fraction of dps applied as a lingering burn DoT (0 = none)
   wallAmp: Fx; //     Earth (Geomancy): damage bonus per adjacent wall (0 = none)
   ramp: Fx; //        Dark (Umbra): permanent damage bonus per kill this tower lands (0 = none)
+  breakerBane: Fx; // Earth (Geomancy): bonus damage vs Breakers — shatters them before they breach (0 = none)
 }
 
 /** A support-role tower's persistent field (Pylon / Emitter). Turrets have none. */

@@ -91,7 +91,7 @@ export const TRAIT_COUNTER: Record<Trait, string> = {
   [Trait.Shade]: 'unseen until a detector reveals it — a ◉ Light or Dark ward, a Light Hex field, or the Reveal (👁) tap.',
   [Trait.Shielded]: 'a ward soaks its first few hits — high per-hit damage punches through.',
   [Trait.Mender]: 'heals nearby summons — focus it down first, or the wave never dies.',
-  [Trait.Breaker]: 'smashes your walls to breach a shortcut — kill it before it opens a lane.',
+  [Trait.Breaker]: 'smashes your walls to breach a shortcut — Earth (Geomancy) wards shatter them; else kill it before it opens a lane.',
   [Trait.Warden]: 'shields the summons around it (they take less damage) — kill the Aegis and the escort folds.',
   [Trait.Totem]: 'hastes the summons around it — kill the Herald to slow the push back down.',
 };

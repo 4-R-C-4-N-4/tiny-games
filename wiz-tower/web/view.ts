@@ -335,7 +335,7 @@ export class GameView {
       if (flags.disrupt) caps.push('<i class="wt-cap dis" title="disrupt — shatters shields & hushes menders">⊘</i>');
       if (flags.harvest) caps.push('<i class="wt-cap har" title="harvest — kills pay a bonus bounty">◈</i>');
       if (flags.burn > 0) caps.push('<i class="wt-cap burn" title="burn — a lingering fire DoT that keeps damaging after the shot">🜂</i>');
-      if (flags.wallAmp > 0) caps.push('<i class="wt-cap wall" title="wall-channeling — +30% damage per adjacent wall (build walls around it)">▦</i>');
+      if (flags.wallAmp > 0) caps.push('<i class="wt-cap wall" title="wall-channeling — +30% damage per adjacent wall; and shatters Breakers (+60%)">▦</i>');
       if (flags.ramp > 0) caps.push('<i class="wt-cap ramp" title="ruin — this ward gains damage with every kill it lands">⇑</i>');
       roleHint = `${ELEMENT_NAMES[el]} ward — ${ELEMENT_ARCANA[el]}`;
     } else if (this.role === NodeKind.Structure) {

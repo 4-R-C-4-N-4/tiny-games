@@ -144,6 +144,7 @@ export function towerStats(element: Element, tier: Tier, kind: NodeKind): TowerS
     burn: element === Element.Fire ? fxRatio(1, 2) : 0, //     50% of dps as a 2s burn
     wallAmp: element === Element.Earth ? fxRatio(3, 10) : 0, // +30% damage per adjacent wall
     ramp: element === Element.Dark ? fxRatio(6, 100) : 0, //   +6% damage per kill landed
+    breakerBane: element === Element.Earth ? fxRatio(3, 5) : 0, // +60% damage vs Breakers (Geomancy's nemesis)
   };
   const priority = flags.antiAir ? TargetPriority.Flying : TargetPriority.First;
   return { dps, range, flags, priority, aura: towerAura(element, tier, kind) };
