@@ -1,0 +1,21 @@
+{
+  "name": "lexomancy",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Word-spell roguelike — deterministic scoring engine shared by trainer (Node) and browser.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "preview": "vite preview --port 5299 --strictPort"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
+  }
+}

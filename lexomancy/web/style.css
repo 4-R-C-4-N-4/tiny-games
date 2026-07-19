@@ -1,0 +1,280 @@
+:root {
+  --bg: #0d0a14;
+  --panel: #1a1426;
+  --panel-edge: #322a4a;
+  --ink: #e8e2f4;
+  --ink-dim: #8d84a8;
+  --damage: #e5484d;
+  --hex: #9d5ce5;
+  --ward: #4d9de5;
+  --heal: #4dc47f;
+  --mana: #38b6c9;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Courier New', ui-monospace, monospace;
+  display: flex;
+  justify-content: center;
+  min-height: 100dvh;
+}
+
+/* Portrait-proportioned stage on any screen: mobile is the native layout,
+   desktop gets the same column centered on the page. */
+#stage {
+  width: min(100vw, 62dvh);
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #141021 0%, var(--bg) 100%);
+  border-left: 1px solid var(--panel-edge);
+  border-right: 1px solid var(--panel-edge);
+}
+
+#floor-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--panel-edge);
+  font-size: 0.75rem;
+}
+
+#floor-name {
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#floor-rule {
+  color: var(--ink-dim);
+  font-style: italic;
+}
+
+#battle {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1rem 0.75rem;
+  min-height: 0;
+}
+
+.combatant {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+#enemy {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+#player {
+  align-self: flex-start;
+}
+
+.sprite {
+  font-size: 3.5rem;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6));
+}
+
+.nameplate {
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  min-width: 11rem;
+}
+
+.nameplate .name {
+  display: block;
+  font-size: 0.8rem;
+  margin-bottom: 0.3rem;
+  letter-spacing: 0.04em;
+}
+
+.hp-track,
+.mana-track {
+  height: 0.5rem;
+  background: #000;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 0.2rem;
+}
+
+.hp-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #3fbf5a, #7de55a);
+  transition: width 0.4s ease;
+}
+
+.mana-track {
+  height: 0.3rem;
+}
+
+.mana-fill {
+  height: 100%;
+  width: 100%;
+  background: var(--mana);
+  transition: width 0.4s ease;
+}
+
+.nameplate .status {
+  display: block;
+  font-size: 0.6rem;
+  color: var(--ink-dim);
+  margin-top: 0.25rem;
+  min-height: 0.8em;
+}
+
+#battle {
+  position: relative;
+}
+
+#overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(13, 10, 20, 0.88);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  text-align: center;
+  padding: 1rem;
+}
+
+#overlay[hidden] {
+  display: none;
+}
+
+#overlay-text {
+  font-size: 1rem;
+  line-height: 1.6;
+  max-width: 18rem;
+}
+
+#restart-btn {
+  background: var(--panel-edge);
+  border: 1px solid #4a3f6e;
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  padding: 0.5rem 1.2rem;
+  cursor: pointer;
+}
+
+/* Compose panel sits at the bottom so it rides directly above the mobile keyboard. */
+#compose {
+  border-top: 1px solid var(--panel-edge);
+  background: var(--panel);
+  padding: 0.6rem 0.75rem calc(0.6rem + env(safe-area-inset-bottom));
+}
+
+#preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.channel {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.channel .label {
+  font-size: 0.6rem;
+  width: 2.2rem;
+  color: var(--ink-dim);
+  letter-spacing: 0.1em;
+}
+
+.channel .track {
+  flex: 1;
+  height: 0.55rem;
+  background: #000;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.channel .fill {
+  height: 100%;
+  width: 0%;
+  transition: width 0.12s ease-out;
+}
+
+.channel[data-channel='damage'] .fill { background: var(--damage); }
+.channel[data-channel='hex'] .fill { background: var(--hex); }
+.channel[data-channel='ward'] .fill { background: var(--ward); }
+.channel[data-channel='heal'] .fill { background: var(--heal); }
+
+#preview-meta {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  color: var(--ink-dim);
+}
+
+#cast-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+#word-input {
+  flex: 1;
+  background: #000;
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.05rem;
+  padding: 0.55rem 0.7rem;
+  outline: none;
+}
+
+#word-input:focus {
+  border-color: var(--mana);
+}
+
+#cast-btn {
+  background: var(--panel-edge);
+  border: 1px solid #4a3f6e;
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0 1.1rem;
+  cursor: pointer;
+  letter-spacing: 0.06em;
+}
+
+#cast-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+#cast-log {
+  margin-top: 0.45rem;
+  font-size: 0.7rem;
+  color: var(--ink-dim);
+  min-height: 2.1em;
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+#cast-log .latest {
+  color: var(--ink);
+}
