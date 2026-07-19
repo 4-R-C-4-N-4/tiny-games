@@ -1,15 +1,19 @@
+import { evaluateWord, fatigueRecency, type FloorSpec, type FloorWordEffect } from './floors.ts';
+import { NEUTRAL_STATS, type Stats } from './stats.ts';
 import type { Scorer, SpellProfile } from './types.ts';
 
 // The duel loop: strict alternation, headless, deterministic (seeded RNG for
 // enemy policy). Everything the UI shows comes out of the DuelEvent stream.
+
+export type Policy = 'random' | 'counter' | 'exploit' | 'mirror';
 
 export interface OpponentDef {
   name: string;
   sprite: string;
   maxHp: number;
   words: string[];
-  /** 'random' is the lower-floor tier; smarter policies come with the spire. */
-  policy: 'random';
+  /** The difficulty ladder is policy intelligence, not stat inflation. */
+  policy: Policy;
 }
 
 export interface HexState {
@@ -42,12 +46,20 @@ export interface CastEvent {
   healed: number;
   wardGained: number;
   hexApplied: number;
+  /** Offense redirected onto the caster by a taboo floor. */
+  tabooed: boolean;
 }
 
 export interface DrainEvent {
   kind: 'drain';
   actor: string;
   drain: number;
+}
+
+export interface EchoEvent {
+  kind: 'echo';
+  actor: string;
+  damage: number;
 }
 
 export interface FalterEvent {
@@ -60,7 +72,7 @@ export interface DefeatEvent {
   loser: string;
 }
 
-export type DuelEvent = CastEvent | DrainEvent | FalterEvent | DefeatEvent;
+export type DuelEvent = CastEvent | DrainEvent | EchoEvent | FalterEvent | DefeatEvent;
 
 export interface CastPreview {
   profile: SpellProfile;
@@ -68,19 +80,36 @@ export interface CastPreview {
   effectiveness: number;
   effectivePower: number;
   affordable: boolean;
+  /** What this floor does to the word — the scrying glass never lies. */
+  floor: FloorWordEffect;
+  /** Mana cost after resonance discount. */
+  cost: number;
 }
 
 const FATIGUE_WINDOW = 4;
-const FATIGUE_RECENCY = [1, 0.75, 0.5, 0.25];
 const FATIGUE_DEPTH = 0.7; // max power lost to a perfect-similarity repeat
 const MIN_EFFECTIVENESS = 0.15;
 const HEX_WEAKEN_CAP = 0.5;
 const HEX_DRAIN_RATE = 0.25;
 const HEX_TURNS = 3;
 const MANA_REGEN = 4;
+const ECHO_FACTOR = 0.5;
 
 export const PLAYER_MAX_HP = 60;
 export const PLAYER_MAX_MANA = 20;
+
+export interface DuelOptions {
+  stats?: Stats;
+  floor?: FloorSpec;
+  playerHp?: number;
+  playerMaxHp?: number;
+  playerMana?: number;
+  playerMaxMana?: number;
+  /** "The spire studies you": upper bosses open pre-warded. */
+  enemyWard?: number;
+  /** Pact self-hex carried into the floor. */
+  playerHex?: HexState;
+}
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -96,32 +125,60 @@ function makeCombatant(name: string, maxHp: number, maxMana: number): Combatant 
   return { name, hp: maxHp, maxHp, mana: maxMana, maxMana, ward: 0, hex: null, recent: [] };
 }
 
+/** Counter policy: answer the player's dominant channel orthogonally. */
+const COUNTER: Record<string, string> = {
+  damage: 'ward', // they hit — wall up
+  hex: 'heal', //    they curse — cleanse
+  ward: 'hex', //    they turtle — hex slips through wards
+  heal: 'damage', // they stall — pressure
+};
+
 export class Duel {
   readonly player: Combatant;
   readonly enemy: Combatant;
+  readonly stats: Stats;
+  readonly floor: FloorSpec | null;
   winner: 'player' | 'enemy' | null = null;
   private readonly rng: () => number;
+  private readonly recency: number[];
 
   constructor(
     private readonly scorer: Scorer,
     readonly opponent: OpponentDef,
     seed = 1,
+    opts: DuelOptions = {},
   ) {
-    this.player = makeCombatant('player', PLAYER_MAX_HP, PLAYER_MAX_MANA);
+    const maxHp = opts.playerMaxHp ?? PLAYER_MAX_HP;
+    const maxMana = opts.playerMaxMana ?? PLAYER_MAX_MANA;
+    this.player = makeCombatant('player', maxHp, maxMana);
+    this.player.hp = Math.min(maxHp, opts.playerHp ?? maxHp);
+    this.player.mana = Math.min(maxMana, opts.playerMana ?? maxMana);
+    if (opts.playerHex) this.player.hex = { ...opts.playerHex };
     this.enemy = makeCombatant(opponent.name, opponent.maxHp, PLAYER_MAX_MANA);
+    this.enemy.ward = opts.enemyWard ?? 0;
+    this.stats = opts.stats ?? NEUTRAL_STATS;
+    this.floor = opts.floor ?? null;
     this.rng = mulberry32(seed);
+    this.recency = fatigueRecency(this.floor);
   }
 
-  /** Fatigue factor for a prospective cast: 1 = fresh, MIN_EFFECTIVENESS = fizzle. */
+  /** Stat multiplier helper: 1.0 at the neutral 0.5, ±25% at the extremes. */
+  private statMul(value: number): number {
+    return 0.75 + 0.5 * value;
+  }
+
   private fatigue(actor: Combatant, word: string): number {
     let worst = 0;
     actor.recent.slice(0, FATIGUE_WINDOW).forEach((prev, age) => {
       // Squared so near-synonyms sting while loosely-related words survive.
       // (similarity() is already calibrated: synonyms ≈ 0.7-1, unrelated ≈ 0.)
       const sim = this.scorer.similarity(word, prev);
-      worst = Math.max(worst, sim * sim * FATIGUE_RECENCY[age]);
+      worst = Math.max(worst, sim * sim * this.recency[age]);
     });
-    return Math.max(MIN_EFFECTIVENESS, 1 - FATIGUE_DEPTH * worst);
+    // Grace hastens fatigue recovery (player only).
+    const depth =
+      actor === this.player ? FATIGUE_DEPTH * (1 - 0.4 * (this.stats.grace - 0.5)) : FATIGUE_DEPTH;
+    return Math.max(MIN_EFFECTIVENESS, 1 - depth * worst);
   }
 
   private hexWeakening(actor: Combatant): number {
@@ -129,16 +186,27 @@ export class Duel {
     return 1 - Math.min(HEX_WEAKEN_CAP, actor.hex.potency / 30);
   }
 
+  /** Resonance makes rare words cheaper (player only). */
+  private manaCost(actor: Combatant, profile: SpellProfile): number {
+    if (actor !== this.player) return profile.cost;
+    const discount = 1 - 0.3 * this.stats.resonance * profile.rarity;
+    return Math.max(1, Math.round(profile.cost * discount));
+  }
+
   /** The scrying glass: exactly what this word would do if cast this instant. */
   preview(word: string): CastPreview | null {
     if (this.winner || !this.scorer.knows(word)) return null;
     const profile = this.scorer.score(word);
     const effectiveness = this.fatigue(this.player, word) * this.hexWeakening(this.player);
+    const floor = evaluateWord(this.scorer, this.floor, word);
+    const cost = this.manaCost(this.player, profile);
     return {
       profile,
       effectiveness,
-      effectivePower: Math.round(profile.power * effectiveness),
-      affordable: profile.cost <= this.player.mana,
+      effectivePower: Math.round(profile.power * effectiveness * floor.amp),
+      affordable: cost <= this.player.mana,
+      floor,
+      cost,
     };
   }
 
@@ -153,31 +221,48 @@ export class Duel {
     if (actor.hex.turns <= 0) actor.hex = null;
   }
 
-  private resolveCast(attacker: Combatant, defender: Combatant, word: string): CastEvent {
+  private resolveCast(
+    attacker: Combatant,
+    defender: Combatant,
+    word: string,
+    events: DuelEvent[],
+  ): CastEvent {
     const profile = this.scorer.score(word);
+    const isPlayer = attacker === this.player;
+    const floor = evaluateWord(this.scorer, this.floor, word);
     const effectiveness = this.fatigue(attacker, word) * this.hexWeakening(attacker);
-    const eff = profile.power * effectiveness;
+    const eff = profile.power * effectiveness * floor.amp;
+    const chAmp = (c: 'damage' | 'hex' | 'ward' | 'heal') => floor.channelAmp[c] ?? 1;
 
-    // Full mana cost even when fatigued — fizzling wastes the turn's budget.
-    attacker.mana -= profile.cost;
+    attacker.mana -= this.manaCost(attacker, profile);
 
-    const rawDamage = Math.round(eff * profile.mix.damage);
-    const absorbed = Math.min(defender.ward, rawDamage);
+    // Taboo floors: offense turns on the caster; utility is halved.
+    const offenseTarget = floor.tabooed ? attacker : defender;
+    const utilityScale = floor.tabooed ? 0.5 : 1;
+
+    const dmgMul = isPlayer ? this.statMul(this.stats.ferocity) : 1;
+    const rawDamage = Math.round(eff * profile.mix.damage * chAmp('damage') * dmgMul);
+    const absorbed = Math.min(offenseTarget.ward, rawDamage);
     const damage = rawDamage - absorbed;
-    defender.ward -= absorbed;
-    defender.hp = Math.max(0, defender.hp - damage);
+    offenseTarget.ward -= absorbed;
+    offenseTarget.hp = Math.max(0, offenseTarget.hp - damage);
 
-    const hexApplied = Math.round(eff * profile.mix.hex);
+    const hexMul = isPlayer ? this.statMul(this.stats.guile) : 1;
+    // Guile also resists incoming hexes.
+    const hexResist =
+      offenseTarget === this.player ? 1.25 - 0.5 * this.stats.guile : 1;
+    const hexApplied = Math.round(eff * profile.mix.hex * chAmp('hex') * hexMul * hexResist);
     if (hexApplied > 0) {
-      defender.hex = {
-        potency: (defender.hex?.potency ?? 0) + hexApplied,
+      offenseTarget.hex = {
+        potency: (offenseTarget.hex?.potency ?? 0) + hexApplied,
         turns: HEX_TURNS,
       };
     }
 
+    const healMul = isPlayer ? this.statMul(this.stats.grace) : 1;
     const healed = Math.min(
       attacker.maxHp - attacker.hp,
-      Math.round(eff * profile.mix.heal),
+      Math.round(eff * profile.mix.heal * chAmp('heal') * healMul * utilityScale),
     );
     attacker.hp += healed;
     // Heal cleanses: potency scrubbed by half the heal magnitude.
@@ -186,7 +271,8 @@ export class Duel {
       if (attacker.hex.potency === 0) attacker.hex = null;
     }
 
-    const wardGained = Math.round(eff * profile.mix.ward);
+    const wardMul = isPlayer ? this.statMul(this.stats.stone) : 1;
+    const wardGained = Math.round(eff * profile.mix.ward * chAmp('ward') * wardMul * utilityScale);
     attacker.ward += wardGained;
 
     attacker.recent.unshift(profile.word);
@@ -195,18 +281,31 @@ export class Duel {
     // End-of-action regen keeps strict alternation simple: cast, then tick back.
     attacker.mana = Math.min(attacker.maxMana, attacker.mana + MANA_REGEN);
 
-    return {
+    const event: CastEvent = {
       kind: 'cast',
       actor: attacker.name,
       word: profile.word,
       effectiveness,
-      cost: profile.cost,
+      cost: this.manaCost(attacker, profile),
       damage,
       absorbed,
       healed,
       wardGained,
       hexApplied,
+      tabooed: floor.tabooed,
     };
+    events.push(event);
+
+    // Echo floors: your own cast returns at half force (skip taboo backfires —
+    // the word already struck its speaker once).
+    if (this.floor?.archetype === 'echo' && !floor.tabooed && damage > 0) {
+      const echo = Math.round(damage * ECHO_FACTOR);
+      if (echo > 0) {
+        attacker.hp = Math.max(0, attacker.hp - echo);
+        events.push({ kind: 'echo', actor: attacker.name, damage: echo });
+      }
+    }
+    return event;
   }
 
   private checkDefeat(events: DuelEvent[]): void {
@@ -223,12 +322,12 @@ export class Duel {
   /** Player's half of the round. Returns null if the cast is illegal right now. */
   castPlayer(word: string): DuelEvent[] | null {
     if (this.winner || !this.scorer.knows(word)) return null;
-    if (this.scorer.score(word).cost > this.player.mana) return null;
+    if (this.manaCost(this.player, this.scorer.score(word)) > this.player.mana) return null;
     const events: DuelEvent[] = [];
     this.tickHex(this.player, events);
     this.checkDefeat(events);
     if (this.winner) return events;
-    events.push(this.resolveCast(this.player, this.enemy, word));
+    this.resolveCast(this.player, this.enemy, word, events);
     this.checkDefeat(events);
     return events;
   }
@@ -248,16 +347,68 @@ export class Duel {
       events.push({ kind: 'falter', actor: this.enemy.name });
       return events;
     }
-    events.push(this.resolveCast(this.enemy, this.player, word));
+    this.resolveCast(this.enemy, this.player, word, events);
     this.checkDefeat(events);
     return events;
   }
 
-  private pickEnemyWord(): string | null {
-    const affordable = this.opponent.words.filter(
+  private affordableWords(): string[] {
+    return this.opponent.words.filter(
       (w) => this.scorer.knows(w) && this.scorer.score(w).cost <= this.enemy.mana,
     );
+  }
+
+  private pickEnemyWord(): string | null {
+    const affordable = this.affordableWords();
     if (affordable.length === 0) return null;
-    return affordable[Math.floor(this.rng() * affordable.length)];
+    switch (this.opponent.policy) {
+      case 'random':
+        return affordable[Math.floor(this.rng() * affordable.length)];
+      case 'counter':
+        return this.pickCounter(affordable);
+      case 'exploit':
+      case 'mirror':
+        return this.pickExploit(affordable);
+    }
+  }
+
+  /** Mid-floor tier: answer the player's last dominant channel orthogonally. */
+  private pickCounter(affordable: string[]): string {
+    const last = this.player.recent[0];
+    const want = last ? COUNTER[this.scorer.score(last).dominant] : 'damage';
+    const matching = affordable.filter((w) => this.scorer.score(w).dominant === want);
+    const pool = matching.length > 0 ? matching : affordable;
+    return this.bestByPower(pool);
+  }
+
+  /**
+   * Upper-floor tier (and the Mirror): avoid own fatigue, hex through wards,
+   * otherwise spike with the strongest fresh word. Never trips its own taboo.
+   */
+  private pickExploit(affordable: string[]): string {
+    let pool = affordable.filter(
+      (w) => !evaluateWord(this.scorer, this.floor, w).tabooed,
+    );
+    if (pool.length === 0) pool = affordable;
+    const fresh = pool.filter((w) => this.fatigue(this.enemy, w) > 0.75);
+    if (fresh.length > 0) pool = fresh;
+    if (this.player.ward > 6) {
+      const hexes = pool.filter((w) => this.scorer.score(w).dominant === 'hex');
+      if (hexes.length > 0) return this.bestByPower(hexes);
+    }
+    return this.bestByPower(pool);
+  }
+
+  private bestByPower(pool: string[]): string {
+    let best = pool[0];
+    let bestScore = -1;
+    for (const w of pool) {
+      const s = this.scorer.score(w).power * this.fatigue(this.enemy, w);
+      if (s > bestScore) {
+        bestScore = s;
+        best = w;
+      }
+    }
+    return best;
   }
 }

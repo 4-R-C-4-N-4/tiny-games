@@ -83,7 +83,7 @@ def main():
     zipf_u8 = np.clip(np.round(np.asarray(zipfs) * SCORING["zipfScale"]), 0, 255).astype(np.uint8)
 
     anchors = load_anchor_words()
-    anchor_names, anchor_rows = [], []
+    anchor_names, anchor_rows, anchor_scales = [], [], []
     for group in ("stats", "themes"):
         for name, members in anchors[group].items():
             vecs = [q[index[w]].astype(np.float32) / 127.0 for w in members if w in index]
@@ -91,6 +91,15 @@ def main():
             c /= np.linalg.norm(c)
             anchor_names.append(f"{group}:{name}")
             anchor_rows.append(c.astype(np.float32))
+            # Per-anchor scale: mean calibrated affinity of the anchor's own
+            # members. Diffuse anchors (scattered wordsets) read low for
+            # everything; dividing by this evens the playing field.
+            sims = []
+            for v in vecs:
+                cos = float(v @ c / np.linalg.norm(v))
+                sims.append(np.clip((cos - SCORING["simFloor"]) / SCORING["simRange"], 0, 1))
+            # Floor prevents very diffuse anchors from inflating all affinities.
+            anchor_scales.append(round(max(0.55, float(np.mean(sims))), 4))
     anchor_mat = np.stack(anchor_rows)
 
     vocab_bytes = "\n".join(words).encode()
@@ -121,6 +130,7 @@ def main():
         "channels": CHANNELS,
         "scoring": SCORING,
         "anchorNames": anchor_names,
+        "anchorScales": anchor_scales,
         "sections": sections,
     }
     header_bytes = json.dumps(header).encode()

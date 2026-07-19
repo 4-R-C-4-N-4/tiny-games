@@ -113,6 +113,11 @@ export class StubScorer implements Scorer {
     return dot / Math.sqrt(na * nb);
   }
 
+  /** Deterministic hash stand-in — floor/stat systems stay functional offline. */
+  anchorAffinity(word: string, anchor: string): number {
+    return unit(`${normalize(word)}::${anchor}`) * 0.8;
+  }
+
   score(word: string): SpellProfile {
     const w = normalize(word);
     const seed = SEED[w];

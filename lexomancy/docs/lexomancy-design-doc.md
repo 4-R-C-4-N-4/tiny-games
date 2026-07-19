@@ -198,7 +198,7 @@ Generate concept sprites with an image model, then hand-clean in Aseprite (or co
 2. ~~Static page: input box, live 4-bar preview, health bars~~ **DONE**
 3. ~~Duel loop vs. one random-policy enemy~~ **DONE** (the Necromancer)
 4. ~~Fatigue + wards + mana~~ **DONE** — fatigue now runs on true embedding cosine, calibrated (synonyms ≈ 0.7-1, unrelated ≈ 0)
-5. Character draft screen (Self-Naming Rite) — stat anchors already ship in lexicon.bin
-6. Archetype × theme floor generator, Threshold screen, boss policy ladder, The Mirror — theme anchors already ship in lexicon.bin
+5. ~~Character draft screen (Self-Naming Rite)~~ **DONE** — drafted 5-of-12 + free-form flaw; synonym picks collapse via squared mutual similarity; flaw hollows its dominant stat, deepens the rest (scaled by rarity). Stats feed duel multipliers (ferocity→damage, guile→hex both ways, stone→wards, grace→heals+fatigue recovery, resonance→rare-word mana discount).
+6. ~~Archetype × theme floor generator, Threshold screen, boss policy ladder, The Mirror~~ **DONE** — 7 rolled floors + Summit (domain/taboo/drain/echo/leyline × 26 themes, tiered pools, ≥1 taboo), Threshold with practice glass + Pact/Study, policy ladder random→counter→exploit→mirror, pre-wards from history concentration on floors 5+, The Mirror casts from the run history. Hierophant + Storm-Caller join the roster.
 7. Pixel art pass: enemy base sprites + palette-swap system, player back-sprite, battle framing, compose/theater mobile layouts
 8. Juice: channel-coded spell VFX, grimoire UI, True Name generator

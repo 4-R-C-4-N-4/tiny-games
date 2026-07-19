@@ -28,8 +28,9 @@
       "blazing", "brutal", "furious", "merciless", "rabid", "vicious", "untamed"
     ],
     "guile": [
-      "cunning", "veiled", "sly", "subtle", "shadowed", "crafty", "serpentine",
-      "secretive", "devious", "elusive", "wily", "masked", "treacherous", "oblique"
+      "cunning", "sly", "crafty", "devious", "wily", "scheming", "deceitful",
+      "treacherous", "conniving", "shrewd", "calculating", "duplicitous",
+      "secretive", "elusive"
     ],
     "stone": [
       "patient", "unyielding", "steadfast", "enduring", "immovable", "rooted",

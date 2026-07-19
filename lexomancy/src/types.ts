@@ -27,4 +27,9 @@ export interface Scorer {
    * cosine; stubs may approximate.
    */
   similarity(a: string, b: string): number;
+  /**
+   * Affinity in [0,1] of a word to a shipped anchor ("stats:ferocity",
+   * "themes:bone"). Powers the Self-Naming Rite and floor domains/taboos.
+   */
+  anchorAffinity(word: string, anchor: string): number;
 }

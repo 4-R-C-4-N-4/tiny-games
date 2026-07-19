@@ -158,6 +158,158 @@ body {
   display: none;
 }
 
+#rite,
+#threshold {
+  position: absolute;
+  inset: 0;
+  background: rgba(13, 10, 20, 0.96);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.8rem;
+  padding: 1.2rem;
+  overflow-y: auto;
+}
+
+#rite[hidden],
+#threshold[hidden] {
+  display: none;
+}
+
+#rite h2,
+#threshold h2 {
+  font-size: 1.1rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.rite-sub {
+  color: var(--ink-dim);
+  font-size: 0.75rem;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+#th-rule {
+  font-size: 0.85rem;
+  border-left: 3px solid var(--mana);
+  padding-left: 0.6rem;
+}
+
+.th-hint {
+  font-size: 0.65rem;
+  color: var(--ink-dim);
+}
+
+#rite-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.adj-chip {
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 999px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+}
+
+.adj-chip.picked {
+  background: var(--panel-edge);
+  border-color: var(--mana);
+}
+
+.flaw-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--ink-dim);
+}
+
+.flaw-row input {
+  background: #000;
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  padding: 0.4rem 0.6rem;
+}
+
+.rite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.7rem;
+  color: var(--ink-dim);
+}
+
+.rite-actions button {
+  background: var(--panel-edge);
+  border: 1px solid #4a3f6e;
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+}
+
+.rite-actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.rite-actions button.used {
+  opacity: 0.45;
+  border-style: dashed;
+  cursor: default;
+}
+
+#study-report {
+  font-size: 0.7rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  padding: 0.5rem 0.7rem;
+  line-height: 1.6;
+}
+
+/* Floor theming: hue set from THEME_HUES via --floor-hue. */
+#stage.themed {
+  background:
+    linear-gradient(180deg, hsl(var(--floor-hue, 260) 35% 12%) 0%, var(--bg) 70%);
+}
+
+/* Taboo words: the scrying glass warns before you burn yourself. */
+#preview.tabooed .fill {
+  background: var(--damage) !important;
+  opacity: 0.55;
+}
+
+#preview.tabooed .track {
+  outline: 1px dashed var(--damage);
+}
+
+#preview-warn {
+  grid-column: 1 / -1;
+  font-size: 0.65rem;
+  min-height: 0.9em;
+}
+
+#preview-warn.taboo {
+  color: var(--damage);
+}
+
+#preview-warn.amped {
+  color: var(--heal);
+}
+
 #overlay-text {
   font-size: 1rem;
   line-height: 1.6;

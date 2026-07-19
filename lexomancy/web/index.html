@@ -39,7 +39,34 @@
 
         <div id="overlay" hidden>
           <p id="overlay-text"></p>
-          <button id="restart-btn" type="button">Climb again</button>
+          <button id="overlay-btn" type="button">Climb again</button>
+        </div>
+
+        <div id="rite" hidden>
+          <h2>The Self-Naming Rite</h2>
+          <p class="rite-sub">Choose five words that describe you. Choose carefully — synonyms collapse.</p>
+          <div id="rite-choices"></div>
+          <label class="flaw-row">
+            <span>…and one flaw, in your own word:</span>
+            <input id="flaw-input" type="text" maxlength="24" spellcheck="false" placeholder="e.g. reckless" />
+          </label>
+          <div class="rite-actions">
+            <span id="rite-count">0 / 5 chosen</span>
+            <button id="begin-run" type="button" disabled>Speak your name</button>
+          </div>
+        </div>
+
+        <div id="threshold" hidden>
+          <h2 id="th-name"></h2>
+          <p id="th-inscription" class="rite-sub"></p>
+          <p id="th-rule"></p>
+          <p class="th-hint">The compose glass below previews words under this floor’s law.</p>
+          <div id="study-report" hidden></div>
+          <div class="rite-actions">
+            <button id="pact-btn" type="button">Pact: +4 max mana, enter hexed</button>
+            <button id="study-btn" type="button">Study: −5 max HP, read the boss</button>
+            <button id="enter-btn" type="button">Enter</button>
+          </div>
         </div>
       </section>
 
@@ -65,6 +92,7 @@
             <span id="preview-rarity">—</span>
             <span id="preview-cost">—</span>
           </div>
+          <div id="preview-warn"></div>
         </div>
         <form id="cast-form" autocomplete="off">
           <input

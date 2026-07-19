@@ -25,6 +25,7 @@ interface Header {
   channels: string[];
   scoring: ScoringParams;
   anchorNames: string[];
+  anchorScales: number[];
   sections: Record<string, { offset: number; length: number }>;
 }
 
@@ -201,5 +202,27 @@ export class ModelScorer implements Scorer {
     const cos = dot / Math.sqrt(na * nb);
     const p = this.header.scoring;
     return Math.min(1, Math.max(0, (cos - p.simFloor) / p.simRange));
+  }
+
+  /**
+   * Calibrated cosine of a word against a shipped anchor centroid, normalized
+   * by the anchor's own-member mean so diffuse anchors aren't penalized.
+   */
+  anchorAffinity(word: string, anchor: string): number {
+    const i = this.index.get(normalize(word));
+    const c = this.anchors.get(anchor);
+    if (i === undefined || !c) return 0;
+    const v = this.vector(i);
+    let dot = 0;
+    let nv = 0;
+    for (let k = 0; k < v.length; k++) {
+      dot += (v[k] / 127) * c[k];
+      nv += (v[k] / 127) * (v[k] / 127);
+    }
+    const cos = dot / Math.sqrt(nv); // anchors are unit vectors already
+    const p = this.header.scoring;
+    const raw = Math.min(1, Math.max(0, (cos - p.simFloor) / p.simRange));
+    const scale = this.header.anchorScales[this.header.anchorNames.indexOf(anchor)] || 1;
+    return Math.min(1, raw / scale);
   }
 }
