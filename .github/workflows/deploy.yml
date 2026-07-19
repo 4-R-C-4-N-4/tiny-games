@@ -18,24 +18,43 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: wiz-tower
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: wiz-tower/package-lock.json
+          cache-dependency-path: '**/package-lock.json'
+
+      # ── Build each game into _site/<game>/ ─────────────────────────────
+      # Every game deploys side-by-side under its own path, so they never
+      # collide. To add a game: copy this 4-step block, change the dir name.
+      # `single` emits dist/<game>.html (self-contained) + dist/index.html (PWA).
       - run: npm ci
+        working-directory: wiz-tower
       - run: npm run typecheck
-      # `single` runs vite build + inlines everything into dist/wiz-tower.html
-      # (self-contained), alongside the normal dist/index.html PWA build.
+        working-directory: wiz-tower
       - run: npm run single
+        working-directory: wiz-tower
+      - run: mkdir -p _site/wiz-tower && cp -r wiz-tower/dist/. _site/wiz-tower/
+      # ───────────────────────────────────────────────────────────────────
+
+      # Auto-generated landing page that lists whatever games are in _site/.
+      - name: Games index
+        run: |
+          exec > _site/index.html
+          echo '<!doctype html><meta charset="utf-8"><title>tiny-games</title>'
+          echo '<meta name="viewport" content="width=device-width,initial-scale=1">'
+          echo '<body style="font:16px/1.6 system-ui,sans-serif;background:#0a0a0f;color:#e9e3d4;padding:3rem 1.5rem">'
+          echo '<main style="max-width:34rem;margin:auto"><h1 style="font-weight:400">tiny-games</h1>'
+          echo '<p style="color:#a8a08d">Small games, each with a tiny client-side adversary.</p>'
+          for d in _site/*/; do g=$(basename "$d");
+            printf '<p><a href="%s/" style="color:#c4a35a;font-size:1.3rem;text-decoration:none">%s &rsaquo;</a></p>\n' "$g" "$g"; done
+          echo '<p><a href="https://github.com/4-R-C-4-N-4/tiny-games" style="color:#6d6857">source on GitHub</a></p></main>'
+
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: wiz-tower/dist
+          path: _site
 
   deploy:
     needs: build
