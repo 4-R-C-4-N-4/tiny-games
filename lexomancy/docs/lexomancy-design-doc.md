@@ -181,6 +181,32 @@ Enemies use the same scoring model with different vocabularies and policies — 
 
 ## Visual Direction
 
+### Mix sharpening (added post-launch, 2026-07-20)
+
+Softmax at temperature 2.5 spread a word's power across all four channels
+almost uniformly for most vocabulary ("spreadsheet" read ~23/23/26/24) — a
+"damage" word only put a quarter of its power into damage, diluting every
+hit and dragging fights out over many turns. Retuned: `temperature=0.5`
+sharpens the softmax onto its dominant channel(s), then `mixFloor=0.20`
+zeroes anything that doesn't survive as a real component and renormalizes
+the rest. Tuned against the full 80k-word vocab to land ~40% single-channel,
+~43% two-channel, ~15% three-channel, ~2% touching all four.
+
+Because purity (the winning channel's share) is now high by default instead
+of the old ~0.3-0.5 typical, `costBase`/`costPurity` — which scale mana cost
+with purity — had to come down too (0.35/0.6 → 0.18/0.32), or nearly every
+real cast became a maximally-expensive "spike" that starved the whole
+encounter after one hit.
+
+**Known follow-up:** this also sharpened enemy self-sustain — a heal/ward
+specialist boss (the Hierophant) now heals ~10-14 HP per turn from its own
+liturgical kit instead of a diluted fraction, and simulated fights against
+it can outpace a fatigue-limited attacker's sustainable damage. Damage-
+focused matchups got dramatically more decisive (verified: two bosses died
+in 2-4 turns in simulation, down from 15-30+); whether the healer archetype
+needs its own separate sustain dampening is an open question pending real
+playtesting, not yet acted on.
+
 ### Quick cast (added post-launch, 2026-07-20)
 
 The gap between the fixed arena and the compose panel is filled by

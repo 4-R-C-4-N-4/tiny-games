@@ -13,6 +13,7 @@ Usage: .venv/bin/python export_assets.py
 """
 
 import json
+import math
 import struct
 from pathlib import Path
 
@@ -28,6 +29,13 @@ GOLDEN_WORDS = [
     "malediction", "winter", "anchor", "lullaby", "spreadsheet", "sepulchre",
 ]
 GOLDEN_PAIRS = [("kill", "murder"), ("kill", "mirror"), ("frost", "ice"), ("honey", "anvil")]
+
+
+def js_round(x):
+    """Python round() ties-to-even (round(6.5)==6); JS Math.round ties-up
+    (Math.round(6.5)==7). power/cost feed the TS golden test directly, so
+    match JS semantics here rather than silently disagreeing at .5 ties."""
+    return math.floor(x + 0.5)
 
 
 def gelu_tanh(x):
@@ -47,12 +55,14 @@ def profile(word, index, q, zipf_u8, head):
     raw = head_forward(head, x[None, :])[0]
     exps = np.exp((raw - raw.max()) / s["temperature"])
     mix = exps / exps.sum()
+    mix = np.where(mix < s["mixFloor"], 0, mix)
+    mix = mix / mix.sum()  # softmax max is always >= 1/4 > mixFloor, so sum > 0
     z = zipf_u8[i] / s["zipfScale"]
     rarity = float(np.clip((s["zipfZero"] - z) / s["zipfRange"], 0, 1))
     potency = float(np.clip(raw.max() / 10.0, 0, 1))
-    power = round((s["powerBase"] + s["powerRarity"] * rarity) * (s["potencyFloor"] + (1 - s["potencyFloor"]) * potency))
+    power = js_round((s["powerBase"] + s["powerRarity"] * rarity) * (s["potencyFloor"] + (1 - s["potencyFloor"]) * potency))
     purity = float(mix.max())
-    cost = max(1, round(power * (s["costBase"] + s["costPurity"] * purity)))
+    cost = max(1, js_round(power * (s["costBase"] + s["costPurity"] * purity)))
     return {
         "word": word,
         "mix": {c: float(m) for c, m in zip(CHANNELS, mix)},
