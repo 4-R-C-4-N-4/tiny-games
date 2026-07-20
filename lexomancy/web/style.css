@@ -58,11 +58,29 @@ body {
   font-style: italic;
 }
 
+/* #playfield holds everything below the banner: the fixed-size arena plus
+   the compose panel. It's the flex:1 element now (battle itself no longer
+   is), and the full-screen interstitial panels (rite/threshold/grimoire/
+   overlay) are its direct children so they cover the WHOLE playfield —
+   not just the small arena box above the compose panel. */
+#playfield {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  min-height: 0;
+}
+
 /* Fixed frame, not elastic flex:1 — a defined arena instead of however much
    leftover vertical space the viewport happens to have. */
 #battle {
   flex: none;
-  height: 21rem;
+  /* Bounded, not elastic (no more flex:1 stretching to fill leftover
+     space) — but a flat rem value overflowed short viewports and left an
+     ugly gap on wide-short desktop windows. clamp() keeps it a deliberate,
+     capped arena size while still scaling down before it ever forces a
+     scrollbar. */
+  height: clamp(10rem, 34dvh, 23rem);
   display: flex;
   flex-direction: column;
   justify-content: space-between;

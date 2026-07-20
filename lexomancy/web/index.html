@@ -18,32 +18,38 @@
         <button id="grimoire-btn" type="button" hidden>📖</button>
       </header>
 
-      <section id="battle">
-        <div id="arena">
-          <div id="arena-ground"></div>
-          <div id="arena-far"></div>
-          <div id="arena-near"></div>
-        </div>
-        <div id="enemy" class="combatant">
-          <div class="nameplate">
-            <span class="name" id="enemy-name">…</span>
-            <div class="hp-track"><div class="hp-fill" id="enemy-hp"></div></div>
-            <span class="status" id="enemy-status"></span>
+      <div id="playfield">
+        <section id="battle">
+          <div id="arena">
+            <div id="arena-ground"></div>
+            <div id="arena-far"></div>
+            <div id="arena-near"></div>
           </div>
-          <div class="sprite" id="enemy-sprite"></div>
-          <span id="enemy-thinking" class="thinking-dots" hidden><i></i><i></i><i></i></span>
-        </div>
-
-        <div id="player" class="combatant">
-          <div class="sprite back" id="player-sprite"></div>
-          <div class="nameplate">
-            <span class="name" id="player-name">The Unnamed</span>
-            <div class="hp-track"><div class="hp-fill" id="player-hp"></div></div>
-            <div class="mana-track"><div class="mana-fill" id="player-mana"></div></div>
-            <span class="status" id="player-status"></span>
+          <div id="enemy" class="combatant">
+            <div class="nameplate">
+              <span class="name" id="enemy-name">…</span>
+              <div class="hp-track"><div class="hp-fill" id="enemy-hp"></div></div>
+              <span class="status" id="enemy-status"></span>
+            </div>
+            <div class="sprite" id="enemy-sprite"></div>
+            <span id="enemy-thinking" class="thinking-dots" hidden><i></i><i></i><i></i></span>
           </div>
-        </div>
 
+          <div id="player" class="combatant">
+            <div class="sprite back" id="player-sprite"></div>
+            <div class="nameplate">
+              <span class="name" id="player-name">The Unnamed</span>
+              <div class="hp-track"><div class="hp-fill" id="player-hp"></div></div>
+              <div class="mana-track"><div class="mana-fill" id="player-mana"></div></div>
+              <span class="status" id="player-status"></span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Full-screen interstitial panels: siblings of #battle (not
+             children) so they get the whole playfield, not just the small
+             arena box — these are character creation / threshold / grimoire
+             takeovers, not battle-scene dressing. -->
         <div id="overlay" hidden>
           <p id="overlay-text"></p>
           <button id="overlay-btn" type="button">Climb again</button>
@@ -106,46 +112,46 @@
             <button id="enter-btn" type="button">Enter</button>
           </div>
         </div>
-      </section>
 
-      <section id="compose">
-        <div id="preview">
-          <div class="channel" data-channel="damage">
-            <span class="label">DMG</span>
-            <div class="track"><div class="fill" id="bar-damage"></div></div>
+        <section id="compose">
+          <div id="preview">
+            <div class="channel" data-channel="damage">
+              <span class="label">DMG</span>
+              <div class="track"><div class="fill" id="bar-damage"></div></div>
+            </div>
+            <div class="channel" data-channel="hex">
+              <span class="label">HEX</span>
+              <div class="track"><div class="fill" id="bar-hex"></div></div>
+            </div>
+            <div class="channel" data-channel="ward">
+              <span class="label">WRD</span>
+              <div class="track"><div class="fill" id="bar-ward"></div></div>
+            </div>
+            <div class="channel" data-channel="heal">
+              <span class="label">HEA</span>
+              <div class="track"><div class="fill" id="bar-heal"></div></div>
+            </div>
+            <div id="preview-meta">
+              <span id="preview-rarity">—</span>
+              <span id="preview-cost">—</span>
+            </div>
+            <div id="preview-warn"></div>
+            <div id="preview-roots"></div>
           </div>
-          <div class="channel" data-channel="hex">
-            <span class="label">HEX</span>
-            <div class="track"><div class="fill" id="bar-hex"></div></div>
-          </div>
-          <div class="channel" data-channel="ward">
-            <span class="label">WRD</span>
-            <div class="track"><div class="fill" id="bar-ward"></div></div>
-          </div>
-          <div class="channel" data-channel="heal">
-            <span class="label">HEA</span>
-            <div class="track"><div class="fill" id="bar-heal"></div></div>
-          </div>
-          <div id="preview-meta">
-            <span id="preview-rarity">—</span>
-            <span id="preview-cost">—</span>
-          </div>
-          <div id="preview-warn"></div>
-          <div id="preview-roots"></div>
-        </div>
-        <form id="cast-form" autocomplete="off">
-          <input
-            id="word-input"
-            type="text"
-            inputmode="latin"
-            spellcheck="false"
-            placeholder="speak a word…"
-            maxlength="24"
-          />
-          <button id="cast-btn" type="submit" disabled>Cast</button>
-        </form>
-        <div id="cast-log"></div>
-      </section>
+          <form id="cast-form" autocomplete="off">
+            <input
+              id="word-input"
+              type="text"
+              inputmode="latin"
+              spellcheck="false"
+              placeholder="speak a word…"
+              maxlength="24"
+            />
+            <button id="cast-btn" type="submit" disabled>Cast</button>
+          </form>
+          <div id="cast-log"></div>
+        </section>
+      </div>
     </div>
     <script type="module" src="./main.ts"></script>
   </body>
