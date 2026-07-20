@@ -181,6 +181,17 @@ Enemies use the same scoring model with different vocabularies and policies — 
 
 ## Visual Direction
 
+### Quick cast (added post-launch, 2026-07-20)
+
+The gap between the fixed arena and the compose panel is filled by
+`#quickcast` (`flex:1`, absorbing exactly the leftover space) rather than
+left dead: tap a word you've already discovered this run to drop it back
+into the input instead of retyping it. Chips are most-recent-first,
+deduplicated, dot-colored by dominant channel, and dimmed when the word is
+currently fatigued so a tap doesn't waste a turn on a fizzle. Complements
+the full grimoire (📖) rather than replacing it — this is the fast inline
+version, the grimoire is the detailed browse.
+
 ### The battle arena (added post-launch, 2026-07-20)
 
 `#battle` is a **fixed-height frame**, not an elastic flex region — the

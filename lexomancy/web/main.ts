@@ -319,6 +319,55 @@ function render(): void {
   renderFloorBanner();
   renderCombatants();
   renderPreview();
+  renderQuickcast();
+}
+
+/** Fills the gap between the arena and compose: tap a discovered word to
+ * reuse it instead of retyping. Dims words currently fatigued so a tap
+ * doesn't waste a turn on a word that'll fizzle. */
+function renderQuickcast(): void {
+  const list = $('quickcast-list');
+  const label = $('quickcast-label');
+  list.replaceChildren();
+
+  const seen = new Set<string>();
+  const words: string[] = [];
+  for (let i = run.history.length - 1; i >= 0 && words.length < 40; i--) {
+    const w = run.history[i];
+    if (seen.has(w)) continue;
+    seen.add(w);
+    words.push(w);
+  }
+
+  label.hidden = words.length === 0;
+  if (words.length === 0) {
+    const empty = document.createElement('span');
+    empty.id = 'quickcast-empty';
+    empty.textContent = 'Cast a word and it appears here for quick reuse.';
+    list.appendChild(empty);
+    return;
+  }
+
+  const duel = activeDuelForPreview();
+  for (const w of words) {
+    if (!scorer.knows(w)) continue;
+    const profile = scorer.score(w);
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'qc-chip';
+    const eff = duel?.preview(w)?.effectiveness ?? 1;
+    if (eff < 0.5) chip.classList.add('fatigued');
+    const dot = document.createElement('i');
+    dot.className = 'qc-dot';
+    dot.style.background = CHANNEL_COLORS[profile.dominant];
+    chip.append(dot, document.createTextNode(w));
+    chip.addEventListener('click', () => {
+      input.value = w;
+      renderPreview();
+      input.focus();
+    });
+    list.appendChild(chip);
+  }
 }
 
 function renderThreshold(): void {
