@@ -619,6 +619,33 @@ body {
   color: var(--heal);
 }
 
+#preview-warn.short {
+  color: var(--mana);
+}
+
+/* Insufficient mana: the cost readout goes hot pink/red and bold, and the
+   player's mana bar itself pulses so the eye jumps straight to why. */
+#preview-cost.cost-short {
+  color: var(--damage);
+  font-weight: bold;
+}
+
+#player.mana-short .mana-track {
+  animation: manaPulse 0.9s ease-in-out infinite;
+  outline: 1px solid var(--damage);
+  outline-offset: 1px;
+}
+
+@keyframes manaPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(229, 72, 77, 0.5); }
+  50% { box-shadow: 0 0 4px 1px rgba(229, 72, 77, 0.8); }
+}
+
+#cast-btn.short {
+  border-color: var(--damage);
+  color: var(--damage);
+}
+
 #overlay-text {
   font-size: 1rem;
   line-height: 1.6;

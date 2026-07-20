@@ -70,11 +70,19 @@ function renderPreview(): void {
     ? `${rarityLabel(p.profile.rarity)} · power ${p.profile.power}` +
       (p.effectivePower !== p.profile.power ? ` → ${p.effectivePower}` : '')
     : '—';
-  $('preview-cost').textContent = p ? `cost ${p.cost} ✦` : '—';
+  const manaPool = duel?.player.mana ?? 0;
+  const shortfall = p && !p.affordable ? p.cost - manaPool : 0;
+  const costEl = $('preview-cost');
+  costEl.textContent = p ? `cost ${p.cost} ✦` : '—';
+  costEl.classList.toggle('cost-short', shortfall > 0);
+  $('player').classList.toggle('mana-short', shortfall > 0);
   $('preview').classList.toggle('tabooed', !!p?.floor.tabooed);
   if (p?.floor.tabooed) {
     warn.textContent = '⚠ forbidden here — this word will turn on you';
     warn.className = 'taboo';
+  } else if (shortfall > 0) {
+    warn.textContent = `✦ not enough mana — need ${shortfall} more`;
+    warn.className = 'short';
   } else if (p && p.floor.amp > 1.1) {
     warn.textContent = `✦ the floor favors this word — ×${p.floor.amp.toFixed(2)}`;
     warn.className = 'amped';
@@ -84,6 +92,8 @@ function renderPreview(): void {
   }
   const inDuel = run.phase === 'duel';
   castBtn.disabled = !inDuel || !p || !p.affordable || enemyThinking;
+  castBtn.textContent = shortfall > 0 ? `Need ${shortfall} ✦` : 'Cast';
+  castBtn.classList.toggle('short', shortfall > 0);
 }
 
 function statusLine(c: Combatant): string {
