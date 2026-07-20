@@ -43,8 +43,10 @@ export const N_FEATURES = 11;
  *  - EFFECTIVE coverage per element E (7): how much of the player's fire actually lands on
  *    a mob of element E, after the type chart — i.e. sum_T dps[T]·typeMult(T,E). This is the
  *    signal that decides which element the player answers weakly, handed to the net directly.
- *  - anti-air, detection, control totals (3): the capability gaps (fliers/shades/slow).
- *  - wall coverage (1): total wall HP on the board → drives the Breaker decision.
+ *  - anti-air, detection, control gaps (3): capability coverage RELATIVE to total ground DPS,
+ *    so "no anti-air" reads as a gap even on a high-DPS board — a wall of Earth turrets can't
+ *    mask an open sky (an absolute anti-air sum got drowned out by the huge coverage features).
+ *  - wall coverage (1): total wall HP on the board (incl. Earth wards) → drives the Breaker read.
  */
 export function featurize(obs: Observation): number[] {
   const dps = new Array(N_ELEMENTS).fill(0);
@@ -63,7 +65,8 @@ export function featurize(obs: Observation): number[] {
     for (let T = 0; T < N_ELEMENTS; T++) s += dps[T] * fxToFloat(typeMult(T as Element, E as Element));
     eff[E] = s;
   }
-  return [...eff, antiAir, detection, control, walls];
+  const total = dps.reduce((a, b) => a + b, 0) + 1; // normaliser (avoids /0, dampens tiny boards)
+  return [...eff, antiAir / total, detection / total, control / total, walls];
 }
 
 export interface Weights {
