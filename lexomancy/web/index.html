@@ -19,6 +19,11 @@
       </header>
 
       <section id="battle">
+        <div id="arena">
+          <div id="arena-ground"></div>
+          <div id="arena-far"></div>
+          <div id="arena-near"></div>
+        </div>
         <div id="enemy" class="combatant">
           <div class="nameplate">
             <span class="name" id="enemy-name">…</span>
@@ -26,6 +31,7 @@
             <span class="status" id="enemy-status"></span>
           </div>
           <div class="sprite" id="enemy-sprite"></div>
+          <span id="enemy-thinking" class="thinking-dots" hidden><i></i><i></i><i></i></span>
         </div>
 
         <div id="player" class="combatant">

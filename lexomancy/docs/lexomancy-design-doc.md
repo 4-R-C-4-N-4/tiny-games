@@ -181,6 +181,19 @@ Enemies use the same scoring model with different vocabularies and policies — 
 
 ## Visual Direction
 
+### The battle arena (added post-launch, 2026-07-20)
+
+`#battle` is a **fixed-height frame**, not an elastic flex region — the
+original layout let it stretch to fill whatever vertical space the viewport
+had, which read as dead space around two floating sprites. Behind the
+combatants sits a procedural, theme-tinted arena: a two-tone ground+horizon
+canvas (far strip for the enemy, near strip for the player — the depth cue
+a Gen-1 battle framing wants) plus two parallax dressing bands built from
+five shared silhouette "prop kinds" (spike/shard/wisp/reed/orb) mapped
+across all 26 themes, drifting continuously at different speeds. Zero new
+asset pipeline — drawn at runtime the same way sprites are, cached per
+theme, `prefers-reduced-motion`-aware. See `web/arena-render.ts`.
+
 ### Framing: Gen-1 battle layout, portrait-first
 
 Pokémon-style dueling frame: **enemy sprite upper area facing the player; player character seen from behind, lower foreground; input/preview panel at the bottom.** This layout is instantly readable, nostalgic, and — critically — native to portrait orientation, which makes mobile the *default* rather than an adaptation.
