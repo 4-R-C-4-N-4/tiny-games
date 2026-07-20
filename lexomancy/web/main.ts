@@ -82,10 +82,18 @@ function renderPreview(): void {
   costEl.textContent = p ? `cost ${p.cost} ✦` : '—';
   costEl.classList.toggle('cost-short', shortfall > 0);
   $('player').classList.toggle('mana-short', shortfall > 0);
-  $('preview').classList.toggle('tabooed', !!p?.floor.tabooed);
+  const silenced = !!p && p.floor.channelAmp[p.profile.dominant] === 0;
+  $('preview').classList.toggle('backfire', !!p?.floor.tabooed || !!p?.floor.healInverted);
+  $('preview').classList.toggle('silenced', silenced);
   if (p?.floor.tabooed) {
     warn.textContent = '⚠ forbidden here — this word will turn on you';
     warn.className = 'taboo';
+  } else if (p?.floor.healInverted) {
+    warn.textContent = '⚠ healing is cursed here — this word will wound you instead';
+    warn.className = 'healinvert';
+  } else if (silenced) {
+    warn.textContent = '◦ that channel is silenced here — it will do nothing';
+    warn.className = 'muted';
   } else if (shortfall > 0) {
     warn.textContent = `✦ not enough mana — need ${shortfall} more`;
     warn.className = 'short';
@@ -222,6 +230,7 @@ function describe(e: DuelEvent): string {
       if (e.absorbed > 0) parts.push(`${e.absorbed} warded`);
       if (e.hexApplied > 0) parts.push(`hex +${e.hexApplied}`);
       if (e.healed > 0) parts.push(`${e.healed} healed`);
+      if (e.selfHarm > 0) parts.push(`— cursed mercy — ${e.selfHarm} self-inflicted`);
       if (e.wardGained > 0) parts.push(`🛡 +${e.wardGained}`);
       return parts.join(' · ');
     }
@@ -589,6 +598,12 @@ function playCastVfx(e: DuelEvent): void {
   if (e.healed > 0) {
     vfxSpawn(caster, 'vfx-mote', 4, 1000);
     vfxFloat(caster, `+${e.healed}`, CHANNEL_COLORS.heal);
+  }
+  if (e.selfHarm > 0) {
+    const mag = magFor(e.selfHarm);
+    vfxBurst(caster, CHANNEL_COLORS.damage, mag);
+    vfxFloat(caster, `−${e.selfHarm}`, CHANNEL_COLORS.damage);
+    vfxShake(caster, mag);
   }
 
   // Beat 3 (delayed to STREAK_MS): effects landing ON the target — damage

@@ -130,14 +130,18 @@ The chosen adjectives seed the character's True Name. Enemies that survive enoug
 
 Floors are **hand-authored mechanic skeletons filled with generated semantic content**:
 
-**Archetypes** (~6–8, contain all hardcoded logic):
+**Archetypes** (contain all hardcoded logic — 9 rolled + the Summit-only Mirror):
 | Archetype | Rule |
 |-----------|------|
-| **Domain** | An aura anchor amplifies a theme for both combatants |
-| **Taboo** | Words in a forbidden region fizzle or backfire as self-damage |
-| **Drain** | Fatigue decays slower; variety pressure doubled |
-| **Echo** | Your own last cast is re-cast at you at half power |
-| **Leyline** | One random channel amplified for both sides |
+| **Domain** | Words matching the floor's theme are amplified for both duelists (up to +50% power). |
+| **Taboo** | Words matching the floor's theme backfire — the damage/hex hits the caster instead of the opponent. |
+| **Drain** | Fatigue decays much slower — a word cast 3-4 turns ago still meaningfully punishes a repeat. |
+| **Echo** | Landing direct damage also hits the caster for half that amount, instantly. |
+| **Leyline** | One channel, rolled per floor, is amplified 40% for both duelists. |
+| **Silence** *(added 2026-07-20)* | One channel, rolled per floor, is forbidden for both duelists — casting it does nothing (mana still spent). The inverse of Leyline. |
+| **Bloodprice** *(added 2026-07-20)* | Heal-dominant words hurt their caster instead of restoring them, for both duelists. Held back to floor 4+ — punishes an instinct a first-time player wouldn't expect. |
+| **Bulwark** *(added 2026-07-20)* | Both duelists start the floor already warded (12 ward) — you have to break the shield before real damage lands. |
+| **Fading** *(added 2026-07-20)* | Hex decays twice as fast and reapplication never resets its duration clock. The inverse of Drain. |
 
 **Theme library** (~25–30 curated anchor wordsets, authored once): bone, tide, ash, clockwork, honey, frost, ruin, choir, etc. A theme is just an anchor vector, so filling a slot is trivial.
 

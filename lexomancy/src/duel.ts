@@ -1,4 +1,10 @@
-import { evaluateWord, fatigueRecency, type FloorSpec, type FloorWordEffect } from './floors.ts';
+import {
+  BULWARK_START_WARD,
+  evaluateWord,
+  fatigueRecency,
+  type FloorSpec,
+  type FloorWordEffect,
+} from './floors.ts';
 import type { SpriteArt } from './sprites.ts';
 import { NEUTRAL_STATS, type Stats } from './stats.ts';
 import type { Scorer, SpellProfile } from './types.ts';
@@ -50,6 +56,8 @@ export interface CastEvent {
   hexApplied: number;
   /** Offense redirected onto the caster by a taboo floor. */
   tabooed: boolean;
+  /** Bloodprice floors: heal magnitude that hurt the caster instead. */
+  selfHarm: number;
 }
 
 export interface DrainEvent {
@@ -188,9 +196,12 @@ export class Duel {
     this.player.mana = Math.min(maxMana, opts.playerMana ?? maxMana);
     if (opts.playerHex) this.player.hex = { ...opts.playerHex };
     this.enemy = makeCombatant(opponent.name, opponent.maxHp, PLAYER_MAX_MANA);
-    this.enemy.ward = opts.enemyWard ?? 0;
-    this.stats = opts.stats ?? NEUTRAL_STATS;
     this.floor = opts.floor ?? null;
+    // Bulwark floors: both duelists start already shielded.
+    const bulwark = this.floor?.archetype === 'bulwark' ? BULWARK_START_WARD : 0;
+    this.player.ward = bulwark;
+    this.enemy.ward = Math.max(opts.enemyWard ?? 0, bulwark);
+    this.stats = opts.stats ?? NEUTRAL_STATS;
     this.rng = mulberry32(seed);
     this.recency = fatigueRecency(this.floor);
   }
@@ -246,7 +257,9 @@ export class Duel {
   /** Runs at the start of an actor's turn: hex drains and decays, ward fades. */
   private tickTurnStart(actor: Combatant, events: DuelEvent[]): void {
     if (actor.hex) {
-      const drain = Math.round(actor.hex.potency * HEX_DRAIN_RATE);
+      // Fading floors: curses burn out twice as fast.
+      const rate = this.floor?.archetype === 'fading' ? HEX_DRAIN_RATE * 2 : HEX_DRAIN_RATE;
+      const drain = Math.round(actor.hex.potency * rate);
       if (drain > 0) {
         actor.hp = Math.max(0, actor.hp - drain);
         events.push({ kind: 'drain', actor: actor.name, drain });
@@ -291,22 +304,30 @@ export class Duel {
       offenseTarget === this.player ? 1.25 - 0.5 * this.stats.guile : 1;
     const hexApplied = Math.round(eff * profile.mix.hex * chAmp('hex') * hexMul * hexResist);
     if (hexApplied > 0) {
+      // Fading floors: reapplication tops up potency but never resets the clock.
+      const keepTurns = this.floor?.archetype === 'fading' ? offenseTarget.hex?.turns : undefined;
       offenseTarget.hex = {
         potency: Math.min(HEX_POTENCY_CAP, (offenseTarget.hex?.potency ?? 0) + hexApplied),
-        turns: HEX_TURNS,
+        turns: keepTurns ?? HEX_TURNS,
       };
     }
 
     const healMul = isPlayer ? this.statMul(this.stats.grace) : ENEMY_HEAL_MUL;
-    const healed = Math.min(
-      attacker.maxHp - attacker.hp,
-      Math.round(eff * profile.mix.heal * chAmp('heal') * healMul * utilityScale),
-    );
-    attacker.hp += healed;
-    // Heal cleanses: potency scrubbed by half the heal magnitude.
-    if (attacker.hex && healed > 0) {
-      attacker.hex.potency = Math.max(0, attacker.hex.potency - Math.round(healed / 2));
-      if (attacker.hex.potency === 0) attacker.hex = null;
+    const rawHeal = Math.round(eff * profile.mix.heal * chAmp('heal') * healMul * utilityScale);
+    let healed = 0;
+    let selfHarm = 0;
+    if (floor.healInverted && rawHeal > 0) {
+      // Bloodprice floors: healing hurts its caster instead of restoring them.
+      selfHarm = rawHeal;
+      attacker.hp = Math.max(0, attacker.hp - selfHarm);
+    } else {
+      healed = Math.min(attacker.maxHp - attacker.hp, rawHeal);
+      attacker.hp += healed;
+      // Heal cleanses: potency scrubbed by half the heal magnitude.
+      if (attacker.hex && healed > 0) {
+        attacker.hex.potency = Math.max(0, attacker.hex.potency - Math.round(healed / 2));
+        if (attacker.hex.potency === 0) attacker.hex = null;
+      }
     }
 
     const wardMul = isPlayer ? this.statMul(this.stats.stone) : 1;
@@ -331,6 +352,7 @@ export class Duel {
       wardGained,
       hexApplied,
       tabooed: floor.tabooed,
+      selfHarm,
     };
     events.push(event);
 

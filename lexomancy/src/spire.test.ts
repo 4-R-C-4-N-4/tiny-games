@@ -130,6 +130,59 @@ describe.skipIf(!model)('spire systems on the real model', () => {
     expect(d.player.hp).toBeLessThan(hpBefore);
   });
 
+  it('silence floors zero a channel for both duelists', () => {
+    const floor = makeFloor(3, 'silence', 'storm', 'damage');
+    expect(evaluateWord(scorer, floor, 'inferno').channelAmp.damage).toBe(0);
+    const d = new Duel(scorer, ROSTER[0], 1, { floor });
+    const enemyHpBefore = d.enemy.hp;
+    d.castPlayer('inferno');
+    expect(d.enemy.hp).toBe(enemyHpBefore); // pure-damage word did nothing
+  });
+
+  it('bloodprice floors make healing hurt the caster instead', () => {
+    const floor = makeFloor(4, 'bloodprice', 'garden');
+    expect(evaluateWord(scorer, floor, 'balm').healInverted).toBe(true);
+    expect(evaluateWord(scorer, floor, 'inferno').healInverted).toBe(false);
+
+    const d = new Duel(scorer, ROSTER[0], 1, { floor });
+    d.player.hp = d.player.maxHp - 10; // room to observe either direction
+    const hpBefore = d.player.hp;
+    const events = d.castPlayer('balm') ?? [];
+    const cast = events.find((e) => e.kind === 'cast');
+    expect(cast && 'selfHarm' in cast && cast.selfHarm).toBeGreaterThan(0);
+    expect(cast && 'healed' in cast && cast.healed).toBe(0);
+    expect(d.player.hp).toBeLessThan(hpBefore);
+  });
+
+  it('bulwark floors start both duelists warded', () => {
+    const floor = makeFloor(1, 'bulwark', 'iron');
+    const d = new Duel(scorer, ROSTER[0], 1, { floor });
+    expect(d.player.ward).toBeGreaterThan(0);
+    expect(d.enemy.ward).toBeGreaterThanOrEqual(d.player.ward);
+  });
+
+  it('fading floors drain hex faster and never refresh its duration', () => {
+    const floor = makeFloor(2, 'fading', 'plague');
+    const plain = new Duel(scorer, ROSTER[0], 1, {});
+    const fading = new Duel(scorer, ROSTER[0], 1, { floor });
+    plain.player.hex = { potency: 16, turns: 3 };
+    fading.player.hex = { potency: 16, turns: 3 };
+    const plainEvents = plain.castPlayer('mend') ?? [];
+    const fadingEvents = fading.castPlayer('mend') ?? [];
+    const plainDrain = plainEvents.find((e) => e.kind === 'drain');
+    const fadingDrain = fadingEvents.find((e) => e.kind === 'drain');
+    expect(fadingDrain && 'drain' in fadingDrain && plainDrain && 'drain' in plainDrain
+      ? fadingDrain.drain > plainDrain.drain
+      : false
+    ).toBe(true);
+
+    // Reapplying hex on a fading floor keeps the existing countdown instead
+    // of resetting it back to full duration.
+    fading.enemy.hex = { potency: 4, turns: 1 };
+    fading.castPlayer('curse');
+    expect(fading.enemy.hex?.turns).toBe(1);
+  });
+
   it('ferocity raises player damage output', () => {
     const meek = new Duel(scorer, ROSTER[0], 1, {
       stats: { ferocity: 0.1, guile: 0.5, stone: 0.5, grace: 0.5, resonance: 0.5 },
