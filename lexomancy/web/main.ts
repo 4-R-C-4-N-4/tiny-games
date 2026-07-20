@@ -3,7 +3,7 @@ import { THEME_HUES } from '../src/floors.ts';
 import { ModelScorer } from '../src/model-scorer.ts';
 import { SpireRun } from '../src/run.ts';
 import { STAT_HUES, enemyPalette, playerPalette, type SpriteArt } from '../src/sprites.ts';
-import { dominantStat } from '../src/stats.ts';
+import { dominantStat, performRite, STATS } from '../src/stats.ts';
 import { StubScorer } from '../src/stub-scorer.ts';
 import { CHANNELS, type Channel, type Scorer } from '../src/types.ts';
 import { renderGallery } from './gallery.ts';
@@ -293,6 +293,7 @@ function renderThreshold(): void {
 // ---------- rite ----------
 
 const picked = new Set<string>();
+let lastRiteStats: Record<string, number> | null = null;
 
 function renderRiteChoices(): void {
   const box = $('rite-choices');
@@ -306,12 +307,33 @@ function renderRiteChoices(): void {
       if (picked.has(adj)) picked.delete(adj);
       else if (picked.size < 5) picked.add(adj);
       renderRiteChoices();
+      renderRiteStats();
     });
     box.appendChild(chip);
   }
   $('rite-count').textContent = `${picked.size} / 5 chosen`;
   $<HTMLButtonElement>('begin-run').disabled = picked.size !== 5;
 }
+
+function renderRiteStats(): void {
+  const flaw = $<HTMLInputElement>('flaw-input').value.trim();
+  const stats =
+    picked.size > 0
+      ? performRite(scorer, [...picked], flaw && scorer.knows(flaw) ? flaw : undefined).stats
+      : null;
+  for (const stat of STATS) {
+    const row = document.querySelector<HTMLElement>(`.rite-stat[data-stat="${stat}"]`);
+    if (!row) continue;
+    const value = stats ? stats[stat] : 0.5;
+    const fill = row.querySelector<HTMLElement>('.rs-fill')!;
+    fill.style.width = `${Math.round(value * 100)}%`;
+    const prev = lastRiteStats?.[stat];
+    row.classList.toggle('rising', prev !== undefined && value > prev + 0.01);
+  }
+  lastRiteStats = stats ? { ...stats } : null;
+}
+
+$('flaw-input').addEventListener('input', renderRiteStats);
 
 $('begin-run').addEventListener('click', () => {
   const flaw = $<HTMLInputElement>('flaw-input').value.trim();
@@ -509,11 +531,14 @@ $('overlay-btn').addEventListener('click', () => {
 function startRun(): void {
   run = new SpireRun(scorer, (Math.random() * 2 ** 31) | 0);
   picked.clear();
+  lastRiteStats = null;
   practiceDuel = null;
   enemyThinking = false;
   log.replaceChildren();
   input.value = '';
+  $<HTMLInputElement>('flaw-input').value = '';
   renderRiteChoices();
+  renderRiteStats();
   render();
 }
 

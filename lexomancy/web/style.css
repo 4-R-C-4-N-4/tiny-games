@@ -532,6 +532,57 @@ body {
   border-color: var(--mana);
 }
 
+#rite-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  padding: 0.5rem 0.7rem;
+}
+
+.rite-stat {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.68rem;
+}
+
+.rite-stat .rs-label {
+  width: 5rem;
+  color: var(--ink-dim);
+}
+
+.rite-stat .rs-track {
+  flex: 1;
+  height: 0.5rem;
+  background: #000;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.rite-stat .rs-fill {
+  height: 100%;
+  width: 0%;
+  transition: width 0.2s ease-out;
+}
+
+.rite-stat[data-stat='ferocity'] .rs-fill { background: hsl(355 65% 55%); }
+.rite-stat[data-stat='guile'] .rs-fill { background: hsl(285 55% 60%); }
+.rite-stat[data-stat='stone'] .rs-fill { background: hsl(35 55% 55%); }
+.rite-stat[data-stat='grace'] .rs-fill { background: hsl(130 45% 50%); }
+.rite-stat[data-stat='resonance'] .rs-fill { background: hsl(245 60% 65%); }
+
+.rite-stat.rising .rs-fill {
+  animation: statRise 0.25s ease-out;
+}
+
+@keyframes statRise {
+  from { filter: brightness(1.8); }
+  to { filter: brightness(1); }
+}
+
 .flaw-row {
   display: flex;
   flex-direction: column;
