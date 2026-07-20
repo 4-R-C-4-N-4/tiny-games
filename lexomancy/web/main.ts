@@ -3,11 +3,11 @@ import { THEME_HUES } from '../src/floors.ts';
 import { ModelScorer } from '../src/model-scorer.ts';
 import { SpireRun } from '../src/run.ts';
 import { STAT_HUES, enemyPalette, playerPalette, type SpriteArt } from '../src/sprites.ts';
-import { dominantStat, type StatName } from '../src/stats.ts';
+import { dominantStat } from '../src/stats.ts';
 import { StubScorer } from '../src/stub-scorer.ts';
 import { CHANNELS, type Channel, type Scorer } from '../src/types.ts';
 import { renderGallery } from './gallery.ts';
-import { spriteCanvas } from './sprite-render.ts';
+import { spriteAnim } from './sprite-render.ts';
 
 // Thin shell over SpireRun: the run machine is headless; this file only
 // renders phases and forwards input.
@@ -19,14 +19,6 @@ let run: SpireRun;
 let enemyThinking = false;
 /** Throwaway duel for threshold practice previews under the coming floor's law. */
 let practiceDuel: Duel | null = null;
-
-const EPITHETS: Record<StatName, string> = {
-  ferocity: 'The Fierce',
-  guile: 'The Veiled',
-  stone: 'The Unmoved',
-  grace: 'The Gentle',
-  resonance: 'The Learned',
-};
 
 const $ = <T extends HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -113,11 +105,11 @@ function setSprite(holder: HTMLElement, art: SpriteArt | null): void {
   }
   // The Mirror is your reflection — it wears YOUR dominant-stat color.
   const hue = art === 'mirror' ? STAT_HUES[dominantStat(run.stats)] : currentThemeHue();
-  const canvas =
+  const el =
     art === 'player'
-      ? spriteCanvas('player', playerPalette(dominantStat(run.stats)))
-      : spriteCanvas(art, enemyPalette(art, hue));
-  if (holder.firstChild !== canvas) holder.replaceChildren(canvas);
+      ? spriteAnim('player', playerPalette(dominantStat(run.stats)), playerPalette(dominantStat(run.stats), 1))
+      : spriteAnim(art, enemyPalette(art, hue), enemyPalette(art, hue, 1));
+  if (holder.firstChild !== el) holder.replaceChildren(el);
 }
 
 function renderCombatants(): void {
@@ -137,7 +129,7 @@ function renderCombatants(): void {
     ? `${(100 * player.mana) / player.maxMana}%`
     : '100%';
   $('player-status').textContent = player ? statusLine(player) : '';
-  $('player-name').textContent = run.rite ? EPITHETS[dominantStat(run.stats)] : 'The Unnamed';
+  $('player-name').textContent = run.trueName ?? 'The Unnamed';
 }
 
 function renderFloorBanner(): void {
@@ -191,6 +183,8 @@ function describe(e: DuelEvent): string {
       return `${e.actor === 'player' ? 'Your' : 'Its'} own word echoes back — ${e.damage} dmg`;
     case 'falter':
       return `${e.actor} falters, gathering mana…`;
+    case 'truename':
+      return `${e.actor} speaks your True Name — ${run.trueName ?? 'it knows you'} — its casts sharpen!`;
     case 'defeat':
       return e.loser === 'player' ? 'You fall.' : `${e.loser} is undone.`;
   }
@@ -198,9 +192,63 @@ function describe(e: DuelEvent): string {
 
 // ---------- phase rendering ----------
 
+// ---------- grimoire ----------
+
+function renderGrimoire(): void {
+  const list = $('grimoire-list');
+  list.replaceChildren();
+  const counts = new Map<string, number>();
+  for (const w of run.history) counts.set(w, (counts.get(w) ?? 0) + 1);
+  const entries = [...counts.entries()]
+    .filter(([w]) => scorer.knows(w))
+    .map(([w, n]) => ({ profile: scorer.score(w), n }))
+    .sort((a, b) => b.profile.rarity - a.profile.rarity);
+  for (const { profile, n } of entries) {
+    const row = document.createElement('div');
+    row.className = 'grimoire-row';
+    const word = document.createElement('span');
+    word.className = 'g-word';
+    word.textContent = profile.word;
+    row.appendChild(word);
+    const bars = document.createElement('span');
+    bars.className = 'g-bars';
+    for (const c of CHANNELS) {
+      const bar = document.createElement('i');
+      bar.style.height = `${Math.max(2, Math.round(profile.mix[c] * 14))}px`;
+      bar.style.background = CHANNEL_COLORS[c];
+      bars.appendChild(bar);
+    }
+    row.appendChild(bars);
+    const meta = document.createElement('span');
+    meta.className = 'g-meta';
+    meta.textContent = `${rarityLabel(profile.rarity)} · pw ${profile.power} · ✦${profile.cost}${n > 1 ? ` · ×${n}` : ''}`;
+    row.appendChild(meta);
+    list.appendChild(row);
+  }
+  if (entries.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'rite-sub';
+    empty.textContent = 'No words yet. Speak.';
+    list.appendChild(empty);
+  }
+}
+
+$('grimoire-btn').addEventListener('click', () => {
+  renderGrimoire();
+  $('grimoire').hidden = false;
+});
+
+$('grimoire-close').addEventListener('click', () => {
+  $('grimoire').hidden = true;
+});
+
 function render(): void {
   rite.hidden = run.phase !== 'rite';
   threshold.hidden = run.phase !== 'threshold';
+  $('grimoire').hidden = true;
+  const gbtn = $('grimoire-btn');
+  gbtn.hidden = run.phase === 'rite';
+  gbtn.textContent = `📖 ${new Set(run.history).size}`;
   overlay.hidden = !(run.phase === 'fallen' || run.phase === 'ascended');
   if (run.phase === 'threshold') renderThreshold();
   if (run.phase === 'fallen') {
@@ -310,6 +358,47 @@ function vfxBurst(target: HTMLElement, color: string): void {
   b.addEventListener('animationend', () => b.remove());
 }
 
+/** Spawn a batch of VFX pixels with staggered delays; self-cleaning. */
+function vfxSpawn(target: HTMLElement, className: string, count: number, ttlMs: number): void {
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('div');
+    el.className = className;
+    el.style.left = `${25 + Math.random() * 50}%`;
+    el.style.animationDelay = `${i * 90}ms`;
+    target.appendChild(el);
+    setTimeout(() => el.remove(), ttlMs + i * 90);
+  }
+}
+
+function vfxStreak(target: HTMLElement, fromLeft: boolean): void {
+  const s = document.createElement('div');
+  s.className = 'vfx-streak' + (fromLeft ? ' from-left' : ' from-right');
+  target.appendChild(s);
+  s.addEventListener('animationend', () => s.remove());
+}
+
+function vfxRing(target: HTMLElement): void {
+  const r = document.createElement('div');
+  r.className = 'vfx-ring';
+  target.appendChild(r);
+  r.addEventListener('animationend', () => r.remove());
+}
+
+function vfxLunge(actor: string): void {
+  const sprite = $(actor === 'player' ? 'player-sprite' : 'enemy-sprite');
+  const cls = actor === 'player' ? 'lunge-up' : 'lunge-down';
+  sprite.classList.remove('lunge-up', 'lunge-down');
+  void sprite.offsetWidth;
+  sprite.classList.add(cls);
+}
+
+function vfxTabooFlash(): void {
+  const battle = $('battle');
+  battle.classList.remove('taboo-flash');
+  void battle.offsetWidth;
+  battle.classList.add('taboo-flash');
+}
+
 function vfxFloat(target: HTMLElement, text: string, color: string): void {
   const f = document.createElement('div');
   f.className = 'vfx-float';
@@ -335,17 +424,39 @@ function playCastVfx(e: DuelEvent): void {
     vfxShake(combatantEl(e.actor));
     return;
   }
-  if (e.kind !== 'cast') return;
-  const dominant = scorer.knows(e.word) ? scorer.score(e.word).dominant : 'damage';
-  const target = e.tabooed ? combatantEl(e.actor) : otherEl(e.actor);
-  vfxBurst(target, CHANNEL_COLORS[dominant]);
-  if (e.damage > 0) {
-    vfxFloat(target, `−${e.damage}`, CHANNEL_COLORS.damage);
-    vfxShake(target);
+  if (e.kind === 'truename') {
+    vfxBurst(combatantEl('player'), CHANNEL_COLORS.hex);
+    vfxShake(combatantEl('player'));
+    return;
   }
-  if (e.hexApplied > 0) vfxFloat(target, `☠ +${e.hexApplied}`, CHANNEL_COLORS.hex);
-  if (e.healed > 0) vfxFloat(combatantEl(e.actor), `+${e.healed}`, CHANNEL_COLORS.heal);
-  if (e.wardGained > 0) vfxFloat(combatantEl(e.actor), `🛡 +${e.wardGained}`, CHANNEL_COLORS.ward);
+  if (e.kind !== 'cast') return;
+  const caster = combatantEl(e.actor);
+  const target = e.tabooed ? caster : otherEl(e.actor);
+  vfxLunge(e.actor);
+  if (e.tabooed) {
+    vfxTabooFlash();
+    vfxBurst(caster, CHANNEL_COLORS.damage);
+  }
+  // Channel-coded shapes: the VFX literally displays the score vector.
+  if (e.damage > 0 || e.absorbed > 0) {
+    vfxStreak(target, e.actor !== 'player');
+    if (e.damage > 0) {
+      vfxFloat(target, `−${e.damage}`, CHANNEL_COLORS.damage);
+      vfxShake(target);
+    }
+  }
+  if (e.hexApplied > 0) {
+    vfxSpawn(target, 'vfx-tendril', 3, 900);
+    vfxFloat(target, `☠ +${e.hexApplied}`, CHANNEL_COLORS.hex);
+  }
+  if (e.wardGained > 0) {
+    vfxRing(caster);
+    vfxFloat(caster, `🛡 +${e.wardGained}`, CHANNEL_COLORS.ward);
+  }
+  if (e.healed > 0) {
+    vfxSpawn(caster, 'vfx-mote', 4, 1000);
+    vfxFloat(caster, `+${e.healed}`, CHANNEL_COLORS.heal);
+  }
 }
 
 function showEvents(events: DuelEvent[]): void {

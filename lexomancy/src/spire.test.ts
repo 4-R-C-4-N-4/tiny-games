@@ -190,6 +190,20 @@ describe.skipIf(!model)('spire systems on the real model', () => {
     expect(run.history.length).toBeGreaterThan(8);
   });
 
+  it('a boss that survives long enough learns your True Name', () => {
+    const d = new Duel(scorer, ROSTER[0], 5);
+    d.enemy.hp = 999;
+    d.enemy.maxHp = 999;
+    let named = false;
+    for (let i = 0; i < 8 && !named; i++) {
+      d.castPlayer('mend');
+      d.player.hp = d.player.maxHp;
+      named = d.enemyTurn().some((e) => e.kind === 'truename');
+    }
+    expect(named).toBe(true);
+    expect(d.nameKnown).toBe(true);
+  });
+
   it('the Mirror casts only from the player history', () => {
     const mirror = makeMirror(['inferno', 'balm', 'mirror']);
     const d = new Duel(scorer, mirror, 3);

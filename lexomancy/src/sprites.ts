@@ -165,6 +165,40 @@ export const GRIDS: Record<SpriteArt, SpriteGrid> = {
   ],
 };
 
+/**
+ * Optional second animation frames. Sprites without one still animate: the
+ * renderer pairs the base frame with a glow-pulsed palette instead.
+ */
+export const ALT_GRIDS: Partial<Record<SpriteArt, SpriteGrid>> = {
+  // Wing flap: the sail drops low and forward.
+  dragon: [
+    '...oo.......................',
+    '..oppo......................',
+    '..opppo.....................',
+    'gopgppo.....................',
+    '.opppppo...........o........',
+    '.owwoppo..........oa........',
+    '..oo.oppo.......oaaa........',
+    '.....oppo......oaaaa........',
+    '.....owppo....oaaaaa........',
+    '......owppo..oaaaaaa........',
+    '......owpppooaaaaaaa........',
+    '.......owppppoaaaaao........',
+    '.......owppppppaaaapo.......',
+    '......owwpppppppppppppo.....',
+    '......owwppppppppppppppo....',
+    '......owwpppppppppppppppo...',
+    '.......owwpppppo.opppppppo..',
+    '........opppo.oppo..oppppo..',
+    '........oppo...oppo...oppo..',
+    '........omo.....omo....oppo.',
+    '........................oppo',
+    '.......................oppo.',
+    '......................oapo..',
+    '.....................oaao...',
+  ],
+};
+
 export interface Palette {
   o: string;
   p: string;
@@ -188,15 +222,19 @@ const CLASS_BASE: Record<Exclude<SpriteArt, 'player'>, { p: string; P: string; b
   mirror: { p: 'hsl(250 14% 30%)', P: 'hsl(250 18% 20%)', b: '#c8c2d4', w: '#e8e2f4' },
 };
 
-/** Enemy palette: class base + theme-hue accent/glow. */
-export function enemyPalette(art: Exclude<SpriteArt, 'player'>, themeHue: number): Palette {
+/** Enemy palette: class base + theme-hue accent/glow. Frame 1 pulses the glow. */
+export function enemyPalette(
+  art: Exclude<SpriteArt, 'player'>,
+  themeHue: number,
+  frame = 0,
+): Palette {
   const base = CLASS_BASE[art];
   return {
     o: OUTLINE,
     m: METAL,
     ...base,
     a: `hsl(${themeHue} 55% 48%)`,
-    g: `hsl(${themeHue} 85% 68%)`,
+    g: frame === 0 ? `hsl(${themeHue} 85% 68%)` : `hsl(${themeHue} 95% 82%)`,
   };
 }
 
@@ -209,7 +247,7 @@ export const STAT_HUES: Record<StatName, number> = {
   resonance: 245,
 };
 
-export function playerPalette(dominant: StatName): Palette {
+export function playerPalette(dominant: StatName, frame = 0): Palette {
   const h = STAT_HUES[dominant];
   return {
     o: OUTLINE,
@@ -219,6 +257,6 @@ export function playerPalette(dominant: StatName): Palette {
     b: '#ddd4c2',
     w: '#e8e2f4',
     a: `hsl(${h} 58% 54%)`,
-    g: `hsl(${h} 85% 70%)`,
+    g: frame === 0 ? `hsl(${h} 85% 70%)` : `hsl(${h} 95% 84%)`,
   };
 }

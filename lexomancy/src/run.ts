@@ -2,6 +2,7 @@ import { draftOffer } from './adjectives.ts';
 import { Duel, PLAYER_MAX_HP, PLAYER_MAX_MANA, type DuelEvent, type HexState, type Policy } from './duel.ts';
 import { generateSpire, type FloorSpec } from './floors.ts';
 import { NEUTRAL_STATS, performRite, type RiteResult, type Stats } from './stats.ts';
+import { makeTrueName } from './truename.ts';
 import { makeMirror, ROSTER } from './opponents.ts';
 import type { OpponentDef } from './duel.ts';
 import type { Scorer } from './types.ts';
@@ -55,6 +56,7 @@ export class SpireRun {
   phase: RunPhase = 'rite';
   stats: Stats = NEUTRAL_STATS;
   rite: RiteResult | null = null;
+  trueName: string | null = null;
   duel: Duel | null = null;
   /** Every word the player has cast this run — the spire's fingerprint of you. */
   readonly history: string[] = [];
@@ -85,6 +87,7 @@ export class SpireRun {
     if (this.phase !== 'rite') throw new Error('rite already performed');
     this.rite = performRite(this.scorer, picks, flaw);
     this.stats = this.rite.stats;
+    this.trueName = makeTrueName(picks, this.stats, flaw);
     this.phase = 'threshold';
     return this.rite;
   }

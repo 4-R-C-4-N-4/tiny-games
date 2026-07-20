@@ -15,6 +15,7 @@
       <header id="floor-banner">
         <span id="floor-name">The Anteroom</span>
         <span id="floor-rule">practice grounds — no floor rules</span>
+        <button id="grimoire-btn" type="button" hidden>📖</button>
       </header>
 
       <section id="battle">
@@ -53,6 +54,15 @@
           <div class="rite-actions">
             <span id="rite-count">0 / 5 chosen</span>
             <button id="begin-run" type="button" disabled>Speak your name</button>
+          </div>
+        </div>
+
+        <div id="grimoire" hidden>
+          <h2>Your Grimoire</h2>
+          <p class="rite-sub">Every word you have cast this run. The Mirror is listening.</p>
+          <div id="grimoire-list"></div>
+          <div class="rite-actions">
+            <button id="grimoire-close" type="button">Close</button>
           </div>
         </div>
 

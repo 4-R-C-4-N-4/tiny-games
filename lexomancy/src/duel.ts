@@ -69,12 +69,18 @@ export interface FalterEvent {
   actor: string;
 }
 
+/** The enemy has endured long enough to learn the player's True Name. */
+export interface TruenameEvent {
+  kind: 'truename';
+  actor: string;
+}
+
 export interface DefeatEvent {
   kind: 'defeat';
   loser: string;
 }
 
-export type DuelEvent = CastEvent | DrainEvent | EchoEvent | FalterEvent | DefeatEvent;
+export type DuelEvent = CastEvent | DrainEvent | EchoEvent | FalterEvent | TruenameEvent | DefeatEvent;
 
 export interface CastPreview {
   profile: SpellProfile;
@@ -96,6 +102,9 @@ const HEX_DRAIN_RATE = 0.25;
 const HEX_TURNS = 3;
 const MANA_REGEN = 4;
 const ECHO_FACTOR = 0.5;
+/** Survive this many of the enemy's turns and it learns your True Name. */
+const TRUENAME_ROUNDS = 7;
+const TRUENAME_BOOST = 1.15;
 
 export const PLAYER_MAX_HP = 60;
 export const PLAYER_MAX_MANA = 20;
@@ -141,6 +150,9 @@ export class Duel {
   readonly stats: Stats;
   readonly floor: FloorSpec | null;
   winner: 'player' | 'enemy' | null = null;
+  /** True once the enemy has endured TRUENAME_ROUNDS turns: its casts sharpen. */
+  nameKnown = false;
+  private enemyRounds = 0;
   private readonly rng: () => number;
   private readonly recency: number[];
 
@@ -233,7 +245,9 @@ export class Duel {
     const isPlayer = attacker === this.player;
     const floor = evaluateWord(this.scorer, this.floor, word);
     const effectiveness = this.fatigue(attacker, word) * this.hexWeakening(attacker);
-    const eff = profile.power * effectiveness * floor.amp;
+    // Knowing the True Name sharpens the enemy's casts against its speaker.
+    const nameEdge = !isPlayer && this.nameKnown ? TRUENAME_BOOST : 1;
+    const eff = profile.power * effectiveness * floor.amp * nameEdge;
     const chAmp = (c: 'damage' | 'hex' | 'ward' | 'heal') => floor.channelAmp[c] ?? 1;
 
     attacker.mana -= this.manaCost(attacker, profile);
@@ -341,6 +355,12 @@ export class Duel {
     this.tickHex(this.enemy, events);
     this.checkDefeat(events);
     if (this.winner) return events;
+
+    this.enemyRounds += 1;
+    if (this.enemyRounds === TRUENAME_ROUNDS && !this.nameKnown) {
+      this.nameKnown = true;
+      events.push({ kind: 'truename', actor: this.enemy.name });
+    }
 
     const word = this.pickEnemyWord();
     if (!word) {

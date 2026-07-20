@@ -95,14 +95,57 @@ body {
   image-rendering: pixelated;
 }
 
+/* Two-frame animation: frame B hard-toggles over frame A (wing flap where a
+   hand-drawn alt grid exists, glow pulse otherwise). */
+.sprite-anim {
+  position: relative;
+}
+
+.sprite-anim .frame-b {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  animation: frameToggle 1.2s linear infinite;
+}
+
+@keyframes frameToggle {
+  0%, 49.9% { opacity: 0; }
+  50%, 100% { opacity: 1; }
+}
+
 /* Idle bob — steps() keeps it on the pixel grid. Enemy and player run
    different periods so they never sync up. */
-#enemy .pixel-sprite {
+#enemy .sprite-anim {
   animation: bob 1.4s steps(2, jump-none) infinite;
 }
 
-#player .pixel-sprite {
+#player .sprite-anim {
   animation: bob 1.8s steps(2, jump-none) infinite;
+}
+
+#enemy .sprite-anim canvas {
+  width: 7.5rem;
+}
+
+#player .sprite-anim canvas {
+  width: 6rem;
+}
+
+/* Cast wind-up lunges. */
+.lunge-up {
+  animation: lungeUp 0.3s ease-out;
+}
+
+.lunge-down {
+  animation: lungeDown 0.3s ease-out;
+}
+
+@keyframes lungeUp {
+  30% { transform: translateY(-7px); }
+}
+
+@keyframes lungeDown {
+  30% { transform: translateY(7px); }
 }
 
 @keyframes bob {
@@ -116,13 +159,6 @@ body {
   }
 }
 
-#player .pixel-sprite {
-  width: 5.5rem;
-}
-
-#enemy .pixel-sprite {
-  width: 6.5rem;
-}
 
 /* ---------- VFX ---------- */
 
@@ -162,6 +198,103 @@ body {
 
 .shaking {
   animation: shake 0.35s;
+}
+
+/* Channel-coded spell shapes. */
+.vfx-streak {
+  position: absolute;
+  top: 45%;
+  height: 3px;
+  width: 2.6rem;
+  background: linear-gradient(90deg, transparent, var(--damage));
+  pointer-events: none;
+}
+
+.vfx-streak.from-left {
+  left: -1rem;
+  animation: streakL 0.28s ease-in forwards;
+}
+
+.vfx-streak.from-right {
+  right: -1rem;
+  transform: scaleX(-1);
+  animation: streakR 0.28s ease-in forwards;
+}
+
+@keyframes streakL {
+  from { translate: -3rem 0; opacity: 1; }
+  to { translate: 2.2rem 0; opacity: 0; }
+}
+
+@keyframes streakR {
+  from { translate: 3rem 0; opacity: 1; }
+  to { translate: -2.2rem 0; opacity: 0; }
+}
+
+.vfx-tendril {
+  position: absolute;
+  bottom: 0;
+  width: 4px;
+  height: 12px;
+  background: var(--hex);
+  pointer-events: none;
+  opacity: 0;
+  animation: tendril 0.8s ease-out forwards;
+}
+
+@keyframes tendril {
+  0% { transform: translateY(10px) scaleY(0.4); opacity: 0; }
+  35% { opacity: 1; }
+  100% { transform: translateY(-16px) scaleY(1.6); opacity: 0; }
+}
+
+.vfx-ring {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 2.4rem;
+  height: 2.4rem;
+  border: 2px solid var(--ward);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: ring 0.55s ease-out forwards;
+}
+
+@keyframes ring {
+  from { transform: scale(0.5); opacity: 1; }
+  to { transform: scale(1.9); opacity: 0; }
+}
+
+.vfx-mote {
+  position: absolute;
+  bottom: 15%;
+  width: 4px;
+  height: 4px;
+  background: var(--heal);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  animation: mote 0.9s ease-out forwards;
+}
+
+@keyframes mote {
+  0% { transform: translateY(0); opacity: 0; }
+  25% { opacity: 1; }
+  100% { transform: translateY(-2.4rem); opacity: 0; }
+}
+
+#battle.taboo-flash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--damage);
+  pointer-events: none;
+  animation: tabooFlash 0.4s ease-out forwards;
+}
+
+@keyframes tabooFlash {
+  from { opacity: 0.35; }
+  to { opacity: 0; }
 }
 
 @keyframes shake {
@@ -279,8 +412,61 @@ body {
   display: none;
 }
 
+#grimoire-btn {
+  background: none;
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.65rem;
+  padding: 0.15rem 0.45rem;
+  cursor: pointer;
+}
+
+#grimoire-list {
+  overflow-y: auto;
+  max-height: 60%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.grimoire-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+}
+
+.grimoire-row .g-word {
+  flex: 1;
+  font-weight: bold;
+}
+
+.grimoire-row .g-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+}
+
+.grimoire-row .g-bars i {
+  display: block;
+  width: 4px;
+}
+
+.grimoire-row .g-meta {
+  color: var(--ink-dim);
+  font-size: 0.62rem;
+}
+
 #rite,
-#threshold {
+#threshold,
+#grimoire {
   position: absolute;
   inset: 0;
   background: rgba(13, 10, 20, 0.96);
@@ -293,12 +479,14 @@ body {
 }
 
 #rite[hidden],
-#threshold[hidden] {
+#threshold[hidden],
+#grimoire[hidden] {
   display: none;
 }
 
 #rite h2,
-#threshold h2 {
+#threshold h2,
+#grimoire h2 {
   font-size: 1.1rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
