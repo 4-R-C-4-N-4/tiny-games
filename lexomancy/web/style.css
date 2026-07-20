@@ -95,6 +95,27 @@ body {
   image-rendering: pixelated;
 }
 
+/* Idle bob — steps() keeps it on the pixel grid. Enemy and player run
+   different periods so they never sync up. */
+#enemy .pixel-sprite {
+  animation: bob 1.4s steps(2, jump-none) infinite;
+}
+
+#player .pixel-sprite {
+  animation: bob 1.8s steps(2, jump-none) infinite;
+}
+
+@keyframes bob {
+  from { transform: translateY(0); }
+  to { transform: translateY(3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pixel-sprite {
+    animation: none !important;
+  }
+}
+
 #player .pixel-sprite {
   width: 5.5rem;
 }
