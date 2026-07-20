@@ -22,10 +22,15 @@ export const HIEROPHANT: OpponentDef = {
   art: 'hierophant',
   maxHp: 60,
   policy: 'random',
+  // Every word here is verified (train/eval_words.py) to score ward/heal-
+  // dominant — a few plausible-sounding liturgical words ("litany", "chalice",
+  // "halo", "anoint", "absolve", "priest") sit in an embedding neighborhood
+  // the model reads as cursed-ritual/hex despite correct teacher labels, so
+  // they're excluded rather than fielding a "healer" that secretly hexes.
   words: [
-    'hymn', 'psalm', 'litany', 'blessing', 'chalice', 'incense', 'shrine',
-    'relic', 'halo', 'absolve', 'anoint', 'sanctuary', 'vestment', 'censer',
-    'benediction',
+    'hymn', 'psalm', 'blessing', 'incense', 'shrine', 'sanctuary', 'vestment',
+    'benediction', 'censer', 'divine', 'grace', 'worship', 'devotion', 'vow',
+    'altar',
   ],
 };
 

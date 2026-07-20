@@ -24,11 +24,16 @@ SCORING = {
     "temperature": 2.5,   # softmax temp over raw 0-10 channel scores
     "zipfZero": 5.1,      # zipf at/above which rarity = 0
     "zipfRange": 3.3,     # rarity ramps to 1 over this many zipf points below zero
-    "powerBase": 4,
-    "powerRarity": 16,
-    "potencyFloor": 0.3,  # mundane words (all channels low) keep this fraction
+    # Power scale tuned against real fights: a word's power splits across all
+    # four channels (a "damage" word rarely puts more than ~50-80% of its
+    # power into damage), so the raw scale must be well above HP pools or
+    # even good words tickle for 2-3. Playtest showed ~40-60 HP bosses were
+    # nearly unkillable at the old base=4/rarity=16 scale.
+    "powerBase": 7,
+    "powerRarity": 26,
+    "potencyFloor": 0.4,  # mundane words (all channels low) keep this fraction
     "costBase": 0.35,
-    "costPurity": 0.65,
+    "costPurity": 0.6,
     "zipfScale": 32,      # uint8 zipf encoding: round(zipf * 32)
     # Similarity calibration: raw GloVe cosines put synonyms at ~0.45-0.6 and
     # unrelated words at ~0.2. Fatigue wants synonyms ≈ 1 and unrelated ≈ 0,

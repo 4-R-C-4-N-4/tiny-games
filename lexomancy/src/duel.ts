@@ -98,8 +98,17 @@ const FATIGUE_WINDOW = 4;
 const FATIGUE_DEPTH = 0.7; // max power lost to a perfect-similarity repeat
 const MIN_EFFECTIVENESS = 0.15;
 const HEX_WEAKEN_CAP = 0.5;
-const HEX_DRAIN_RATE = 0.25;
+const HEX_DRAIN_RATE = 0.15;
 const HEX_TURNS = 3;
+/** Hex duration REFRESHES on every new application, so an enemy that casts
+ * hex every turn (a hex-specialist boss) can pin potency near this cap
+ * indefinitely. Keep the sustained per-turn drain survivable on its own —
+ * ~2-3 HP/turn, not a death sentence a player can do nothing about. */
+const HEX_POTENCY_CAP = 16;
+/** Wards are a reactive, temporary buffer, not a permanent wall — they fade
+ * a little every time their owner acts, so a fight can't be stalled out by
+ * banking ward early and never taking damage again. */
+const WARD_DECAY = 0.75;
 const MANA_REGEN = 4;
 const ECHO_FACTOR = 0.5;
 /** Survive this many of the enemy's turns and it learns your True Name. */
@@ -224,15 +233,18 @@ export class Duel {
     };
   }
 
-  private tickHex(actor: Combatant, events: DuelEvent[]): void {
-    if (!actor.hex) return;
-    const drain = Math.round(actor.hex.potency * HEX_DRAIN_RATE);
-    if (drain > 0) {
-      actor.hp = Math.max(0, actor.hp - drain);
-      events.push({ kind: 'drain', actor: actor.name, drain });
+  /** Runs at the start of an actor's turn: hex drains and decays, ward fades. */
+  private tickTurnStart(actor: Combatant, events: DuelEvent[]): void {
+    if (actor.hex) {
+      const drain = Math.round(actor.hex.potency * HEX_DRAIN_RATE);
+      if (drain > 0) {
+        actor.hp = Math.max(0, actor.hp - drain);
+        events.push({ kind: 'drain', actor: actor.name, drain });
+      }
+      actor.hex.turns -= 1;
+      if (actor.hex.turns <= 0) actor.hex = null;
     }
-    actor.hex.turns -= 1;
-    if (actor.hex.turns <= 0) actor.hex = null;
+    if (actor.ward > 0) actor.ward = Math.floor(actor.ward * WARD_DECAY);
   }
 
   private resolveCast(
@@ -270,7 +282,7 @@ export class Duel {
     const hexApplied = Math.round(eff * profile.mix.hex * chAmp('hex') * hexMul * hexResist);
     if (hexApplied > 0) {
       offenseTarget.hex = {
-        potency: (offenseTarget.hex?.potency ?? 0) + hexApplied,
+        potency: Math.min(HEX_POTENCY_CAP, (offenseTarget.hex?.potency ?? 0) + hexApplied),
         turns: HEX_TURNS,
       };
     }
@@ -340,7 +352,7 @@ export class Duel {
     if (this.winner || !this.scorer.knows(word)) return null;
     if (this.manaCost(this.player, this.scorer.score(word)) > this.player.mana) return null;
     const events: DuelEvent[] = [];
-    this.tickHex(this.player, events);
+    this.tickTurnStart(this.player, events);
     this.checkDefeat(events);
     if (this.winner) return events;
     this.resolveCast(this.player, this.enemy, word, events);
@@ -352,7 +364,7 @@ export class Duel {
   enemyTurn(): DuelEvent[] {
     if (this.winner) return [];
     const events: DuelEvent[] = [];
-    this.tickHex(this.enemy, events);
+    this.tickTurnStart(this.enemy, events);
     this.checkDefeat(events);
     if (this.winner) return events;
 
