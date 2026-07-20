@@ -30,6 +30,28 @@ Words are rarely pure. "Rot" is hex + damage. "Dawn" is heal + ward. "Mirror" is
 
 As the player types, four bars fill in real time showing the word's spell profile *before* committing. The compose box is a scrying glass — exploration of the semantic space is a core pleasure loop. Deterministic scoring means the same word always produces the same spell, so players build a personal grimoire of discoveries across runs.
 
+### Neologisms — any shape-valid word is castable
+
+Typing a word not in the 80k-word lexicon doesn't fail — it's decomposed. A
+client-side DP segmentation (same idea as "wordninja") finds the best split
+of the string into real dictionary fragments (min length 4, scored by Zipf
+frequency, penalizing uncovered characters). "Frostbane" reads as **frost +
+bane**, blended from those two real embeddings and run through the exact
+same scoring head as any dictionary word — the scrying glass shows "◈ frost
++ bane" and the profile lands as a genuine hybrid, rated *more* rare than
+either root (a novelty bonus for a word never spoken before). Because the
+blended embedding is anchored on real roots, fatigue still works correctly:
+an invented reskin ("killzorp") still reads as similar to "kill" and
+fatigues against it — closing the obvious exploit of spamming nonsense
+synonyms to dodge the anti-spam system.
+
+A word with **zero** recognizable fragments — true gibberish — gets a fixed
+low rarity (0), landing as a weak, flat cantrip ("◇ wild babble"). This
+keeps the core thesis intact: mashing the keyboard never out-powers learning
+real vocabulary; only wordplay *grounded* in real roots does. No new asset
+or retraining required — segmentation runs entirely over the vocab + Zipf
+table already shipped in `lexicon.bin`.
+
 ### Scoring engine
 
 **Architecture (decided): static embeddings + distilled head.**

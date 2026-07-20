@@ -19,7 +19,11 @@ describe.skipIf(!present)('ModelScorer', () => {
     expect(scorer.wordCount).toBeGreaterThan(50000);
     expect(scorer.knows('kill')).toBe(true);
     expect(scorer.knows('conflagration')).toBe(true);
-    expect(scorer.knows('zzzzzz')).toBe(false);
+    // Any shape-valid word is castable now — "knows" just means "has a shape".
+    expect(scorer.knows('zzzzzz')).toBe(true);
+    expect(scorer.knows('a')).toBe(false);
+    expect(scorer.knows('42')).toBe(false);
+    expect(scorer.knows('word salad')).toBe(false);
   });
 
   it('matches the python golden profiles exactly where integral, closely where float', () => {
@@ -58,6 +62,45 @@ describe.skipIf(!present)('ModelScorer', () => {
   it('ships stat and theme anchors', () => {
     expect(scorer.anchors.get('stats:ferocity')).toBeDefined();
     expect(scorer.anchors.get('themes:bone')).toBeDefined();
+  });
+
+  it('dictionary words are never marked improvised', () => {
+    expect(scorer.score('inferno').improvised).toBe(false);
+    expect(scorer.score('inferno').roots).toBeUndefined();
+  });
+
+  it('decomposes a portmanteau into its real roots', () => {
+    const p = scorer.score('frostbane');
+    expect(p.improvised).toBe(true);
+    expect(p.roots).toEqual(['frost', 'bane']);
+  });
+
+  it('a decomposed neologism reads as a blend of its roots channels', () => {
+    const frost = scorer.score('frost');
+    const bane = scorer.score('bane');
+    const blend = scorer.score('frostbane');
+    // The blend should land closer to each root's profile than to an
+    // unrelated word — it's not just falling back to noise.
+    const dist = (a: typeof frost, b: typeof frost) =>
+      CHANNELS.reduce((s, c) => s + Math.abs(a.mix[c] - b.mix[c]), 0);
+    const unrelated = scorer.score('spreadsheet');
+    expect(Math.min(dist(blend, frost), dist(blend, bane))).toBeLessThan(dist(blend, unrelated));
+  });
+
+  it('pure gibberish is weak, deterministic babble — not a power shortcut', () => {
+    const gib = scorer.score('qzxvvkplor');
+    expect(gib.improvised).toBe(true);
+    expect(gib.roots).toBeUndefined();
+    expect(gib.rarity).toBe(0);
+    // Weak: no worse than a common real word like "kill" (also rarity 0).
+    expect(gib.power).toBeLessThanOrEqual(scorer.score('kill').power);
+    expect(scorer.score('qzxvvkplor')).toEqual(gib); // deterministic
+  });
+
+  it('an invented reskin of a real word still fatigues against it', () => {
+    const d = scorer.score('killzorp');
+    expect(d.roots).toEqual(['kill']);
+    expect(scorer.similarity('killzorp', 'kill')).toBeGreaterThan(0.5);
   });
 });
 

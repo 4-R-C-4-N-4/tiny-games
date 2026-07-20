@@ -16,11 +16,17 @@ export interface SpellProfile {
   power: number;
   /** Mana cost. Pure words cost more per point of power than hybrids. */
   cost: number;
+  /** True if this word isn't a dictionary entry — a decomposed or babbled neologism. */
+  improvised: boolean;
+  /** Real word fragments a non-dictionary word decomposed into, if any. */
+  roots?: string[];
 }
 
 export interface Scorer {
   score(word: string): SpellProfile;
-  /** True if the word is castable at all (in vocabulary, valid shape). */
+  /** True if the word is castable at all — valid shape. Any shape-valid word
+   * is castable now: dictionary words score normally, everything else is an
+   * improvised neologism (decomposed from real roots, or weak babble). */
   knows(word: string): boolean;
   /**
    * Semantic similarity in [0,1] — drives fatigue. The real model uses embedding

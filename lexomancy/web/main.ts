@@ -90,6 +90,19 @@ function renderPreview(): void {
     warn.textContent = '';
     warn.className = '';
   }
+  const rootsEl = $('preview-roots');
+  if (p && p.profile.improvised) {
+    if (p.profile.roots?.length) {
+      rootsEl.textContent = `◈ ${p.profile.roots.join(' + ')}`;
+      rootsEl.className = 'roots';
+    } else {
+      rootsEl.textContent = '◇ wild babble — not a real word, and it shows';
+      rootsEl.className = '';
+    }
+  } else {
+    rootsEl.textContent = '';
+    rootsEl.className = '';
+  }
   const inDuel = run.phase === 'duel';
   castBtn.disabled = !inDuel || !p || !p.affordable || enemyThinking;
   castBtn.textContent = shortfall > 0 ? `Need ${shortfall} ✦` : 'Cast';
@@ -219,7 +232,14 @@ function renderGrimoire(): void {
     const word = document.createElement('span');
     word.className = 'g-word';
     word.textContent = profile.word;
+    if (profile.improvised) word.title = profile.roots?.length ? profile.roots.join(' + ') : 'wild babble';
     row.appendChild(word);
+    if (profile.improvised) {
+      const badge = document.createElement('i');
+      badge.className = 'g-improvised';
+      badge.textContent = profile.roots?.length ? '◈' : '◇';
+      row.appendChild(badge);
+    }
     const bars = document.createElement('span');
     bars.className = 'g-bars';
     for (const c of CHANNELS) {

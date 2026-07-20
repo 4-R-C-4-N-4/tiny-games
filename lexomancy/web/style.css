@@ -464,6 +464,12 @@ body {
   font-size: 0.62rem;
 }
 
+.grimoire-row .g-improvised {
+  color: var(--mana);
+  font-style: normal;
+  font-size: 0.7rem;
+}
+
 #rite,
 #threshold,
 #grimoire {
@@ -672,6 +678,19 @@ body {
 
 #preview-warn.short {
   color: var(--mana);
+}
+
+#preview-roots {
+  grid-column: 1 / -1;
+  font-size: 0.62rem;
+  font-style: italic;
+  color: var(--ink-dim);
+  min-height: 0.85em;
+}
+
+#preview-roots.roots {
+  color: var(--mana);
+  font-style: normal;
 }
 
 /* Insufficient mana: the cost readout goes hot pink/red and bold, and the

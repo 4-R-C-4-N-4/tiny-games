@@ -145,6 +145,6 @@ export class StubScorer implements Scorer {
     const purity = mix[dominant];
     const cost = Math.max(1, Math.round(power * (0.35 + 0.65 * purity)));
 
-    return { word: w, mix, dominant, rarity, power, cost };
+    return { word: w, mix, dominant, rarity, power, cost, improvised: !seed };
   }
 }
