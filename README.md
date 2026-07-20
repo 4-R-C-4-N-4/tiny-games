@@ -22,6 +22,48 @@ size of the model behind it.
 
 ## Games
 
+### 📖 lexomancy — a war of words
+
+A word-spell roguelike where **your vocabulary is your build**. Type any English word; a
+client-side model scores it live across four spell channels (damage / hex / ward / heal)
+in a scrying-glass preview, then you cast it in strict-alternation duels up a spire of
+eight floors. "Kill" is a cantrip; "conflagration" is an arcane spike; "bureaucracy" is,
+correctly, a hex.
+
+**What makes it tick — one embedding space powers every system:**
+
+- **The scorer.** 80k dictionary-filtered words as int8 PCA-reduced GloVe embeddings plus
+  a tiny MLP head distilled from a local-LLM teacher (~8.5MB total, instant vanilla-JS
+  inference). Word rarity (Zipf) is the power knob — erudition is literally damage. The
+  reusable distillation pipeline lives in [`lexomancy/train/`](lexomancy/train/README.md).
+- **Semantic fatigue.** Casts leave residue: repeat a word — or a near-synonym — and it
+  fizzles at full mana cost. Real embedding cosine, so "inferno" after "conflagration"
+  genuinely tires. Variety is the mana pool.
+- **The Self-Naming Rite.** Draft five adjectives (synonyms collapse — the anti-dump-stat
+  lesson) plus a free-form flaw; stat anchors turn them into your build, and they seed
+  your **True Name** — which bosses that survive long enough will speak, and sharpen.
+- **The spire studies you.** Floors roll archetype × theme (domains amplify, taboos
+  backfire, echoes return your words, drains cling); bosses climb a policy ladder from
+  random through counter-casting to fatigue-exploiting; upper floors open pre-warded
+  against your run's semantic fingerprint. At the Summit, **The Mirror** casts only words
+  you cast this run — beat your past self with vocabulary you haven't spent.
+- **Procedural pixel art.** Sprites are text grids palette-swapped by floor theme; your
+  cloak (and The Mirror) wear your dominant stat's color. Channel-coded VFX display the
+  score vector: damage streaks, hex tendrils, ward rune-rings, heal motes.
+
+**Play it:**
+
+```bash
+cd lexomancy
+npm install
+npm run dev          # play in the browser
+npm run single       # → dist/lexomancy.html, one self-contained offline file (model included)
+npm test             # engine + scorer golden suite
+```
+
+Design doc: [`lexomancy/docs/lexomancy-design-doc.md`](lexomancy/docs/lexomancy-design-doc.md).
+Sprite gallery for art direction: `npm run dev`, then open `/?gallery`.
+
 ### 🧙 wiz-tower — adversarial tower defense
 
 A mobile-first, vertical tower-defense game where the attacking waves are generated live by a
@@ -75,6 +117,11 @@ grammar).
 
 ```
 tiny-games/
+├── lexomancy/          # word-spell roguelike duel (in progress)
+│   ├── src/            # headless duel engine + scorers (stub and distilled model)
+│   ├── web/            # portrait battle stage, live spell preview, lexicon.bin asset
+│   ├── train/          # reusable distillation pipeline: vocab → teacher labels → head → pack
+│   └── docs/           # design doc
 ├── wiz-tower/          # the first game — adversarial tower defense
 │   ├── src/            # deterministic sim + attacker tiers (search, strategist, distilled net)
 │   ├── web/            # Canvas renderer, DOM HUD, start screen, theming

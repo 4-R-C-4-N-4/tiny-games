@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Lexomancy</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📖</text></svg>"
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="stage">
+      <header id="floor-banner">
+        <span id="floor-name">The Anteroom</span>
+        <span id="floor-rule">practice grounds — no floor rules</span>
+        <button id="grimoire-btn" type="button" hidden>📖</button>
+      </header>
+
+      <section id="battle">
+        <div id="enemy" class="combatant">
+          <div class="nameplate">
+            <span class="name" id="enemy-name">…</span>
+            <div class="hp-track"><div class="hp-fill" id="enemy-hp"></div></div>
+            <span class="status" id="enemy-status"></span>
+          </div>
+          <div class="sprite" id="enemy-sprite"></div>
+        </div>
+
+        <div id="player" class="combatant">
+          <div class="sprite back" id="player-sprite"></div>
+          <div class="nameplate">
+            <span class="name" id="player-name">The Unnamed</span>
+            <div class="hp-track"><div class="hp-fill" id="player-hp"></div></div>
+            <div class="mana-track"><div class="mana-fill" id="player-mana"></div></div>
+            <span class="status" id="player-status"></span>
+          </div>
+        </div>
+
+        <div id="overlay" hidden>
+          <p id="overlay-text"></p>
+          <button id="overlay-btn" type="button">Climb again</button>
+        </div>
+
+        <div id="rite" hidden>
+          <h2>The Self-Naming Rite</h2>
+          <p class="rite-sub">Choose five words that describe you. Choose carefully — synonyms collapse.</p>
+          <div id="rite-choices"></div>
+          <div id="rite-stats">
+            <div class="rite-stat" data-stat="ferocity">
+              <span class="rs-label">Ferocity</span>
+              <div class="rs-track"><div class="rs-fill"></div></div>
+            </div>
+            <div class="rite-stat" data-stat="guile">
+              <span class="rs-label">Guile</span>
+              <div class="rs-track"><div class="rs-fill"></div></div>
+            </div>
+            <div class="rite-stat" data-stat="stone">
+              <span class="rs-label">Stone</span>
+              <div class="rs-track"><div class="rs-fill"></div></div>
+            </div>
+            <div class="rite-stat" data-stat="grace">
+              <span class="rs-label">Grace</span>
+              <div class="rs-track"><div class="rs-fill"></div></div>
+            </div>
+            <div class="rite-stat" data-stat="resonance">
+              <span class="rs-label">Resonance</span>
+              <div class="rs-track"><div class="rs-fill"></div></div>
+            </div>
+          </div>
+          <label class="flaw-row">
+            <span>…and one flaw, in your own word:</span>
+            <input id="flaw-input" type="text" maxlength="24" spellcheck="false" placeholder="e.g. reckless" />
+          </label>
+          <div class="rite-actions">
+            <span id="rite-count">0 / 5 chosen</span>
+            <button id="begin-run" type="button" disabled>Speak your name</button>
+          </div>
+        </div>
+
+        <div id="grimoire" hidden>
+          <h2>Your Grimoire</h2>
+          <p class="rite-sub">Every word you have cast this run. The Mirror is listening.</p>
+          <div id="grimoire-list"></div>
+          <div class="rite-actions">
+            <button id="grimoire-close" type="button">Close</button>
+          </div>
+        </div>
+
+        <div id="threshold" hidden>
+          <h2 id="th-name"></h2>
+          <p id="th-inscription" class="rite-sub"></p>
+          <p id="th-rule"></p>
+          <p class="th-hint">The compose glass below previews words under this floor’s law.</p>
+          <div id="study-report" hidden></div>
+          <div class="rite-actions">
+            <button id="pact-btn" type="button">Pact: +4 max mana, enter hexed</button>
+            <button id="study-btn" type="button">Study: −5 max HP, read the boss</button>
+            <button id="enter-btn" type="button">Enter</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="compose">
+        <div id="preview">
+          <div class="channel" data-channel="damage">
+            <span class="label">DMG</span>
+            <div class="track"><div class="fill" id="bar-damage"></div></div>
+          </div>
+          <div class="channel" data-channel="hex">
+            <span class="label">HEX</span>
+            <div class="track"><div class="fill" id="bar-hex"></div></div>
+          </div>
+          <div class="channel" data-channel="ward">
+            <span class="label">WRD</span>
+            <div class="track"><div class="fill" id="bar-ward"></div></div>
+          </div>
+          <div class="channel" data-channel="heal">
+            <span class="label">HEA</span>
+            <div class="track"><div class="fill" id="bar-heal"></div></div>
+          </div>
+          <div id="preview-meta">
+            <span id="preview-rarity">—</span>
+            <span id="preview-cost">—</span>
+          </div>
+          <div id="preview-warn"></div>
+          <div id="preview-roots"></div>
+        </div>
+        <form id="cast-form" autocomplete="off">
+          <input
+            id="word-input"
+            type="text"
+            inputmode="latin"
+            spellcheck="false"
+            placeholder="speak a word…"
+            maxlength="24"
+          />
+          <button id="cast-btn" type="submit" disabled>Cast</button>
+        </form>
+        <div id="cast-log"></div>
+      </section>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
