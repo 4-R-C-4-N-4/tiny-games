@@ -198,14 +198,19 @@ with purity — had to come down too (0.35/0.6 → 0.18/0.32), or nearly every
 real cast became a maximally-expensive "spike" that starved the whole
 encounter after one hit.
 
-**Known follow-up:** this also sharpened enemy self-sustain — a heal/ward
-specialist boss (the Hierophant) now heals ~10-14 HP per turn from its own
-liturgical kit instead of a diluted fraction, and simulated fights against
-it can outpace a fatigue-limited attacker's sustainable damage. Damage-
-focused matchups got dramatically more decisive (verified: two bosses died
-in 2-4 turns in simulation, down from 15-30+); whether the healer archetype
-needs its own separate sustain dampening is an open question pending real
-playtesting, not yet acted on.
+**Follow-up, resolved (playtested same day):** this also sharpened enemy
+self-sustain — the Hierophant now healed ~10-14 HP per turn from its own
+liturgical kit instead of a diluted fraction. A real playtest (adaptive
+strategy: hex to bypass ward stacking, wide cross-register vocabulary to
+dodge fatigue) confirmed the fight was genuinely winnable and never
+seriously threatened the player (HP never dropped below 52/60) — the
+earlier "unwinnable" read from an automated sim had been a test-harness
+bug, not a real problem. But it took 38 turns against 2-14 for its floor-1
+peers under the equivalent strategy — a real pacing outlier. Added
+`ENEMY_HEAL_MUL = 0.65` (duel.ts) — enemies have no grace stat to trade off
+against like the player does, so a flat dampener keeps the "healer boss"
+identity without letting it become uniquely grindy. Re-playtested: 12
+turns, still zero real threat to the player.
 
 ### Quick cast (added post-launch, 2026-07-20)
 

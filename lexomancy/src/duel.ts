@@ -109,6 +109,16 @@ const HEX_POTENCY_CAP = 16;
  * a little every time their owner acts, so a fight can't be stalled out by
  * banking ward early and never taking damage again. */
 const WARD_DECAY = 0.75;
+/** The mix-sharpening pass concentrates a heal-flavored word's full power
+ * into the heal channel instead of a diluted fraction — great for the
+ * player (grace investment finally means something), but it also let a
+ * sustain-archetype boss (the Hierophant) out-heal what a fatigue-limited
+ * attacker can sustainably deal, turning one specific fight into a ~40-turn
+ * grind while its floor-1 peers die in single digits. Enemies don't have a
+ * grace stat to invest in trading off against, so a flat dampener keeps the
+ * "healer boss" identity without letting it become uniquely unkillable.
+ */
+const ENEMY_HEAL_MUL = 0.65;
 const MANA_REGEN = 4;
 const ECHO_FACTOR = 0.5;
 /** Survive this many of the enemy's turns and it learns your True Name. */
@@ -287,7 +297,7 @@ export class Duel {
       };
     }
 
-    const healMul = isPlayer ? this.statMul(this.stats.grace) : 1;
+    const healMul = isPlayer ? this.statMul(this.stats.grace) : ENEMY_HEAL_MUL;
     const healed = Math.min(
       attacker.maxHp - attacker.hp,
       Math.round(eff * profile.mix.heal * chAmp('heal') * healMul * utilityScale),
