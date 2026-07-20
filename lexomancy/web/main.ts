@@ -1,5 +1,6 @@
 import { Duel, type Combatant, type DuelEvent, type CastPreview, type OpponentDef } from '../src/duel.ts';
-import { THEME_HUES } from '../src/floors.ts';
+import { THEME_HUES, type Theme } from '../src/floors.ts';
+import { arenaFor } from './arena-render.ts';
 import { ModelScorer } from '../src/model-scorer.ts';
 import { SpireRun } from '../src/run.ts';
 import { STAT_HUES, enemyPalette, playerPalette, type SpriteArt } from '../src/sprites.ts';
@@ -12,7 +13,10 @@ import { spriteAnim } from './sprite-render.ts';
 // Thin shell over SpireRun: the run machine is headless; this file only
 // renders phases and forwards input.
 
-const ENEMY_TURN_DELAY_MS = 750;
+// Trimmed from 750ms: the preview no longer goes dark during this window
+// (see renderPreview), so a shorter gap still reads as responsive rather
+// than rushed — just enough time for the enemy's own cast VFX to land.
+const ENEMY_TURN_DELAY_MS = 600;
 
 let scorer: Scorer = new StubScorer();
 let run: SpireRun;
@@ -59,9 +63,11 @@ function activeDuelForPreview(): Duel | null {
 }
 
 function renderPreview(): void {
+  // The scrying glass stays live even while the enemy acts — duel.preview()
+  // is a pure read, so there's no reason composing your next word should go
+  // dark for the ~0.5s the enemy takes. Only the actual cast is gated.
   const duel = activeDuelForPreview();
-  const p: CastPreview | null =
-    duel && !enemyThinking ? duel.preview(input.value) : null;
+  const p: CastPreview | null = duel ? duel.preview(input.value) : null;
   for (const c of CHANNELS) {
     bars[c].style.width = p ? `${Math.round(p.profile.mix[c] * 100)}%` : '0%';
   }
@@ -153,6 +159,23 @@ function renderCombatants(): void {
     : '100%';
   $('player-status').textContent = player ? statusLine(player) : '';
   $('player-name').textContent = run.trueName ?? 'The Unnamed';
+  $('enemy-thinking').hidden = !(enemyThinking && run.phase === 'duel');
+}
+
+const RITE_THEME: Theme = 'starlight';
+let arenaTheme: Theme | null = null;
+
+function setArenaTheme(theme: Theme): void {
+  if (theme === arenaTheme) return;
+  arenaTheme = theme;
+  const layers = arenaFor(theme);
+  $('arena-ground').style.backgroundImage = `url(${layers.ground})`;
+  const far = $('arena-far');
+  far.style.backgroundImage = `url(${layers.farDressing})`;
+  far.style.setProperty('--tile-w', `${layers.farTileWidth}px`);
+  const near = $('arena-near');
+  near.style.backgroundImage = `url(${layers.nearDressing})`;
+  near.style.setProperty('--tile-w', `${layers.nearTileWidth}px`);
 }
 
 function renderFloorBanner(): void {
@@ -160,6 +183,7 @@ function renderFloorBanner(): void {
     $('floor-name').textContent = 'The Spire';
     $('floor-rule').textContent = `${wordCountLabel()} — name yourself`;
     document.getElementById('stage')!.classList.remove('themed');
+    setArenaTheme(RITE_THEME);
     return;
   }
   const floor = run.currentFloorSafe();
@@ -169,6 +193,7 @@ function renderFloorBanner(): void {
   const stage = document.getElementById('stage')!;
   stage.classList.add('themed');
   stage.style.setProperty('--floor-hue', String(THEME_HUES[floor.theme]));
+  setArenaTheme(floor.theme);
 }
 
 function wordCountLabel(): string {
@@ -294,6 +319,55 @@ function render(): void {
   renderFloorBanner();
   renderCombatants();
   renderPreview();
+  renderQuickcast();
+}
+
+/** Fills the gap between the arena and compose: tap a discovered word to
+ * reuse it instead of retyping. Dims words currently fatigued so a tap
+ * doesn't waste a turn on a word that'll fizzle. */
+function renderQuickcast(): void {
+  const list = $('quickcast-list');
+  const label = $('quickcast-label');
+  list.replaceChildren();
+
+  const seen = new Set<string>();
+  const words: string[] = [];
+  for (let i = run.history.length - 1; i >= 0 && words.length < 40; i--) {
+    const w = run.history[i];
+    if (seen.has(w)) continue;
+    seen.add(w);
+    words.push(w);
+  }
+
+  label.hidden = words.length === 0;
+  if (words.length === 0) {
+    const empty = document.createElement('span');
+    empty.id = 'quickcast-empty';
+    empty.textContent = 'Cast a word and it appears here for quick reuse.';
+    list.appendChild(empty);
+    return;
+  }
+
+  const duel = activeDuelForPreview();
+  for (const w of words) {
+    if (!scorer.knows(w)) continue;
+    const profile = scorer.score(w);
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'qc-chip';
+    const eff = duel?.preview(w)?.effectiveness ?? 1;
+    if (eff < 0.5) chip.classList.add('fatigued');
+    const dot = document.createElement('i');
+    dot.className = 'qc-dot';
+    dot.style.background = CHANNEL_COLORS[profile.dominant];
+    chip.append(dot, document.createTextNode(w));
+    chip.addEventListener('click', () => {
+      input.value = w;
+      renderPreview();
+      input.focus();
+    });
+    list.appendChild(chip);
+  }
 }
 
 function renderThreshold(): void {
@@ -402,10 +476,21 @@ function otherEl(actor: string): HTMLElement {
   return actor === 'player' ? $('enemy') : $('player');
 }
 
-function vfxBurst(target: HTMLElement, color: string): void {
+// Streak travel time — must match the CSS default (--streak-ms) so the
+// impact beat (burst/shake/number) is scheduled to land exactly when the
+// projectile visually arrives, not before.
+const STREAK_MS = 180;
+
+/** Damage magnitude -> visual intensity, clamped so tiny/huge hits both read clearly. */
+function magFor(value: number, ref = 12): number {
+  return Math.min(1.9, Math.max(0.6, 0.6 + (value / ref) * 0.8));
+}
+
+function vfxBurst(target: HTMLElement, color: string, mag = 1): void {
   const b = document.createElement('div');
   b.className = 'vfx-burst';
   b.style.setProperty('--vfx-color', color);
+  b.style.setProperty('--mag', String(mag));
   target.appendChild(b);
   b.addEventListener('animationend', () => b.remove());
 }
@@ -460,47 +545,43 @@ function vfxFloat(target: HTMLElement, text: string, color: string): void {
   f.addEventListener('animationend', () => f.remove());
 }
 
-function vfxShake(target: HTMLElement): void {
+function vfxShake(target: HTMLElement, mag = 1): void {
   target.classList.remove('shaking');
+  target.style.setProperty('--mag', String(mag));
   void target.offsetWidth; // restart the animation
   target.classList.add('shaking');
 }
 
 function playCastVfx(e: DuelEvent): void {
   if (e.kind === 'drain') {
-    vfxFloat(combatantEl(e.actor), `−${e.drain} ☠`, CHANNEL_COLORS.hex);
+    const el = combatantEl(e.actor);
+    vfxFloat(el, `−${e.drain} ☠`, CHANNEL_COLORS.hex);
+    vfxShake(el, magFor(e.drain, 8));
     return;
   }
   if (e.kind === 'echo') {
-    vfxFloat(combatantEl(e.actor), `−${e.damage} ⟲`, CHANNEL_COLORS.damage);
-    vfxShake(combatantEl(e.actor));
+    const el = combatantEl(e.actor);
+    const mag = magFor(e.damage);
+    vfxFloat(el, `−${e.damage} ⟲`, CHANNEL_COLORS.damage);
+    vfxBurst(el, CHANNEL_COLORS.damage, mag);
+    vfxShake(el, mag);
     return;
   }
   if (e.kind === 'truename') {
-    vfxBurst(combatantEl('player'), CHANNEL_COLORS.hex);
-    vfxShake(combatantEl('player'));
+    const el = combatantEl('player');
+    vfxBurst(el, CHANNEL_COLORS.hex, 1.4);
+    vfxShake(el, 1.4);
     return;
   }
   if (e.kind !== 'cast') return;
   const caster = combatantEl(e.actor);
   const target = e.tabooed ? caster : otherEl(e.actor);
+  // Beat 1 (instant, t=0): the wind-up — your input's immediate confirmation.
   vfxLunge(e.actor);
-  if (e.tabooed) {
-    vfxTabooFlash();
-    vfxBurst(caster, CHANNEL_COLORS.damage);
-  }
-  // Channel-coded shapes: the VFX literally displays the score vector.
-  if (e.damage > 0 || e.absorbed > 0) {
-    vfxStreak(target, e.actor !== 'player');
-    if (e.damage > 0) {
-      vfxFloat(target, `−${e.damage}`, CHANNEL_COLORS.damage);
-      vfxShake(target);
-    }
-  }
-  if (e.hexApplied > 0) {
-    vfxSpawn(target, 'vfx-tendril', 3, 900);
-    vfxFloat(target, `☠ +${e.hexApplied}`, CHANNEL_COLORS.hex);
-  }
+  if (e.tabooed) vfxTabooFlash();
+
+  // Beat 2 (instant): self-effects have no travel distance — ward blooms and
+  // heal motes rise on the caster right away, no reason to wait.
   if (e.wardGained > 0) {
     vfxRing(caster);
     vfxFloat(caster, `🛡 +${e.wardGained}`, CHANNEL_COLORS.ward);
@@ -508,6 +589,28 @@ function playCastVfx(e: DuelEvent): void {
   if (e.healed > 0) {
     vfxSpawn(caster, 'vfx-mote', 4, 1000);
     vfxFloat(caster, `+${e.healed}`, CHANNEL_COLORS.heal);
+  }
+
+  // Beat 3 (delayed to STREAK_MS): effects landing ON the target — damage
+  // and hex both travel, so their payoff (burst/shake/tendrils/numbers) is
+  // scheduled to land exactly when the streak visually arrives, not before.
+  const hasImpact = e.damage > 0 || e.absorbed > 0 || e.hexApplied > 0;
+  if (hasImpact) vfxStreak(target, e.actor !== 'player');
+  if (e.damage > 0 || e.absorbed > 0) {
+    const mag = magFor(e.damage || e.absorbed);
+    setTimeout(() => {
+      if (e.damage > 0) {
+        vfxBurst(target, CHANNEL_COLORS.damage, mag);
+        vfxFloat(target, `−${e.damage}`, CHANNEL_COLORS.damage);
+        vfxShake(target, mag);
+      }
+    }, STREAK_MS);
+  }
+  if (e.hexApplied > 0) {
+    setTimeout(() => {
+      vfxSpawn(target, 'vfx-tendril', 3, 900);
+      vfxFloat(target, `☠ +${e.hexApplied}`, CHANNEL_COLORS.hex);
+    }, STREAK_MS);
   }
 }
 

@@ -16,6 +16,7 @@ import { CHANNELS, type Channel, type ChannelMix, type Scorer, type SpellProfile
 
 interface ScoringParams {
   temperature: number;
+  mixFloor: number;
   zipfZero: number;
   zipfRange: number;
   powerBase: number;
@@ -301,9 +302,14 @@ export class ModelScorer implements Scorer {
     const maxRaw = Math.max(...raw);
     const exps = raw.map((r) => Math.exp((r - maxRaw) / p.temperature));
     const sum = exps.reduce((a, b) => a + b, 0);
-    const mix = Object.fromEntries(
-      CHANNELS.map((c, ci) => [c, exps[ci] / sum]),
-    ) as ChannelMix;
+    let mixArr = exps.map((e) => e / sum);
+    // Floor + renormalize: zero out channels that don't survive as a real
+    // component instead of letting every word smear across all four. The
+    // softmax max is always >= 1/4 > mixFloor, so the sum can't hit zero.
+    mixArr = mixArr.map((m) => (m < p.mixFloor ? 0 : m));
+    const mixSum = mixArr.reduce((a, b) => a + b, 0);
+    mixArr = mixArr.map((m) => m / mixSum);
+    const mix = Object.fromEntries(CHANNELS.map((c, ci) => [c, mixArr[ci]])) as ChannelMix;
 
     let dominant: Channel = CHANNELS[0];
     for (const c of CHANNELS) if (mix[c] > mix[dominant]) dominant = c;

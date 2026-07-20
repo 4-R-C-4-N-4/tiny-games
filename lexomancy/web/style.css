@@ -58,13 +58,91 @@ body {
   font-style: italic;
 }
 
-#battle {
+/* #playfield holds everything below the banner: the fixed-size arena plus
+   the compose panel. It's the flex:1 element now (battle itself no longer
+   is), and the full-screen interstitial panels (rite/threshold/grimoire/
+   overlay) are its direct children so they cover the WHOLE playfield —
+   not just the small arena box above the compose panel. */
+#playfield {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  min-height: 0;
+}
+
+/* Fixed frame, not elastic flex:1 — a defined arena instead of however much
+   leftover vertical space the viewport happens to have. */
+#battle {
+  flex: none;
+  /* Bounded, not elastic (no more flex:1 stretching to fill leftover
+     space) — but a flat rem value overflowed short viewports and left an
+     ugly gap on wide-short desktop windows. clamp() keeps it a deliberate,
+     capped arena size while still scaling down before it ever forces a
+     scrollbar. */
+  height: clamp(10rem, 34dvh, 23rem);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   padding: 1rem 0.75rem;
-  min-height: 0;
+  overflow: hidden;
+  box-shadow: inset 0 0 2.5rem rgba(0, 0, 0, 0.55);
+}
+
+#arena {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+#arena-ground {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  image-rendering: pixelated;
+}
+
+#arena-far,
+#arena-near {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background-repeat: repeat-x;
+  background-position: bottom left;
+  image-rendering: pixelated;
+}
+
+#arena-far {
+  top: 42%;
+  height: 22%;
+  background-size: auto 100%;
+  animation: driftFar 34s linear infinite;
+  opacity: 0.7;
+}
+
+#arena-near {
+  bottom: 0;
+  height: 30%;
+  background-size: auto 100%;
+  animation: driftNear 15s linear infinite;
+}
+
+@keyframes driftFar {
+  from { background-position-x: 0; }
+  to { background-position-x: calc(-1 * var(--tile-w, 180px)); }
+}
+
+@keyframes driftNear {
+  from { background-position-x: 0; }
+  to { background-position-x: calc(-1 * var(--tile-w, 130px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #arena-far,
+  #arena-near {
+    animation: none;
+  }
 }
 
 .combatant {
@@ -88,6 +166,7 @@ body {
 
 .combatant {
   position: relative;
+  z-index: 1;
 }
 
 .pixel-sprite {
@@ -131,21 +210,53 @@ body {
   width: 6rem;
 }
 
-/* Cast wind-up lunges. */
+/* Cast wind-up lunges: fires the instant input is confirmed — this is the
+   "your click registered" cue, distinct from (and earlier than) impact. */
 .lunge-up {
-  animation: lungeUp 0.3s ease-out;
+  animation: lungeUp 0.22s cubic-bezier(0.3, 0, 0.4, 1);
 }
 
 .lunge-down {
-  animation: lungeDown 0.3s ease-out;
+  animation: lungeDown 0.22s cubic-bezier(0.3, 0, 0.4, 1);
 }
 
 @keyframes lungeUp {
-  30% { transform: translateY(-7px); }
+  0% { transform: translateY(0); }
+  40% { transform: translateY(-8px); }
+  100% { transform: translateY(0); }
 }
 
 @keyframes lungeDown {
-  30% { transform: translateY(7px); }
+  0% { transform: translateY(0); }
+  40% { transform: translateY(8px); }
+  100% { transform: translateY(0); }
+}
+
+/* Casting indicator: fills the enemy's ~0.5-0.6s turn window so it reads as
+   "thinking", not stalled — the preview itself stays fully live throughout. */
+.thinking-dots {
+  position: absolute;
+  bottom: -0.4rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 3px;
+}
+
+.thinking-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ink-dim);
+  animation: dotPulse 1s ease-in-out infinite;
+}
+
+.thinking-dots i:nth-child(2) { animation-delay: 0.15s; }
+.thinking-dots i:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes dotPulse {
+  0%, 100% { opacity: 0.25; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
 }
 
 @keyframes bob {
@@ -171,12 +282,13 @@ body {
   border-radius: 50%;
   background: radial-gradient(circle, var(--vfx-color) 0%, transparent 65%);
   pointer-events: none;
-  animation: burst 0.45s ease-out forwards;
+  animation: burst 0.32s cubic-bezier(0.1, 0.7, 0.3, 1) forwards;
+  transform: scale(var(--mag, 1));
 }
 
 @keyframes burst {
-  from { transform: scale(0.3); opacity: 0.95; }
-  to { transform: scale(2.4); opacity: 0; }
+  from { transform: scale(calc(var(--mag, 1) * 0.25)); opacity: 1; }
+  to { transform: scale(calc(var(--mag, 1) * 2.2)); opacity: 0; }
 }
 
 .vfx-float {
@@ -188,19 +300,23 @@ body {
   font-weight: bold;
   text-shadow: 0 1px 3px #000;
   pointer-events: none;
-  animation: floatUp 0.9s ease-out forwards;
+  animation: floatUp 0.75s cubic-bezier(0.1, 0.6, 0.3, 1) forwards;
 }
 
 @keyframes floatUp {
-  from { transform: translate(-50%, 0); opacity: 1; }
-  to { transform: translate(-50%, -2.2rem); opacity: 0; }
+  0% { transform: translate(-50%, 0) scale(1.3); opacity: 1; }
+  15% { transform: translate(-50%, -0.3rem) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -2.2rem) scale(1); opacity: 0; }
 }
 
 .shaking {
-  animation: shake 0.35s;
+  animation: shake 0.3s cubic-bezier(0.2, 0.6, 0.3, 1);
 }
 
-/* Channel-coded spell shapes. */
+/* Channel-coded spell shapes. A sharp accelerating launch (ease-in) reads as
+   a real projectile; its arrival is when playCastVfx fires the impact beat
+   (burst/shake/number), so cause and effect stay in sync instead of the
+   number appearing before the streak visually lands. */
 .vfx-streak {
   position: absolute;
   top: 45%;
@@ -212,23 +328,23 @@ body {
 
 .vfx-streak.from-left {
   left: -1rem;
-  animation: streakL 0.28s ease-in forwards;
+  animation: streakL var(--streak-ms, 180ms) cubic-bezier(0.5, 0, 0.9, 0.4) forwards;
 }
 
 .vfx-streak.from-right {
   right: -1rem;
   transform: scaleX(-1);
-  animation: streakR 0.28s ease-in forwards;
+  animation: streakR var(--streak-ms, 180ms) cubic-bezier(0.5, 0, 0.9, 0.4) forwards;
 }
 
 @keyframes streakL {
   from { translate: -3rem 0; opacity: 1; }
-  to { translate: 2.2rem 0; opacity: 0; }
+  to { translate: 2.2rem 0; opacity: 0.9; }
 }
 
 @keyframes streakR {
   from { translate: 3rem 0; opacity: 1; }
-  to { translate: -2.2rem 0; opacity: 0; }
+  to { translate: -2.2rem 0; opacity: 0.9; }
 }
 
 .vfx-tendril {
@@ -239,12 +355,12 @@ body {
   background: var(--hex);
   pointer-events: none;
   opacity: 0;
-  animation: tendril 0.8s ease-out forwards;
+  animation: tendril 0.65s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
 }
 
 @keyframes tendril {
   0% { transform: translateY(10px) scaleY(0.4); opacity: 0; }
-  35% { opacity: 1; }
+  25% { opacity: 1; }
   100% { transform: translateY(-16px) scaleY(1.6); opacity: 0; }
 }
 
@@ -257,7 +373,7 @@ body {
   border: 2px solid var(--ward);
   border-radius: 50%;
   pointer-events: none;
-  animation: ring 0.55s ease-out forwards;
+  animation: ring 0.4s cubic-bezier(0.1, 0.7, 0.3, 1) forwards;
 }
 
 @keyframes ring {
@@ -299,9 +415,10 @@ body {
 
 @keyframes shake {
   0%, 100% { translate: 0 0; }
-  25% { translate: -4px 0; }
-  50% { translate: 4px 0; }
-  75% { translate: -2px 0; }
+  20% { translate: calc(var(--mag, 1) * -5px) 0; }
+  40% { translate: calc(var(--mag, 1) * 4px) 0; }
+  60% { translate: calc(var(--mag, 1) * -3px) 0; }
+  80% { translate: calc(var(--mag, 1) * 1.5px) 0; }
 }
 
 /* ---------- sprite gallery (?gallery) ---------- */
@@ -398,6 +515,7 @@ body {
 #overlay {
   position: absolute;
   inset: 0;
+  z-index: 2;
   background: rgba(13, 10, 20, 0.88);
   display: flex;
   flex-direction: column;
@@ -475,6 +593,7 @@ body {
 #grimoire {
   position: absolute;
   inset: 0;
+  z-index: 2;
   background: rgba(13, 10, 20, 0.96);
   display: flex;
   flex-direction: column;
@@ -732,11 +851,67 @@ body {
   cursor: pointer;
 }
 
-/* Compose panel sits at the bottom so it rides directly above the mobile keyboard. */
+/* Compose panel sits at the bottom so it rides directly above the mobile keyboard.
+   #quickcast (flex:1, between #battle and here) absorbs the leftover space
+   between the fixed arena and this panel, so no margin trick is needed here. */
 #compose {
+  flex: none;
   border-top: 1px solid var(--panel-edge);
   background: var(--panel);
   padding: 0.6rem 0.75rem calc(0.6rem + env(safe-area-inset-bottom));
+}
+
+#quickcast {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.5rem 0.75rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+#quickcast-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 0.35rem;
+}
+
+.qc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 999px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.qc-chip:hover {
+  border-color: var(--mana);
+}
+
+.qc-chip .qc-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.qc-chip.fatigued {
+  opacity: 0.4;
+}
+
+#quickcast-empty {
+  font-size: 0.65rem;
+  font-style: italic;
+  color: var(--ink-dim);
 }
 
 #preview {

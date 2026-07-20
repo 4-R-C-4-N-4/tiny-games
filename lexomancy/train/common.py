@@ -21,7 +21,16 @@ CHANNELS = ["damage", "hex", "ward", "heal"]
 # Runtime scoring constants — single source of truth, shipped in the asset
 # header so the TS scorer and the python golden generator can never disagree.
 SCORING = {
-    "temperature": 2.5,   # softmax temp over raw 0-10 channel scores
+    # Sharpened + floored: softmax at temperature 2.5 spread power across all
+    # four channels almost uniformly for most words (e.g. "spreadsheet" read
+    # ~23/23/26/24 split) — a "damage" word only put a quarter of its power
+    # into damage, diluting every hit and dragging fights out. temperature=0.5
+    # concentrates the softmax onto its dominant channel(s); mixFloor then
+    # zeroes anything that doesn't survive as a real component and renormalizes
+    # the rest. Tuned against the full vocab to land ~40% single-channel,
+    # ~43% two-channel, ~15% three-channel, ~2% touching all four.
+    "temperature": 0.5,
+    "mixFloor": 0.20,
     "zipfZero": 5.1,      # zipf at/above which rarity = 0
     "zipfRange": 3.3,     # rarity ramps to 1 over this many zipf points below zero
     # Power scale tuned against real fights: a word's power splits across all
@@ -32,8 +41,16 @@ SCORING = {
     "powerBase": 7,
     "powerRarity": 26,
     "potencyFloor": 0.4,  # mundane words (all channels low) keep this fraction
-    "costBase": 0.35,
-    "costPurity": 0.6,
+    # costBase/costPurity were tuned when purity averaged ~0.3-0.5 (the old
+    # diluted mix). The sharpened mix pushes median purity to ~0.7 and a
+    # quarter of words to a full 1.0 — unchanged, these constants made nearly
+    # every real cast a maximally-expensive "spike" (e.g. a power-26 word
+    # costing 22 of a 20-max mana pool), starving the whole encounter after
+    # one cast. Retuned so a fully pure word costs ~0.5x its power and a
+    # median-purity word ~0.35x, preserving "pure costs more" without pricing
+    # out the now-common case of a clean single-channel word.
+    "costBase": 0.18,
+    "costPurity": 0.32,
     "zipfScale": 32,      # uint8 zipf encoding: round(zipf * 32)
     # Similarity calibration: raw GloVe cosines put synonyms at ~0.45-0.6 and
     # unrelated words at ~0.2. Fatigue wants synonyms ≈ 1 and unrelated ≈ 0,

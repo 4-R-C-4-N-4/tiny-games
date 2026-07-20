@@ -181,6 +181,61 @@ Enemies use the same scoring model with different vocabularies and policies — 
 
 ## Visual Direction
 
+### Mix sharpening (added post-launch, 2026-07-20)
+
+Softmax at temperature 2.5 spread a word's power across all four channels
+almost uniformly for most vocabulary ("spreadsheet" read ~23/23/26/24) — a
+"damage" word only put a quarter of its power into damage, diluting every
+hit and dragging fights out over many turns. Retuned: `temperature=0.5`
+sharpens the softmax onto its dominant channel(s), then `mixFloor=0.20`
+zeroes anything that doesn't survive as a real component and renormalizes
+the rest. Tuned against the full 80k-word vocab to land ~40% single-channel,
+~43% two-channel, ~15% three-channel, ~2% touching all four.
+
+Because purity (the winning channel's share) is now high by default instead
+of the old ~0.3-0.5 typical, `costBase`/`costPurity` — which scale mana cost
+with purity — had to come down too (0.35/0.6 → 0.18/0.32), or nearly every
+real cast became a maximally-expensive "spike" that starved the whole
+encounter after one hit.
+
+**Follow-up, resolved (playtested same day):** this also sharpened enemy
+self-sustain — the Hierophant now healed ~10-14 HP per turn from its own
+liturgical kit instead of a diluted fraction. A real playtest (adaptive
+strategy: hex to bypass ward stacking, wide cross-register vocabulary to
+dodge fatigue) confirmed the fight was genuinely winnable and never
+seriously threatened the player (HP never dropped below 52/60) — the
+earlier "unwinnable" read from an automated sim had been a test-harness
+bug, not a real problem. But it took 38 turns against 2-14 for its floor-1
+peers under the equivalent strategy — a real pacing outlier. Added
+`ENEMY_HEAL_MUL = 0.65` (duel.ts) — enemies have no grace stat to trade off
+against like the player does, so a flat dampener keeps the "healer boss"
+identity without letting it become uniquely grindy. Re-playtested: 12
+turns, still zero real threat to the player.
+
+### Quick cast (added post-launch, 2026-07-20)
+
+The gap between the fixed arena and the compose panel is filled by
+`#quickcast` (`flex:1`, absorbing exactly the leftover space) rather than
+left dead: tap a word you've already discovered this run to drop it back
+into the input instead of retyping it. Chips are most-recent-first,
+deduplicated, dot-colored by dominant channel, and dimmed when the word is
+currently fatigued so a tap doesn't waste a turn on a fizzle. Complements
+the full grimoire (📖) rather than replacing it — this is the fast inline
+version, the grimoire is the detailed browse.
+
+### The battle arena (added post-launch, 2026-07-20)
+
+`#battle` is a **fixed-height frame**, not an elastic flex region — the
+original layout let it stretch to fill whatever vertical space the viewport
+had, which read as dead space around two floating sprites. Behind the
+combatants sits a procedural, theme-tinted arena: a two-tone ground+horizon
+canvas (far strip for the enemy, near strip for the player — the depth cue
+a Gen-1 battle framing wants) plus two parallax dressing bands built from
+five shared silhouette "prop kinds" (spike/shard/wisp/reed/orb) mapped
+across all 26 themes, drifting continuously at different speeds. Zero new
+asset pipeline — drawn at runtime the same way sprites are, cached per
+theme, `prefers-reduced-motion`-aware. See `web/arena-render.ts`.
+
 ### Framing: Gen-1 battle layout, portrait-first
 
 Pokémon-style dueling frame: **enemy sprite upper area facing the player; player character seen from behind, lower foreground; input/preview panel at the bottom.** This layout is instantly readable, nostalgic, and — critically — native to portrait orientation, which makes mobile the *default* rather than an adaptation.
