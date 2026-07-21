@@ -78,6 +78,12 @@ describe('Duel', () => {
     expect(d.player.hp + absorbed).toBeGreaterThanOrEqual(hpBefore - (hpBefore - d.player.hp));
   });
 
+  it('a Ward Pact grants the player starting ward (playerWard option)', () => {
+    const d = new Duel(scorer, NECROMANCER, 1, { playerWard: 10 });
+    expect(d.player.ward).toBe(10);
+    expect(d.enemy.ward).toBe(0); // the boon is one-sided, unlike a Bulwark floor
+  });
+
   it('the hex-heavy enemy eventually lands a hex', () => {
     const d = newDuel();
     let hexed = 0;

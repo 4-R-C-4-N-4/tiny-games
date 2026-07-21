@@ -153,15 +153,19 @@ The generator rolls `archetype × theme` per floor at run start ("Taboo × fire"
 
 ### Floor legibility (three layers)
 
-1. **The Threshold (entry screen).** Between floors: generated floor name ("The Bloodless Court"), one-line flavor inscription, and *plainly stated* mechanical text ("Words of violence turn against their speaker"). Includes a free **practice input** — preview-score words under the floor's rules before stepping in. The threshold is a planning phase.
+1. **The Threshold (entry screen).** Between floors: generated floor name ("The Bloodless Court"), one-line flavor inscription, and *plainly stated* mechanical text ("Words of violence turn against their speaker"). Includes a free **practice input** — preview-score words under the floor's rules before stepping in. The threshold is a planning phase. *(Fixed post-launch, 2026-07-21 — the inscription originally tried to ALSO restate the mechanic in flowery, theme-inflected language right above the plain rule sentence, e.g. "Curses find no purchase in the tide here" directly atop "Hex fades twice as fast here, and never renews its own clock." Two similar-but-not-identical explanations of the same rule read as confusing worldbuilding rather than atmosphere. The rule text already names the exact theme where it matters ("Words of tide are amplified") and the floor NAME already carries the theme too, so the inscription's only job now is mood — rewritten theme-independent, purely atmospheric, no mechanical content at all.)*
 2. **Ambient signal.** Palette/background tint derived from the theme anchor; persistent corner icon + rule reminder.
 3. **The preview bars reflect floor modifiers — always.** Taboo words show bars crossed out or turned against you; domain-amplified words visibly glow. The player never mentally computes floor rules; the scrying glass does it. *This is the single most important indicator in the game.*
 
 ### Threshold choices (mob-replacement texture)
 
-Each Threshold offers one optional decision, entirely menu-based:
-- **Pact:** accept a minor self-hex this floor in exchange for a boon (new adjective draft, mana bonus)
-- **Study:** spend a little max HP to learn the boss's wordlist theme and ward policy before the fight
+Each Threshold offers one optional decision, entirely menu-based. **Rolled per floor from small pools, not fixed** *(fixed post-launch, 2026-07-21 — originally the exact same two buttons, same numbers, every single Threshold in the game; feedback: "the pre-entry pacts are shallow and always the same")*:
+- **Pact:** accept a self-hex this floor in exchange for a permanent boon — 3 variants roll per floor (`floors.ts:PACT_OPTIONS`): a mana-focused pact, a HP-focused "Blood Pact" (heavier hex in trade), and a "Ward Pact" that grants a shield instead of a stat bump (lighter hex).
+- **Study:** spend max HP to learn about the boss before the fight — 3 variants roll per floor (`floors.ts:STUDY_OPTIONS`): a cheap "Glance" (policy read only), the original mid-cost Study (5 words), and an expensive "Deep Study" (the full wordlist).
+
+### The victory beat *(added post-launch, 2026-07-21)*
+
+Defeating a boss (floors 1–7) no longer cuts straight to the next Threshold with zero acknowledgment — feedback was that this felt anticlimactic ("the death animation should get a feel-good moment 'you beat the xyz'"). A new `cleared` run phase sits between the duel and the next Threshold: the defeated boss's sprite, glowing, with an explicit "Floor N cleared — you defeated {boss}" beat and a Continue button. The Summit's win (`ascended`) keeps its own existing triumphant finale text untouched — this only fills the gap for the seven ordinary floor-clears that previously got nothing.
 
 ### Boss = floor
 

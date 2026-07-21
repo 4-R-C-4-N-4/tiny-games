@@ -590,7 +590,8 @@ body {
 
 #rite,
 #threshold,
-#grimoire {
+#grimoire,
+#victory {
   position: absolute;
   inset: 0;
   z-index: 2;
@@ -605,16 +606,63 @@ body {
 
 #rite[hidden],
 #threshold[hidden],
-#grimoire[hidden] {
+#grimoire[hidden],
+#victory[hidden] {
   display: none;
 }
 
 #rite h2,
 #threshold h2,
-#grimoire h2 {
+#grimoire h2,
+#victory h2 {
   font-size: 1.1rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+/* The feel-good beat: boss front and center, triumphant color, a small
+   celebratory glow so it reads as a distinct win, not just another menu. */
+#victory {
+  align-items: center;
+  text-align: center;
+  gap: 1rem;
+}
+
+#victory-sprite {
+  position: relative;
+  filter: drop-shadow(0 0 1.2rem rgba(77, 196, 127, 0.45));
+}
+
+#victory-sprite::after {
+  content: '';
+  position: absolute;
+  inset: -1.5rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(77, 196, 127, 0.25) 0%, transparent 70%);
+  animation: victoryGlow 1.6s ease-out infinite;
+  z-index: -1;
+}
+
+@keyframes victoryGlow {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+#victory-title {
+  color: var(--heal);
+  font-size: 1.15rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#victory-sub {
+  max-width: 22rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #victory-sprite::after {
+    animation: none;
+  }
 }
 
 .rite-sub {

@@ -170,6 +170,8 @@ export interface DuelOptions {
   enemyWard?: number;
   /** Pact self-hex carried into the floor. */
   playerHex?: HexState;
+  /** Ward Pact: the player starts the floor already shielded. */
+  playerWard?: number;
 }
 
 function mulberry32(seed: number): () => number {
@@ -222,9 +224,10 @@ export class Duel {
     if (opts.playerHex) this.player.hex = { ...opts.playerHex };
     this.enemy = makeCombatant(opponent.name, opponent.maxHp, PLAYER_MAX_MANA);
     this.floor = opts.floor ?? null;
-    // Bulwark floors: both duelists start already shielded.
+    // Bulwark floors: both duelists start already shielded. A Ward Pact
+    // stacks its own shield on top, on the player's side only.
     const bulwark = this.floor?.archetype === 'bulwark' ? BULWARK_START_WARD : 0;
-    this.player.ward = bulwark;
+    this.player.ward = bulwark + (opts.playerWard ?? 0);
     this.enemy.ward = Math.max(opts.enemyWard ?? 0, bulwark);
     this.stats = opts.stats ?? NEUTRAL_STATS;
     this.rng = mulberry32(seed);

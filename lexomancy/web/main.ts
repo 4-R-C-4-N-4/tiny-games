@@ -38,6 +38,7 @@ const log = $('cast-log');
 const overlay = $('overlay');
 const rite = $('rite');
 const threshold = $('threshold');
+const victory = $('victory');
 const bars = Object.fromEntries(CHANNELS.map((c) => [c, $(`bar-${c}`)]));
 
 // ---------- shared rendering ----------
@@ -313,12 +314,14 @@ $('grimoire-close').addEventListener('click', () => {
 function render(): void {
   rite.hidden = run.phase !== 'rite';
   threshold.hidden = run.phase !== 'threshold';
+  victory.hidden = run.phase !== 'cleared';
   $('grimoire').hidden = true;
   const gbtn = $('grimoire-btn');
   gbtn.hidden = run.phase === 'rite';
   gbtn.textContent = `📖 ${new Set(run.history).size}`;
   overlay.hidden = !(run.phase === 'fallen' || run.phase === 'ascended');
   if (run.phase === 'threshold') renderThreshold();
+  if (run.phase === 'cleared') renderVictoryScreen();
   if (run.phase === 'fallen') {
     $('overlay-text').textContent =
       `Your words fail you on floor ${run.currentFloorSafe()?.index ?? '?'}. The spire keeps your name.`;
@@ -383,6 +386,26 @@ function renderQuickcast(): void {
   }
 }
 
+/** The feel-good beat between winning a duel and the next Threshold — names
+ * the boss you just beat outright, rather than cutting straight to the next
+ * floor's setup with no acknowledgment. */
+function renderVictoryScreen(): void {
+  const boss = run.lastDefeated;
+  const holder = $('victory-sprite');
+  if (!boss || boss.art === 'player') {
+    holder.replaceChildren();
+    return;
+  }
+  // The floor just cleared, not the (already-advanced) upcoming one — so the
+  // boss renders in the theme it actually fought under.
+  const clearedFloor = run.floors[run.lastDefeatedFloorIndex - 1];
+  const hue = THEME_HUES[clearedFloor.theme];
+  const el = spriteAnim(boss.art, enemyPalette(boss.art, hue), enemyPalette(boss.art, hue, 1));
+  if (holder.firstChild !== el) holder.replaceChildren(el);
+  $('victory-title').textContent = `Floor ${run.lastDefeatedFloorIndex} cleared`;
+  $('victory-sub').textContent = `You defeated ${boss.name}. Its casts fall silent — the spire remembers this.`;
+}
+
 function renderThreshold(): void {
   const floor = run.currentFloor();
   $('th-name').textContent = `Floor ${floor.index} of 8 — ${floor.name}`;
@@ -393,6 +416,10 @@ function renderThreshold(): void {
   if (run.studyReport) {
     report.textContent = `${run.studyReport.bossName}. ${run.studyReport.wordHint} ${run.studyReport.policyHint}`;
   }
+  // Pact/Study vary per floor now (floors.ts:PACT_OPTIONS/STUDY_OPTIONS) —
+  // no longer the same two static buttons on every single Threshold.
+  $('pact-btn').textContent = floor.pact.label;
+  $('study-btn').textContent = floor.study.label;
   $<HTMLButtonElement>('pact-btn').classList.toggle('used', run.pactArmed);
   $<HTMLButtonElement>('study-btn').classList.toggle('used', !!run.studyReport);
 }
@@ -693,6 +720,11 @@ input.addEventListener('input', renderPreview);
 
 $('overlay-btn').addEventListener('click', () => {
   startRun();
+});
+
+$('victory-continue').addEventListener('click', () => {
+  run.acknowledgeVictory();
+  render();
 });
 
 // ---------- boot ----------

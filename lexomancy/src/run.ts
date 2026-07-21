@@ -1,5 +1,5 @@
 import { draftOffer } from './adjectives.ts';
-import { Duel, PLAYER_MAX_HP, PLAYER_MAX_MANA, type DuelEvent, type HexState, type Policy } from './duel.ts';
+import { Duel, PLAYER_MAX_HP, PLAYER_MAX_MANA, type DuelEvent, type Policy } from './duel.ts';
 import { generateSpire, type FloorSpec } from './floors.ts';
 import { NEUTRAL_STATS, performRite, type RiteResult, type Stats } from './stats.ts';
 import { makeTrueName } from './truename.ts';
@@ -7,10 +7,10 @@ import { makeMirror, ROSTER } from './opponents.ts';
 import type { OpponentDef } from './duel.ts';
 import type { Scorer } from './types.ts';
 
-// One run up the spire: rite → (threshold → duel) × 7 → the Mirror.
+// One run up the spire: rite → (threshold → duel → cleared) × 7 → the Mirror.
 // Headless and seeded, like everything else; the UI is a thin shell.
 
-export type RunPhase = 'rite' | 'threshold' | 'duel' | 'fallen' | 'ascended';
+export type RunPhase = 'rite' | 'threshold' | 'duel' | 'cleared' | 'fallen' | 'ascended';
 
 /** Floor tier → boss policy intelligence (the difficulty ladder). */
 function policyForFloor(index: number): Policy {
@@ -21,9 +21,6 @@ function policyForFloor(index: number): Policy {
 }
 
 const FLOOR_CLEAR_HEAL = 12;
-const PACT_MANA_BONUS = 4;
-const PACT_HEX: HexState = { potency: 7, turns: 3 };
-const STUDY_HP_PRICE = 5;
 const PREWARD_FROM_FLOOR = 5;
 const PREWARD_SCALE = 20;
 const HISTORY_STUDIED = 10;
@@ -66,6 +63,10 @@ export class SpireRun {
   playerMaxMana = PLAYER_MAX_MANA;
   pactArmed = false;
   studyReport: StudyReport | null = null;
+  /** The boss just defeated, and the (1-based) floor it fell on — for the
+   * "you beat the X!" victory beat between the duel and the next threshold. */
+  lastDefeated: OpponentDef | null = null;
+  lastDefeatedFloorIndex = 0;
   private readonly rng: () => number;
   private readonly riteOffer: string[];
 
@@ -119,24 +120,31 @@ export class SpireRun {
     };
   }
 
-  /** Threshold choice: a self-hex on entry in exchange for deeper mana, permanently. */
+  /** Threshold choice: a self-hex on entry in exchange for a permanent boon
+   * (which boon varies per floor — see floors.ts:PACT_OPTIONS). */
   takePact(): void {
     if (this.phase !== 'threshold' || this.pactArmed) return;
     this.pactArmed = true;
-    this.playerMaxMana += PACT_MANA_BONUS;
+    const pact = this.currentFloor().pact;
+    this.playerMaxMana += pact.manaBonus;
+    this.playerMaxHp += pact.hpBonus;
+    this.playerHp = Math.min(this.playerMaxHp, this.playerHp + pact.hpBonus);
   }
 
-  /** Threshold choice: pay flesh to read the boss before the fight. */
+  /** Threshold choice: pay flesh to read the boss before the fight (price and
+   * depth of the report vary per floor — see floors.ts:STUDY_OPTIONS). */
   takeStudy(): StudyReport | null {
     if (this.phase !== 'threshold' || this.studyReport) return this.studyReport;
-    this.playerMaxHp = Math.max(10, this.playerMaxHp - STUDY_HP_PRICE);
+    const study = this.currentFloor().study;
+    this.playerMaxHp = Math.max(10, this.playerMaxHp - study.hpCost);
     this.playerHp = Math.min(this.playerHp, this.playerMaxHp);
     const boss = this.currentBoss();
-    this.studyReport = {
-      bossName: boss.name,
-      wordHint: `Its lexicon: ${boss.words.slice(0, 5).join(', ')}…`,
-      policyHint: POLICY_HINTS[boss.policy],
-    };
+    const revealed = boss.words.slice(0, study.wordCount);
+    const wordHint =
+      revealed.length > 0
+        ? `Its lexicon: ${revealed.join(', ')}${boss.words.length > revealed.length ? '…' : ''}`
+        : 'You sense its nature, but learn no words.';
+    this.studyReport = { bossName: boss.name, wordHint, policyHint: POLICY_HINTS[boss.policy] };
     return this.studyReport;
   }
 
@@ -169,7 +177,8 @@ export class SpireRun {
       playerMaxHp: this.playerMaxHp,
       playerMaxMana: this.playerMaxMana,
       enemyWard: preWard,
-      playerHex: this.pactArmed ? { ...PACT_HEX } : undefined,
+      playerHex: this.pactArmed ? { potency: floor.pact.hexPotency, turns: floor.pact.hexTurns } : undefined,
+      playerWard: this.pactArmed ? floor.pact.ward : undefined,
     });
     this.pactArmed = false;
     this.phase = 'duel';
@@ -193,6 +202,13 @@ export class SpireRun {
     return events;
   }
 
+  /** Called from the victory screen's Continue button — advances into the
+   * next Threshold once the player has had their "you beat the X!" beat. */
+  acknowledgeVictory(): void {
+    if (this.phase !== 'cleared') return;
+    this.phase = 'threshold';
+  }
+
   private afterAction(): void {
     const duel = this.duel;
     if (!duel?.winner) return;
@@ -200,10 +216,15 @@ export class SpireRun {
       this.phase = 'fallen';
       return;
     }
+    this.lastDefeated = duel.opponent;
+    this.lastDefeatedFloorIndex = this.currentFloor().index;
     // Floor cleared: carry HP forward with a breather, refill mana.
     this.playerHp = Math.min(this.playerMaxHp, duel.player.hp + FLOOR_CLEAR_HEAL);
     this.studyReport = null;
     this.floorIndex += 1;
-    this.phase = this.floorIndex >= this.floors.length ? 'ascended' : 'threshold';
+    // The Summit's win already gets its own triumphant finale screen
+    // ('ascended') — no need to interpose the ordinary per-floor victory
+    // beat before it.
+    this.phase = this.floorIndex >= this.floors.length ? 'ascended' : 'cleared';
   }
 }
