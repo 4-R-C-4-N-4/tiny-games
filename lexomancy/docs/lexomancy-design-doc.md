@@ -167,6 +167,12 @@ Each Threshold offers one optional decision, entirely menu-based. **Rolled per f
 
 Defeating a boss (floors 1–7) no longer cuts straight to the next Threshold with zero acknowledgment — feedback was that this felt anticlimactic ("the death animation should get a feel-good moment 'you beat the xyz'"). A new `cleared` run phase sits between the duel and the next Threshold: the defeated boss's sprite, glowing, with an explicit "Floor N cleared — you defeated {boss}" beat and a Continue button. The Summit's win (`ascended`) keeps its own existing triumphant finale text untouched — this only fills the gap for the seven ordinary floor-clears that previously got nothing.
 
+### The run-end recap *(added post-launch, 2026-07-21)*
+
+Both endings — falling (`fallen`) and ascending (`ascended`) — previously showed one flavor line and a single button, no stats at all ("climb again death screen is weak"). Both now show the boss involved (glowing: red/somber on death, purple/triumphant on ascension) plus a real recap block: True Name, dominant stat, floor reached, words spoken (unique vs. total cast), strongest word cast, and — on death — who ended the run and, if it had learned the player's True Name by then, a line naming exactly what it read and exploited (reusing `truename.ts:EXPLOIT_FLAVOR`).
+
+**A real bug surfaced and fixed along the way:** `spriteAnim()`/`spriteCanvas()` cache and reuse the same DOM node for a given (art, palette) pair, by design, so an idle-bob animation doesn't restart on every re-render. That's fine when only one place on screen ever shows a given sprite — but the death screen wants to show the *same* boss, in the *same* theme, that the live battle view directly underneath is *also* still rendering every frame. Caching by (art, palette) alone handed both call sites the identical DOM node, and whichever rendered second (always the live battle view, called later in `render()`) silently yanked it out of the death screen's container — so the boss portrait was reliably present for one JS tick and then gone. Fixed by adding a `slot` parameter to the cache key (callers pass their own holder's element id), so concurrent UI locations never share a node.
+
 ### Boss = floor
 
 Each boss's policy keys off its floor archetype (the Echo floor's boss baits casts it can echo back). Floor and enemy are one designed unit — more distinct fights, *less* content to author.

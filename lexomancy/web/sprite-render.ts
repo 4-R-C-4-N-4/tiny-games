@@ -1,7 +1,15 @@
 import { ALT_GRIDS, GRIDS, type Palette, type SpriteArt, type SpriteGrid } from '../src/sprites.ts';
 
 // Canvas rendering for the pixel grids. Sprites are drawn once per
-// (art, palette) pair and cached — palettes only change per floor/rite.
+// (slot, art, palette) and cached — palettes only change per floor/rite, and
+// re-rendering the SAME slot reuses its element so an idle-bob/wing-flap
+// animation doesn't restart every render() pass. The slot exists because a
+// DOM node can only live in one place at a time: if two different UI spots
+// (e.g. the live battle view and a death-screen overlay) want the same
+// visual (identical art+palette) at once, caching by (art, palette) alone
+// hands out the SAME node to both, and whichever renders second silently
+// steals it out of the other's container. Callers pass their holder's own
+// id as the slot so concurrent spots never collide.
 
 const cache = new Map<string, HTMLCanvasElement>();
 const animCache = new Map<string, HTMLElement>();
@@ -25,8 +33,8 @@ function drawGrid(grid: SpriteGrid, palette: Palette, scale: number): HTMLCanvas
   return canvas;
 }
 
-export function spriteCanvas(art: SpriteArt, palette: Palette, scale = 5): HTMLCanvasElement {
-  const key = `${art}:${scale}:${JSON.stringify(palette)}`;
+export function spriteCanvas(art: SpriteArt, palette: Palette, scale = 5, slot = 'default'): HTMLCanvasElement {
+  const key = `${slot}:${art}:${scale}:${JSON.stringify(palette)}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const canvas = drawGrid(GRIDS[art], palette, scale);
@@ -45,8 +53,9 @@ export function spriteAnim(
   frameA: Palette,
   frameB: Palette,
   scale = 5,
+  slot = 'default',
 ): HTMLElement {
-  const key = `${art}:${scale}:${JSON.stringify(frameA)}`;
+  const key = `${slot}:${art}:${scale}:${JSON.stringify(frameA)}`;
   const hit = animCache.get(key);
   if (hit) return hit;
   const el = document.createElement('div');
