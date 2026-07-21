@@ -114,8 +114,12 @@ Before the climb, the player describes themself in adjectives. Adjectives are sc
 ### Anti-dump-stat mechanic
 Adjectives interact by mutual similarity: near-synonym sets ("cruel, vicious, brutal, savage") collapse with diminishing returns — a glass cannon with a shallow vocabulary. Varied self-description yields a larger, rounder stat pool. Character creation teaches the fatigue mechanic before the first duel.
 
+**Purely additive from a 0.5 neutral floor** *(fixed after playtest, 2026-07-21)*: picking adjectives can only raise a stat, never lower one below what skipping the rite gives you. The original formula (`raw affinity / flat scale`, no floor) let a specialized build actively crater its unused stats to ~0.25–0.3 — worse than not playing the rite at all, which inverted the intended trade-off. Now `stat = 0.5 + 0.5 × min(1, raw/scale)`, so 0 picks yields a flat 0.5/1.0× on everything (this **is** the "vanilla" hardest-mode challenge run — no adjectives, no buffs, purely the words you know) and any picks only add on top. The free-form flaw is exempt by design: it's meant as a genuine trade-off (hollows its own stat, deepens the rest), not part of this guarantee.
+
+Each offered adjective's chip is color-coded by its own standalone peak stat pull (green = weak, purple = strong, decisive) with a tag showing which stat it feeds — so the "crap shoot" of guessing a word's stat value before picking is gone.
+
 ### Drafted, roguelike-style
-Pick 5 adjectives from a rotating offer of ~12 per run (no free-form "omnipotent" exploits; natural balance and run variety for free), **plus one free-form "flaw" adjective** that grants bonus points — creative self-sabotage the player writes themself.
+Offer up to 5 adjectives per run from a rotating pool of ~12 (no free-form "omnipotent" exploits; natural balance and run variety for free) — **none required**, **plus one free-form "flaw" adjective** (also optional) that grants bonus points — creative self-sabotage the player writes themself.
 
 ### True Name
 The chosen adjectives seed the character's True Name. Enemies that survive enough rounds "learn" it and gain a bonus against the player's dominant stat: extremity has narrative cost.

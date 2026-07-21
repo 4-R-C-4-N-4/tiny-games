@@ -3,6 +3,14 @@ import type { Scorer } from './types.ts';
 // The Self-Naming Rite: adjectives → stats, via the same anchor machinery as
 // everything else. Near-synonym picks collapse with diminishing returns — the
 // anti-dump-stat mechanic that teaches fatigue before the first duel.
+//
+// Stats are PURELY ADDITIVE from the 0.5 neutral baseline: picking adjectives
+// can only raise a stat, never push it below what skipping the rite entirely
+// gives you. Earlier versions divided total affinity by a flat scale with no
+// floor, so a specialized pick set (five ferocity words) actively CRATERED
+// the other four stats to ~0.25-0.3 — worse than not playing the rite at
+// all. That made "vanilla" (0 picks, flat 0.5/1.0x everywhere) the strongest
+// baseline rather than the intended hardest-mode challenge run.
 
 export const STATS = ['ferocity', 'guile', 'stone', 'grace', 'resonance'] as const;
 export type StatName = (typeof STATS)[number];
@@ -68,14 +76,15 @@ export function performRite(scorer: Scorer, picks: string[], flaw?: string): Rit
     for (const stat of STATS) raw[stat] += weight * statAffinity(scorer, pick, stat);
   });
 
-  // No picks isn't a penalty — it's a blank slate. Without this, 0 picks
-  // computes to a flat 0 on every stat (0.75x multiplier everywhere) instead
-  // of the neutral 1.0x baseline the live preview shows before you've chosen
-  // anything.
-  const stats: Stats =
-    picks.length === 0
-      ? { ...NEUTRAL_STATS }
-      : Object.fromEntries(STATS.map((stat) => [stat, Math.min(1, raw[stat] / RAW_SCALE)])) as Stats;
+  // Additive from the 0.5 floor: a stat you never fed rests at exactly
+  // neutral, not zero. (raw is all zeros with no picks, so this naturally
+  // yields flat 0.5 everywhere — the "blank slate" case falls out for free.)
+  const stats: Stats = Object.fromEntries(
+    STATS.map((stat) => [
+      stat,
+      NEUTRAL_STATS[stat] + (1 - NEUTRAL_STATS[stat]) * Math.min(1, raw[stat] / RAW_SCALE),
+    ]),
+  ) as Stats;
 
   let flawStat: StatName | null = null;
   let flawBonus = 0;
