@@ -521,13 +521,105 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
+  gap: 0.7rem;
   text-align: center;
   padding: 1rem;
+  overflow-y: auto;
 }
 
 #overlay[hidden] {
   display: none;
+}
+
+#overlay-sprite {
+  position: relative;
+  margin-bottom: 0.3rem;
+}
+
+/* Somber (fallen) vs triumphant (ascended) — same glow mechanism as the
+   per-floor victory screen, recolored, so the run's ending reads at a
+   glance before the player even reads the text. */
+#overlay-sprite.fallen {
+  filter: drop-shadow(0 0 1.1rem rgba(229, 72, 77, 0.4));
+}
+
+#overlay-sprite.fallen::after {
+  content: '';
+  position: absolute;
+  inset: -1.4rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(229, 72, 77, 0.22) 0%, transparent 70%);
+  z-index: -1;
+}
+
+#overlay-sprite.ascended {
+  filter: drop-shadow(0 0 1.3rem rgba(157, 92, 229, 0.5));
+}
+
+#overlay-sprite.ascended::after {
+  content: '';
+  position: absolute;
+  inset: -1.6rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(157, 92, 229, 0.3) 0%, transparent 70%);
+  animation: victoryGlow 1.6s ease-out infinite;
+  z-index: -1;
+}
+
+#overlay-title {
+  font-size: 1.15rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#overlay.fallen #overlay-title {
+  color: var(--damage);
+}
+
+#overlay.ascended #overlay-title {
+  color: var(--hex);
+}
+
+#overlay-text {
+  max-width: 22rem;
+}
+
+#overlay-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  padding: 0.5rem 0.8rem;
+  width: 100%;
+  max-width: 20rem;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-size: 0.72rem;
+  text-align: left;
+}
+
+.stat-row .stat-label {
+  color: var(--ink-dim);
+  flex: none;
+}
+
+.stat-row .stat-value {
+  text-align: right;
+}
+
+.stat-row.stat-note {
+  justify-content: center;
+  color: var(--ink-dim);
+  font-style: italic;
+  padding-top: 0.2rem;
+  border-top: 1px solid var(--panel-edge);
+  margin-top: 0.1rem;
 }
 
 #grimoire-btn {
@@ -590,7 +682,8 @@ body {
 
 #rite,
 #threshold,
-#grimoire {
+#grimoire,
+#victory {
   position: absolute;
   inset: 0;
   z-index: 2;
@@ -605,16 +698,64 @@ body {
 
 #rite[hidden],
 #threshold[hidden],
-#grimoire[hidden] {
+#grimoire[hidden],
+#victory[hidden] {
   display: none;
 }
 
 #rite h2,
 #threshold h2,
-#grimoire h2 {
+#grimoire h2,
+#victory h2 {
   font-size: 1.1rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+/* The feel-good beat: boss front and center, triumphant color, a small
+   celebratory glow so it reads as a distinct win, not just another menu. */
+#victory {
+  align-items: center;
+  text-align: center;
+  gap: 1rem;
+}
+
+#victory-sprite {
+  position: relative;
+  filter: drop-shadow(0 0 1.2rem rgba(77, 196, 127, 0.45));
+}
+
+#victory-sprite::after {
+  content: '';
+  position: absolute;
+  inset: -1.5rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(77, 196, 127, 0.25) 0%, transparent 70%);
+  animation: victoryGlow 1.6s ease-out infinite;
+  z-index: -1;
+}
+
+@keyframes victoryGlow {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+#victory-title {
+  color: var(--heal);
+  font-size: 1.15rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#victory-sub {
+  max-width: 22rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #victory-sprite::after,
+  #overlay-sprite.ascended::after {
+    animation: none;
+  }
 }
 
 .rite-sub {

@@ -58,8 +58,13 @@
              arena box — these are character creation / threshold / grimoire
              takeovers, not battle-scene dressing. -->
         <div id="overlay" hidden>
-          <p id="overlay-text"></p>
-          <button id="overlay-btn" type="button">Climb again</button>
+          <div id="overlay-sprite"></div>
+          <h2 id="overlay-title"></h2>
+          <p id="overlay-text" class="rite-sub"></p>
+          <div id="overlay-stats"></div>
+          <div class="rite-actions">
+            <button id="overlay-btn" type="button">Climb again</button>
+          </div>
         </div>
 
         <div id="rite" hidden>
@@ -98,6 +103,15 @@
           </div>
         </div>
 
+        <div id="victory" hidden>
+          <div id="victory-sprite"></div>
+          <h2 id="victory-title"></h2>
+          <p id="victory-sub" class="rite-sub"></p>
+          <div class="rite-actions">
+            <button id="victory-continue" type="button">Continue</button>
+          </div>
+        </div>
+
         <div id="grimoire" hidden>
           <h2>Your Grimoire</h2>
           <p class="rite-sub">Every word you have cast this run. The Mirror is listening.</p>
@@ -114,8 +128,8 @@
           <p class="th-hint">The compose glass below previews words under this floor’s law.</p>
           <div id="study-report" hidden></div>
           <div class="rite-actions">
-            <button id="pact-btn" type="button">Pact: +4 max mana, enter hexed</button>
-            <button id="study-btn" type="button">Study: −5 max HP, read the boss</button>
+            <button id="pact-btn" type="button"></button>
+            <button id="study-btn" type="button"></button>
             <button id="enter-btn" type="button">Enter</button>
           </div>
         </div>

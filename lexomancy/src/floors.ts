@@ -25,6 +25,39 @@ export const THEMES = [
 ] as const;
 export type Theme = (typeof THEMES)[number];
 
+/** A Threshold "Pact": a permanent boon in exchange for entering hexed. */
+export interface PactOption {
+  label: string;
+  manaBonus: number;
+  hpBonus: number;
+  ward: number;
+  hexPotency: number;
+  hexTurns: number;
+}
+
+/** A Threshold "Study": pay HP up front to learn about the coming boss. */
+export interface StudyOption {
+  label: string;
+  hpCost: number;
+  /** How many of the boss's words to reveal (0 = none, just the policy read). */
+  wordCount: number;
+}
+
+/** Rolled once per floor so Pact/Study aren't the same two buttons every
+ * single time — still small, hand-authored pools (variety from rolling,
+ * not from bespoke-per-floor authoring). */
+export const PACT_OPTIONS: PactOption[] = [
+  { label: 'Pact: +4 max mana, enter hexed', manaBonus: 4, hpBonus: 0, ward: 0, hexPotency: 7, hexTurns: 3 },
+  { label: 'Blood Pact: +8 max HP, enter hexed harder', manaBonus: 0, hpBonus: 8, ward: 0, hexPotency: 10, hexTurns: 2 },
+  { label: 'Ward Pact: enter shielded, enter hexed lightly', manaBonus: 0, hpBonus: 0, ward: 10, hexPotency: 5, hexTurns: 4 },
+];
+
+export const STUDY_OPTIONS: StudyOption[] = [
+  { label: 'Study: −5 max HP, read the boss', hpCost: 5, wordCount: 5 },
+  { label: 'Deep Study: −8 max HP, read everything', hpCost: 8, wordCount: 99 },
+  { label: 'Glance: −2 max HP, sense its nature', hpCost: 2, wordCount: 0 },
+];
+
 export interface FloorSpec {
   index: number; // 1-based; 8 = the Summit
   archetype: Archetype;
@@ -34,6 +67,8 @@ export interface FloorSpec {
   name: string;
   inscription: string;
   ruleText: string;
+  pact: PactOption;
+  study: StudyOption;
 }
 
 export const SPIRE_HEIGHT = 8; // 7 rolled floors + the Summit
@@ -75,16 +110,23 @@ const NAMES: Record<Archetype, (t: Theme) => string> = {
   mirror: () => 'The Summit of the Mirror',
 };
 
-const INSCRIPTIONS: Record<Archetype, (t: Theme) => string> = {
-  domain: (t) => `Here the spire dreams of ${t}, and rewards those who dream along.`,
-  taboo: (t) => `The court has forbidden ${t}. The walls remember why.`,
-  drain: (t) => `The air is thick with spent words. They cling like ${t}.`,
-  echo: (t) => `Speak carefully. The ${t} remembers your voice.`,
-  leyline: (t) => `A vein of raw power runs through the ${t} here.`,
-  silence: (t) => `Here the ${t} swallows a color of magic whole.`,
-  bloodprice: (t) => `The altar demands payment for mercy. ${cap(t)} does not forgive it freely.`,
-  bulwark: (t) => `Both combatants enter this ${t} hall already shielded.`,
-  fading: (t) => `Curses find no purchase in the ${t} here; they slip away as quickly as spoken.`,
+// Pure mood — no mechanical information lives here. The rule text below
+// already states the exact mechanic AND names the exact theme where it
+// matters ("Words of tide are amplified"); forcing the same theme word into
+// a second, differently-worded sentence just produced confusing near-
+// duplicate explanations ("curses find no purchase in the tide" reading
+// like a second, competing account of what Fading does). The floor NAME
+// already carries the theme too, so the inscription's only job is mood.
+const INSCRIPTIONS: Record<Archetype, () => string> = {
+  domain: () => 'The spire dreams here, and does not want to wake.',
+  taboo: () => 'Some words are forbidden in this court, and have been for a very long time.',
+  drain: () => 'Old words linger in this air, unwilling to fade.',
+  echo: () => 'Say nothing here you are not prepared to hear again.',
+  leyline: () => 'Power gathers here, restless and eager to be spent.',
+  silence: () => 'Something about this place swallows sound whole.',
+  bloodprice: () => 'This altar has always demanded more than it gives.',
+  bulwark: () => 'Old wards linger in these stones, waiting to be called on again.',
+  fading: () => 'Nothing unpleasant seems to last very long here.',
   mirror: () => 'At the top of the spire there is only yourself.',
 };
 
@@ -118,6 +160,8 @@ export function makeFloor(
   archetype: Archetype,
   theme: Theme,
   channel?: Channel,
+  pact: PactOption = PACT_OPTIONS[0],
+  study: StudyOption = STUDY_OPTIONS[0],
 ): FloorSpec {
   const partial = { archetype, theme, channel };
   return {
@@ -126,8 +170,10 @@ export function makeFloor(
     theme,
     channel,
     name: NAMES[archetype](theme),
-    inscription: INSCRIPTIONS[archetype](theme),
+    inscription: INSCRIPTIONS[archetype](),
     ruleText: ruleText(partial),
+    pact,
+    study,
   };
 }
 
@@ -149,7 +195,9 @@ export function generateSpire(rng: () => number): FloorSpec[] {
       archetype === 'leyline' || archetype === 'silence'
         ? CHANNELS[Math.floor(rng() * CHANNELS.length)]
         : undefined;
-    floors.push(makeFloor(i, archetype, takeTheme(), channel));
+    const pact = PACT_OPTIONS[Math.floor(rng() * PACT_OPTIONS.length)];
+    const study = STUDY_OPTIONS[Math.floor(rng() * STUDY_OPTIONS.length)];
+    floors.push(makeFloor(i, archetype, takeTheme(), channel, pact, study));
     prev = archetype;
   }
   floors.push(makeFloor(8, 'mirror', takeTheme()));

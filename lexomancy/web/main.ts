@@ -38,6 +38,7 @@ const log = $('cast-log');
 const overlay = $('overlay');
 const rite = $('rite');
 const threshold = $('threshold');
+const victory = $('victory');
 const bars = Object.fromEntries(CHANNELS.map((c) => [c, $(`bar-${c}`)]));
 
 // ---------- shared rendering ----------
@@ -148,8 +149,8 @@ function setSprite(holder: HTMLElement, art: SpriteArt | null): void {
   const hue = art === 'mirror' ? STAT_HUES[dominantStat(run.stats)] : currentThemeHue();
   const el =
     art === 'player'
-      ? spriteAnim('player', playerPalette(dominantStat(run.stats)), playerPalette(dominantStat(run.stats), 1))
-      : spriteAnim(art, enemyPalette(art, hue), enemyPalette(art, hue, 1));
+      ? spriteAnim('player', playerPalette(dominantStat(run.stats)), playerPalette(dominantStat(run.stats), 1), 5, holder.id)
+      : spriteAnim(art, enemyPalette(art, hue), enemyPalette(art, hue, 1), 5, holder.id);
   if (holder.firstChild !== el) holder.replaceChildren(el);
 }
 
@@ -313,20 +314,30 @@ $('grimoire-close').addEventListener('click', () => {
 function render(): void {
   rite.hidden = run.phase !== 'rite';
   threshold.hidden = run.phase !== 'threshold';
+  victory.hidden = run.phase !== 'cleared';
   $('grimoire').hidden = true;
   const gbtn = $('grimoire-btn');
   gbtn.hidden = run.phase === 'rite';
   gbtn.textContent = `📖 ${new Set(run.history).size}`;
   overlay.hidden = !(run.phase === 'fallen' || run.phase === 'ascended');
+  overlay.classList.toggle('fallen', run.phase === 'fallen');
+  overlay.classList.toggle('ascended', run.phase === 'ascended');
   if (run.phase === 'threshold') renderThreshold();
+  if (run.phase === 'cleared') renderVictoryScreen();
   if (run.phase === 'fallen') {
+    renderOverlaySprite('fallen');
+    $('overlay-title').textContent = 'You Have Fallen';
     $('overlay-text').textContent =
       `Your words fail you on floor ${run.currentFloorSafe()?.index ?? '?'}. The spire keeps your name.`;
+    renderOverlayStats(runSummaryRows(), fallenNote());
     $('overlay-btn').textContent = 'Climb again';
   }
   if (run.phase === 'ascended') {
+    renderOverlaySprite('ascended');
+    $('overlay-title').textContent = 'You Have Ascended';
     $('overlay-text').textContent =
       'The Mirror shatters. At the top of the spire there is only yourself — and you have out-worded them.';
+    renderOverlayStats(runSummaryRows());
     $('overlay-btn').textContent = 'Descend and climb anew';
   }
   renderFloorBanner();
@@ -383,6 +394,99 @@ function renderQuickcast(): void {
   }
 }
 
+/** Run-end recap rows, shared by the fallen and ascended screens: who you
+ * became, how far you got, and what your vocabulary actually did this run —
+ * a real summary instead of one flavor line and a button. */
+function runSummaryRows(): Array<[string, string]> {
+  const uniqueWords = new Set(run.history);
+  let strongest: { word: string; power: number } | null = null;
+  for (const w of uniqueWords) {
+    if (!scorer.knows(w)) continue;
+    const power = scorer.score(w).power;
+    if (!strongest || power > strongest.power) strongest = { word: w, power };
+  }
+  const stat = dominantStat(run.stats);
+  const floorReached = run.phase === 'ascended' ? run.floors.length : (run.currentFloorSafe()?.index ?? run.floors.length);
+  const rows: Array<[string, string]> = [
+    ['True Name', run.trueName ?? 'The Unnamed'],
+    ['Dominant stat', stat[0].toUpperCase() + stat.slice(1)],
+    ['Floor reached', `${floorReached} / ${run.floors.length}`],
+    ['Words spoken', `${uniqueWords.size} unique (${run.history.length} cast)`],
+  ];
+  if (strongest) rows.push(['Strongest word', `“${strongest.word}” (power ${strongest.power})`]);
+  return rows;
+}
+
+/** Names the killer, and — if it got the chance — what it read and exploited. */
+function fallenNote(): string | null {
+  const duel = run.duel;
+  if (!duel) return null;
+  let note = `Undone by ${duel.opponent.name}.`;
+  if (duel.nameKnown && duel.nameExploit) {
+    note += ` It knew your name, ${EXPLOIT_FLAVOR[duel.nameExploit]}.`;
+  }
+  return note;
+}
+
+function renderOverlayStats(rows: Array<[string, string]>, note?: string | null): void {
+  const box = $('overlay-stats');
+  box.replaceChildren();
+  for (const [label, value] of rows) {
+    const row = document.createElement('div');
+    row.className = 'stat-row';
+    const l = document.createElement('span');
+    l.className = 'stat-label';
+    l.textContent = label;
+    const v = document.createElement('span');
+    v.className = 'stat-value';
+    v.textContent = value;
+    row.append(l, v);
+    box.appendChild(row);
+  }
+  if (note) {
+    const row = document.createElement('div');
+    row.className = 'stat-row stat-note';
+    row.textContent = note;
+    box.appendChild(row);
+  }
+}
+
+/** Somber (fallen) shows the boss that beat you, tinted by the floor you
+ * died on; triumphant (ascended) shows the Mirror in your own dominant-stat
+ * color — same figure the duel itself renders it in. */
+function renderOverlaySprite(phase: 'fallen' | 'ascended'): void {
+  const holder = $('overlay-sprite');
+  holder.className = phase;
+  const boss = run.duel?.opponent ?? null;
+  if (!boss || boss.art === 'player') {
+    holder.replaceChildren();
+    return;
+  }
+  const hue = phase === 'ascended' ? STAT_HUES[dominantStat(run.stats)] : currentThemeHue();
+  const el = spriteAnim(boss.art, enemyPalette(boss.art, hue), enemyPalette(boss.art, hue, 1), 5, holder.id);
+  if (holder.firstChild !== el) holder.replaceChildren(el);
+}
+
+/** The feel-good beat between winning a duel and the next Threshold — names
+ * the boss you just beat outright, rather than cutting straight to the next
+ * floor's setup with no acknowledgment. */
+function renderVictoryScreen(): void {
+  const boss = run.lastDefeated;
+  const holder = $('victory-sprite');
+  if (!boss || boss.art === 'player') {
+    holder.replaceChildren();
+    return;
+  }
+  // The floor just cleared, not the (already-advanced) upcoming one — so the
+  // boss renders in the theme it actually fought under.
+  const clearedFloor = run.floors[run.lastDefeatedFloorIndex - 1];
+  const hue = THEME_HUES[clearedFloor.theme];
+  const el = spriteAnim(boss.art, enemyPalette(boss.art, hue), enemyPalette(boss.art, hue, 1), 5, holder.id);
+  if (holder.firstChild !== el) holder.replaceChildren(el);
+  $('victory-title').textContent = `Floor ${run.lastDefeatedFloorIndex} cleared`;
+  $('victory-sub').textContent = `You defeated ${boss.name}. Its casts fall silent — the spire remembers this.`;
+}
+
 function renderThreshold(): void {
   const floor = run.currentFloor();
   $('th-name').textContent = `Floor ${floor.index} of 8 — ${floor.name}`;
@@ -393,6 +497,10 @@ function renderThreshold(): void {
   if (run.studyReport) {
     report.textContent = `${run.studyReport.bossName}. ${run.studyReport.wordHint} ${run.studyReport.policyHint}`;
   }
+  // Pact/Study vary per floor now (floors.ts:PACT_OPTIONS/STUDY_OPTIONS) —
+  // no longer the same two static buttons on every single Threshold.
+  $('pact-btn').textContent = floor.pact.label;
+  $('study-btn').textContent = floor.study.label;
   $<HTMLButtonElement>('pact-btn').classList.toggle('used', run.pactArmed);
   $<HTMLButtonElement>('study-btn').classList.toggle('used', !!run.studyReport);
 }
@@ -693,6 +801,11 @@ input.addEventListener('input', renderPreview);
 
 $('overlay-btn').addEventListener('click', () => {
   startRun();
+});
+
+$('victory-continue').addEventListener('click', () => {
+  run.acknowledgeVictory();
+  render();
 });
 
 // ---------- boot ----------

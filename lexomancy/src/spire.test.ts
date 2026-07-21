@@ -52,6 +52,30 @@ describe('floor generation', () => {
       expect(f.inscription.length).toBeGreaterThan(10);
     }
   });
+
+  it('inscriptions are pure flavor, independent of the rolled theme', () => {
+    // Same seed forced through two different theme draws for the same
+    // archetype should yield an IDENTICAL inscription — proof the flavor
+    // text no longer tries (and risks garbling) a per-theme restatement.
+    const floors = generateSpire(rng(11));
+    const byArchetype = new Map<string, string>();
+    for (const f of floors) {
+      const prev = byArchetype.get(f.archetype);
+      if (prev !== undefined) expect(prev).toBe(f.inscription);
+      byArchetype.set(f.archetype, f.inscription);
+    }
+    expect(byArchetype.size).toBeGreaterThan(1);
+  });
+
+  it('Pact and Study options vary floor to floor, not fixed to one pair', () => {
+    const floors = generateSpire(rng(9));
+    const pactLabels = new Set(floors.slice(0, 7).map((f) => f.pact.label));
+    const studyLabels = new Set(floors.slice(0, 7).map((f) => f.study.label));
+    // 3 options each, 7 rolls — overwhelmingly likely (and here, actually)
+    // to land more than one distinct label across a real run.
+    expect(pactLabels.size).toBeGreaterThan(1);
+    expect(studyLabels.size).toBeGreaterThan(1);
+  });
 });
 
 describe.skipIf(!model)('spire systems on the real model', () => {
@@ -221,6 +245,10 @@ describe.skipIf(!model)('spire systems on the real model', () => {
     let wi = 0;
     let guard = 0;
     while (run.phase !== 'ascended' && run.phase !== 'fallen' && guard++ < 400) {
+      if (run.phase === 'cleared') {
+        run.acknowledgeVictory();
+        continue;
+      }
       if (run.phase === 'threshold') {
         run.enterFloor();
         continue;
@@ -346,6 +374,35 @@ describe.skipIf(!model)('spire systems on the real model', () => {
     if (cast && 'word' in cast) {
       expect(['inferno', 'balm', 'mirror']).toContain(cast.word);
     }
+  });
+
+  it('clearing a floor (not the Summit) pauses at "cleared" with the beaten boss recorded', () => {
+    const run = new SpireRun(scorer, 12);
+    run.completeRite(run.offer().slice(0, 5));
+    const duel = run.enterFloor();
+    const beatenBoss = duel.opponent;
+    duel.enemy.hp = 1;
+    duel.player.mana = duel.player.maxMana;
+    // Cast whatever's affordable and does damage; a few tries covers any word.
+    const pool = ['smite', 'inferno', 'bludgeon', 'conflagration', 'crush'];
+    let cleared = false;
+    for (const w of pool) {
+      const events = run.castPlayer(w);
+      if (events?.some((e) => e.kind === 'defeat')) {
+        cleared = true;
+        break;
+      }
+      duel.player.mana = duel.player.maxMana;
+    }
+    expect(cleared).toBe(true);
+    expect(run.phase).toBe('cleared');
+    expect(run.lastDefeated).toBe(beatenBoss);
+    expect(run.lastDefeatedFloorIndex).toBe(1);
+    expect(run.floorIndex).toBe(1); // already advanced; just waiting on the player to continue
+
+    run.acknowledgeVictory();
+    expect(run.phase).toBe('threshold');
+    expect(run.currentFloor().index).toBe(2);
   });
 
   it('leaning one theme all run walks into a pre-warded boss', () => {
