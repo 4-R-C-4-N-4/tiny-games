@@ -12,6 +12,15 @@ const EPITHETS: Record<StatName, string> = {
   resonance: 'the Learned',
 };
 
+/** What a knowing enemy says (and does) once it's found your weakest stat. */
+export const EXPLOIT_FLAVOR: Record<StatName, string> = {
+  ferocity: 'and finds no fear in your blows — it turns to raw defense',
+  guile: 'and reads the hollow in your guile — curses will sink deep now',
+  stone: 'and reads the hollow in your stone — its blows will press through',
+  grace: "and doubts your resolve will hold — it won't rest",
+  resonance: 'and doubts your unstudied reach — it holds nothing back',
+};
+
 /** First consonant-vowel cluster of a word: "savage" → "sa", "cunning" → "cu". */
 function syllable(word: string, len: number): string {
   const m = word.match(/^[^aeiou]*[aeiou]+[^aeiou]?/);

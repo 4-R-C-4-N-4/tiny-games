@@ -114,11 +114,15 @@ Before the climb, the player describes themself in adjectives. Adjectives are sc
 ### Anti-dump-stat mechanic
 Adjectives interact by mutual similarity: near-synonym sets ("cruel, vicious, brutal, savage") collapse with diminishing returns — a glass cannon with a shallow vocabulary. Varied self-description yields a larger, rounder stat pool. Character creation teaches the fatigue mechanic before the first duel.
 
+**Purely additive from a 0.5 neutral floor** *(fixed after playtest, 2026-07-21)*: picking adjectives can only raise a stat, never lower one below what skipping the rite gives you. The original formula (`raw affinity / flat scale`, no floor) let a specialized build actively crater its unused stats to ~0.25–0.3 — worse than not playing the rite at all, which inverted the intended trade-off. Now `stat = 0.5 + 0.5 × min(1, raw/scale)`, so 0 picks yields a flat 0.5/1.0× on everything (this **is** the "vanilla" hardest-mode challenge run — no adjectives, no buffs, purely the words you know) and any picks only add on top. The free-form flaw is exempt by design: it's meant as a genuine trade-off (hollows its own stat, deepens the rest), not part of this guarantee.
+
+Each offered adjective's chip is color-coded by its own standalone peak stat pull (green = weak, purple = strong, decisive) with a tag showing which stat it feeds — so the "crap shoot" of guessing a word's stat value before picking is gone.
+
 ### Drafted, roguelike-style
-Pick 5 adjectives from a rotating offer of ~12 per run (no free-form "omnipotent" exploits; natural balance and run variety for free), **plus one free-form "flaw" adjective** that grants bonus points — creative self-sabotage the player writes themself.
+Offer up to 5 adjectives per run from a rotating pool of ~12 (no free-form "omnipotent" exploits; natural balance and run variety for free) — **none required**, **plus one free-form "flaw" adjective** (also optional) that grants bonus points — creative self-sabotage the player writes themself.
 
 ### True Name
-The chosen adjectives seed the character's True Name. Enemies that survive enough rounds "learn" it and gain a bonus against the player's dominant stat: extremity has narrative cost.
+The chosen adjectives seed the character's True Name. Enemies that survive 7 rounds "learn" it — and a name known is a weakness known: the boss reads the player's *weakest* stat, not the dominant one, and turns it against them specifically, plus a small (+8%) sharpening across the board. **Three stats map onto a precise counter, because they govern an incoming vector:** Ferocity weak → the boss stops fearing your damage and turtles behind ward; Guile weak → your hex resistance is thin, so it presses hex; Stone weak → your wards are fragile, so it presses raw damage through. **Grace and Resonance have no incoming angle** (they govern the player's own sustain/economy, not a defensive lever), so a boss that reads either one instead drops its own self-restraint — no more waiting for a fresher word, just its best shot, every turn. A persistent 🗝 badge on the boss's status line reminds the player which stat is being read once known. *(Redesigned post-launch, 2026-07-21 — the original was a flat, undifferentiated power multiplier with no connection to what a "true name" should actually expose.)*
 
 ---
 
@@ -130,14 +134,18 @@ The chosen adjectives seed the character's True Name. Enemies that survive enoug
 
 Floors are **hand-authored mechanic skeletons filled with generated semantic content**:
 
-**Archetypes** (~6–8, contain all hardcoded logic):
+**Archetypes** (contain all hardcoded logic — 9 rolled + the Summit-only Mirror):
 | Archetype | Rule |
 |-----------|------|
-| **Domain** | An aura anchor amplifies a theme for both combatants |
-| **Taboo** | Words in a forbidden region fizzle or backfire as self-damage |
-| **Drain** | Fatigue decays slower; variety pressure doubled |
-| **Echo** | Your own last cast is re-cast at you at half power |
-| **Leyline** | One random channel amplified for both sides |
+| **Domain** | Words matching the floor's theme are amplified for both duelists (up to +50% power). |
+| **Taboo** | Words matching the floor's theme backfire — the damage/hex hits the caster instead of the opponent. |
+| **Drain** | Fatigue decays much slower — a word cast 3-4 turns ago still meaningfully punishes a repeat. |
+| **Echo** | Landing direct damage also hits the caster for half that amount, instantly. |
+| **Leyline** | One channel, rolled per floor, is amplified 40% for both duelists. |
+| **Silence** *(added 2026-07-20)* | One channel, rolled per floor, is forbidden for both duelists — casting it does nothing (mana still spent). The inverse of Leyline. |
+| **Bloodprice** *(added 2026-07-20)* | Heal-dominant words hurt their caster instead of restoring them, for both duelists. Held back to floor 4+ — punishes an instinct a first-time player wouldn't expect. |
+| **Bulwark** *(added 2026-07-20)* | Both duelists start the floor already warded (12 ward) — you have to break the shield before real damage lands. |
+| **Fading** *(added 2026-07-20)* | Hex decays twice as fast and reapplication never resets its duration clock. The inverse of Drain. |
 
 **Theme library** (~25–30 curated anchor wordsets, authored once): bone, tide, ash, clockwork, honey, frost, ruin, choir, etc. A theme is just an anchor vector, so filling a slot is trivial.
 

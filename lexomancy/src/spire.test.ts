@@ -130,6 +130,59 @@ describe.skipIf(!model)('spire systems on the real model', () => {
     expect(d.player.hp).toBeLessThan(hpBefore);
   });
 
+  it('silence floors zero a channel for both duelists', () => {
+    const floor = makeFloor(3, 'silence', 'storm', 'damage');
+    expect(evaluateWord(scorer, floor, 'inferno').channelAmp.damage).toBe(0);
+    const d = new Duel(scorer, ROSTER[0], 1, { floor });
+    const enemyHpBefore = d.enemy.hp;
+    d.castPlayer('inferno');
+    expect(d.enemy.hp).toBe(enemyHpBefore); // pure-damage word did nothing
+  });
+
+  it('bloodprice floors make healing hurt the caster instead', () => {
+    const floor = makeFloor(4, 'bloodprice', 'garden');
+    expect(evaluateWord(scorer, floor, 'balm').healInverted).toBe(true);
+    expect(evaluateWord(scorer, floor, 'inferno').healInverted).toBe(false);
+
+    const d = new Duel(scorer, ROSTER[0], 1, { floor });
+    d.player.hp = d.player.maxHp - 10; // room to observe either direction
+    const hpBefore = d.player.hp;
+    const events = d.castPlayer('balm') ?? [];
+    const cast = events.find((e) => e.kind === 'cast');
+    expect(cast && 'selfHarm' in cast && cast.selfHarm).toBeGreaterThan(0);
+    expect(cast && 'healed' in cast && cast.healed).toBe(0);
+    expect(d.player.hp).toBeLessThan(hpBefore);
+  });
+
+  it('bulwark floors start both duelists warded', () => {
+    const floor = makeFloor(1, 'bulwark', 'iron');
+    const d = new Duel(scorer, ROSTER[0], 1, { floor });
+    expect(d.player.ward).toBeGreaterThan(0);
+    expect(d.enemy.ward).toBeGreaterThanOrEqual(d.player.ward);
+  });
+
+  it('fading floors drain hex faster and never refresh its duration', () => {
+    const floor = makeFloor(2, 'fading', 'plague');
+    const plain = new Duel(scorer, ROSTER[0], 1, {});
+    const fading = new Duel(scorer, ROSTER[0], 1, { floor });
+    plain.player.hex = { potency: 16, turns: 3 };
+    fading.player.hex = { potency: 16, turns: 3 };
+    const plainEvents = plain.castPlayer('mend') ?? [];
+    const fadingEvents = fading.castPlayer('mend') ?? [];
+    const plainDrain = plainEvents.find((e) => e.kind === 'drain');
+    const fadingDrain = fadingEvents.find((e) => e.kind === 'drain');
+    expect(fadingDrain && 'drain' in fadingDrain && plainDrain && 'drain' in plainDrain
+      ? fadingDrain.drain > plainDrain.drain
+      : false
+    ).toBe(true);
+
+    // Reapplying hex on a fading floor keeps the existing countdown instead
+    // of resetting it back to full duration.
+    fading.enemy.hex = { potency: 4, turns: 1 };
+    fading.castPlayer('curse');
+    expect(fading.enemy.hex?.turns).toBe(1);
+  });
+
   it('ferocity raises player damage output', () => {
     const meek = new Duel(scorer, ROSTER[0], 1, {
       stats: { ferocity: 0.1, guile: 0.5, stone: 0.5, grace: 0.5, resonance: 0.5 },
@@ -190,8 +243,8 @@ describe.skipIf(!model)('spire systems on the real model', () => {
     expect(run.history.length).toBeGreaterThan(8);
   });
 
-  it('a boss that survives long enough learns your True Name', () => {
-    const d = new Duel(scorer, ROSTER[0], 5);
+  it('a boss that survives long enough learns your True Name and reads a weak stat', () => {
+    const d = new Duel(scorer, ROSTER[0], 5); // default (unpicked) stats: all tied at neutral
     d.enemy.hp = 999;
     d.enemy.maxHp = 999;
     let named = false;
@@ -202,6 +255,86 @@ describe.skipIf(!model)('spire systems on the real model', () => {
     }
     expect(named).toBe(true);
     expect(d.nameKnown).toBe(true);
+    expect(STATS).toContain(d.nameExploit);
+  });
+
+  it('True Name exploit aims at the channel that punishes the weakest stat (Guile -> Hex)', () => {
+    const opp = { ...ROSTER[0], policy: 'random' as const, words: ['smite', 'curse', 'wall', 'balm'], maxHp: 9999 };
+    const stats = { ferocity: 0.9, guile: 0.1, stone: 0.9, grace: 0.9, resonance: 0.9 };
+    const d = new Duel(scorer, opp, 3, { stats });
+    d.player.hp = 9999;
+    d.player.maxHp = 9999;
+
+    let named = false;
+    for (let i = 0; i < 7; i++) {
+      d.enemy.mana = d.enemy.maxMana;
+      if (d.enemyTurn().some((e) => e.kind === 'truename')) named = true;
+    }
+    expect(named).toBe(true);
+    expect(d.nameExploit).toBe('guile');
+
+    // Every subsequent turn should target the hex-dominant word specifically,
+    // not the boss's normal random policy.
+    for (let i = 0; i < 5; i++) {
+      d.enemy.mana = d.enemy.maxMana;
+      const cast = d.enemyTurn().find((e) => e.kind === 'cast');
+      expect(cast && 'word' in cast && cast.word).toBe('curse');
+    }
+  });
+
+  it('True Name exploit turns Stone-weak into direct pressure (Damage) and Ferocity-weak into turtling (Ward)', () => {
+    const opp = { ...ROSTER[0], policy: 'random' as const, words: ['smite', 'curse', 'wall', 'balm'], maxHp: 9999 };
+
+    const stoneWeak = { ferocity: 0.9, guile: 0.9, stone: 0.1, grace: 0.9, resonance: 0.9 };
+    const dStone = new Duel(scorer, opp, 4, { stats: stoneWeak });
+    dStone.player.hp = 9999;
+    dStone.player.maxHp = 9999;
+    for (let i = 0; i < 7; i++) {
+      dStone.enemy.mana = dStone.enemy.maxMana;
+      dStone.enemyTurn();
+    }
+    expect(dStone.nameExploit).toBe('stone');
+    dStone.enemy.mana = dStone.enemy.maxMana;
+    const stoneCast = dStone.enemyTurn().find((e) => e.kind === 'cast');
+    expect(stoneCast && 'word' in stoneCast && stoneCast.word).toBe('smite');
+
+    const ferocityWeak = { ferocity: 0.1, guile: 0.9, stone: 0.9, grace: 0.9, resonance: 0.9 };
+    const dFer = new Duel(scorer, opp, 5, { stats: ferocityWeak });
+    dFer.player.hp = 9999;
+    dFer.player.maxHp = 9999;
+    for (let i = 0; i < 7; i++) {
+      dFer.enemy.mana = dFer.enemy.maxMana;
+      dFer.enemyTurn();
+    }
+    expect(dFer.nameExploit).toBe('ferocity');
+    dFer.enemy.mana = dFer.enemy.maxMana;
+    const ferCast = dFer.enemyTurn().find((e) => e.kind === 'cast');
+    expect(ferCast && 'word' in ferCast && ferCast.word).toBe('wall');
+  });
+
+  it('True Name exploit on Grace/Resonance drops the boss\'s own freshness caution', () => {
+    // Two damage words: a strong one and a weak one. A normal exploit-tier
+    // policy avoids repeating the strong one once it's gone stale for the
+    // boss itself; the Grace/Resonance "relentless" read should not.
+    const opp = { ...ROSTER[0], policy: 'random' as const, words: ['conflagration', 'crack'], maxHp: 9999 };
+    const stats = { ferocity: 0.9, guile: 0.9, stone: 0.9, grace: 0.1, resonance: 0.9 };
+    const d = new Duel(scorer, opp, 6, { stats });
+    d.player.hp = 9999;
+    d.player.maxHp = 9999;
+    for (let i = 0; i < 7; i++) {
+      d.enemy.mana = d.enemy.maxMana;
+      d.enemyTurn();
+    }
+    expect(d.nameExploit).toBe('grace');
+    // Repeating the strong word deliberately fatigues the boss on it.
+    d.enemy.mana = d.enemy.maxMana;
+    const first = d.enemyTurn().find((e) => e.kind === 'cast');
+    expect(first && 'word' in first && first.word).toBe('conflagration');
+    d.enemy.mana = d.enemy.maxMana;
+    const second = d.enemyTurn().find((e) => e.kind === 'cast');
+    // Still willing to reach for its best shot even though it's now stale —
+    // a plain 'exploit' tier boss would have swapped to the fresher option.
+    expect(second && 'word' in second && second.word).toBe('conflagration');
   });
 
   it('the Mirror casts only from the player history', () => {

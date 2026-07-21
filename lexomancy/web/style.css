@@ -643,18 +643,36 @@ body {
 
 .adj-chip {
   background: var(--panel);
-  border: 1px solid var(--panel-edge);
+  border: 1px solid var(--chip-color, var(--panel-edge));
   border-radius: 999px;
   color: var(--ink);
   font: inherit;
   font-size: 0.75rem;
   padding: 0.3rem 0.7rem;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .adj-chip.picked {
-  background: var(--panel-edge);
+  background: var(--chip-color, var(--panel-edge));
   border-color: var(--mana);
+}
+
+.adj-chip .adj-stat {
+  font-size: 0.55rem;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  color: var(--chip-color, var(--ink-dim));
+  border: 1px solid var(--chip-color, var(--panel-edge));
+  border-radius: 3px;
+  padding: 0.05rem 0.25rem;
+}
+
+.adj-chip.picked .adj-stat {
+  color: var(--bg);
+  border-color: var(--bg);
 }
 
 #rite-stats {
@@ -771,14 +789,21 @@ body {
     linear-gradient(180deg, hsl(var(--floor-hue, 260) 35% 12%) 0%, var(--bg) 70%);
 }
 
-/* Taboo words: the scrying glass warns before you burn yourself. */
-#preview.tabooed .fill {
+/* Backfiring words (taboo floors, or heal on a Bloodprice floor): the
+   scrying glass warns before you burn yourself. */
+#preview.backfire .fill {
   background: var(--damage) !important;
   opacity: 0.55;
 }
 
-#preview.tabooed .track {
+#preview.backfire .track {
   outline: 1px dashed var(--damage);
+}
+
+/* Silenced channel (Silence floors): that bar reads as visibly dead. */
+#preview.silenced .fill {
+  background: var(--ink-dim) !important;
+  opacity: 0.3;
 }
 
 #preview-warn {
@@ -787,7 +812,8 @@ body {
   min-height: 0.9em;
 }
 
-#preview-warn.taboo {
+#preview-warn.taboo,
+#preview-warn.healinvert {
   color: var(--damage);
 }
 
@@ -797,6 +823,10 @@ body {
 
 #preview-warn.short {
   color: var(--mana);
+}
+
+#preview-warn.muted {
+  color: var(--ink-dim);
 }
 
 #preview-roots {

@@ -3,6 +3,14 @@ import type { Scorer } from './types.ts';
 // The Self-Naming Rite: adjectives → stats, via the same anchor machinery as
 // everything else. Near-synonym picks collapse with diminishing returns — the
 // anti-dump-stat mechanic that teaches fatigue before the first duel.
+//
+// Stats are PURELY ADDITIVE from the 0.5 neutral baseline: picking adjectives
+// can only raise a stat, never push it below what skipping the rite entirely
+// gives you. Earlier versions divided total affinity by a flat scale with no
+// floor, so a specialized pick set (five ferocity words) actively CRATERED
+// the other four stats to ~0.25-0.3 — worse than not playing the rite at
+// all. That made "vanilla" (0 picks, flat 0.5/1.0x everywhere) the strongest
+// baseline rather than the intended hardest-mode challenge run.
 
 export const STATS = ['ferocity', 'guile', 'stone', 'grace', 'resonance'] as const;
 export type StatName = (typeof STATS)[number];
@@ -34,6 +42,20 @@ export function statAffinity(scorer: Scorer, word: string, stat: StatName): numb
   return scorer.anchorAffinity(word, `stats:${stat}`);
 }
 
+/** A word's strongest stat pull, standalone — what the rite's draft grid shows before you pick. */
+export function peakStat(scorer: Scorer, word: string): { stat: StatName; value: number } {
+  let best: StatName = STATS[0];
+  let bestValue = -1;
+  for (const stat of STATS) {
+    const v = statAffinity(scorer, word, stat);
+    if (v > bestValue) {
+      best = stat;
+      bestValue = v;
+    }
+  }
+  return { stat: best, value: bestValue };
+}
+
 /**
  * Score a drafted self-description. Each pick's contribution is weighted by
  * how different it is from every earlier pick (squared similarity, so true
@@ -54,8 +76,15 @@ export function performRite(scorer: Scorer, picks: string[], flaw?: string): Rit
     for (const stat of STATS) raw[stat] += weight * statAffinity(scorer, pick, stat);
   });
 
-  const stats = { ...raw };
-  for (const stat of STATS) stats[stat] = Math.min(1, raw[stat] / RAW_SCALE);
+  // Additive from the 0.5 floor: a stat you never fed rests at exactly
+  // neutral, not zero. (raw is all zeros with no picks, so this naturally
+  // yields flat 0.5 everywhere — the "blank slate" case falls out for free.)
+  const stats: Stats = Object.fromEntries(
+    STATS.map((stat) => [
+      stat,
+      NEUTRAL_STATS[stat] + (1 - NEUTRAL_STATS[stat]) * Math.min(1, raw[stat] / RAW_SCALE),
+    ]),
+  ) as Stats;
 
   let flawStat: StatName | null = null;
   let flawBonus = 0;
@@ -81,4 +110,11 @@ export function dominantStat(stats: Stats): StatName {
   let best: StatName = STATS[0];
   for (const s of STATS) if (stats[s] > stats[best]) best = s;
   return best;
+}
+
+/** Weakest stat — what a boss that has learned your True Name reads and exploits. */
+export function weakestStat(stats: Stats): StatName {
+  let worst: StatName = STATS[0];
+  for (const s of STATS) if (stats[s] < stats[worst]) worst = s;
+  return worst;
 }

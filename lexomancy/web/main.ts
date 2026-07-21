@@ -4,8 +4,9 @@ import { arenaFor } from './arena-render.ts';
 import { ModelScorer } from '../src/model-scorer.ts';
 import { SpireRun } from '../src/run.ts';
 import { STAT_HUES, enemyPalette, playerPalette, type SpriteArt } from '../src/sprites.ts';
-import { dominantStat, performRite, STATS } from '../src/stats.ts';
+import { dominantStat, peakStat, performRite, STATS, type StatName } from '../src/stats.ts';
 import { StubScorer } from '../src/stub-scorer.ts';
+import { EXPLOIT_FLAVOR } from '../src/truename.ts';
 import { CHANNELS, type Channel, type Scorer } from '../src/types.ts';
 import { renderGallery } from './gallery.ts';
 import { spriteAnim } from './sprite-render.ts';
@@ -82,10 +83,18 @@ function renderPreview(): void {
   costEl.textContent = p ? `cost ${p.cost} ✦` : '—';
   costEl.classList.toggle('cost-short', shortfall > 0);
   $('player').classList.toggle('mana-short', shortfall > 0);
-  $('preview').classList.toggle('tabooed', !!p?.floor.tabooed);
+  const silenced = !!p && p.floor.channelAmp[p.profile.dominant] === 0;
+  $('preview').classList.toggle('backfire', !!p?.floor.tabooed || !!p?.floor.healInverted);
+  $('preview').classList.toggle('silenced', silenced);
   if (p?.floor.tabooed) {
     warn.textContent = '⚠ forbidden here — this word will turn on you';
     warn.className = 'taboo';
+  } else if (p?.floor.healInverted) {
+    warn.textContent = '⚠ healing is cursed here — this word will wound you instead';
+    warn.className = 'healinvert';
+  } else if (silenced) {
+    warn.textContent = '◦ that channel is silenced here — it will do nothing';
+    warn.className = 'muted';
   } else if (shortfall > 0) {
     warn.textContent = `✦ not enough mana — need ${shortfall} more`;
     warn.className = 'short';
@@ -115,10 +124,13 @@ function renderPreview(): void {
   castBtn.classList.toggle('short', shortfall > 0);
 }
 
-function statusLine(c: Combatant): string {
+function statusLine(c: Combatant, exploit?: StatName | null): string {
   const parts: string[] = [];
   if (c.ward > 0) parts.push(`🛡 ${c.ward}`);
   if (c.hex) parts.push(`☠ ${c.hex.potency} (${c.hex.turns}t)`);
+  // Persistent reminder of what a name-knowing boss is reading, not just a
+  // one-off log line — the exploited stat drives its choices every turn.
+  if (exploit) parts.push(`🗝 ${STAT_ABBR[exploit]}`);
   return parts.join('  ');
 }
 
@@ -149,7 +161,7 @@ function renderCombatants(): void {
   setSprite($('player-sprite'), 'player');
   const enemy = duel?.enemy;
   $('enemy-hp').style.width = enemy ? `${(100 * enemy.hp) / enemy.maxHp}%` : '100%';
-  $('enemy-status').textContent = enemy ? statusLine(enemy) : '';
+  $('enemy-status').textContent = enemy ? statusLine(enemy, duel?.nameExploit) : '';
   const player = duel?.player;
   $('player-hp').style.width = player
     ? `${(100 * player.hp) / player.maxHp}%`
@@ -222,6 +234,7 @@ function describe(e: DuelEvent): string {
       if (e.absorbed > 0) parts.push(`${e.absorbed} warded`);
       if (e.hexApplied > 0) parts.push(`hex +${e.hexApplied}`);
       if (e.healed > 0) parts.push(`${e.healed} healed`);
+      if (e.selfHarm > 0) parts.push(`— cursed mercy — ${e.selfHarm} self-inflicted`);
       if (e.wardGained > 0) parts.push(`🛡 +${e.wardGained}`);
       return parts.join(' · ');
     }
@@ -232,7 +245,7 @@ function describe(e: DuelEvent): string {
     case 'falter':
       return `${e.actor} falters, gathering mana…`;
     case 'truename':
-      return `${e.actor} speaks your True Name — ${run.trueName ?? 'it knows you'} — its casts sharpen!`;
+      return `${e.actor} speaks your True Name — ${run.trueName ?? 'it knows you'} — ${EXPLOIT_FLAVOR[e.exploitedStat]}.`;
     case 'defeat':
       return e.loser === 'player' ? 'You fall.' : `${e.loser} is undone.`;
   }
@@ -389,14 +402,42 @@ function renderThreshold(): void {
 const picked = new Set<string>();
 let lastRiteStats: Record<string, number> | null = null;
 
+const STAT_ABBR: Record<StatName, string> = {
+  ferocity: 'FER',
+  guile: 'GUI',
+  stone: 'STO',
+  grace: 'GRA',
+  resonance: 'RES',
+};
+
+/** Green (weak pull) -> purple (strong, decisive pull), so the handful of
+ * genuinely "meh" words in the offer visibly stand out from the rest. */
+function qualityColor(value: number): string {
+  const hue = 140 + 140 * Math.min(1, Math.max(0, value));
+  return `hsl(${hue} 55% 60%)`;
+}
+
+/** Cached per rendered offer so repeated re-renders (every click) don't
+ * re-run anchor-affinity lookups for all 12 words each time. */
+let riteOfferPeaks: Map<string, { stat: StatName; value: number }> | null = null;
+
 function renderRiteChoices(): void {
   const box = $('rite-choices');
   box.replaceChildren();
-  for (const adj of run.offer()) {
+  const offer = run.offer();
+  riteOfferPeaks ??= new Map(offer.map((w) => [w, peakStat(scorer, w)]));
+  for (const adj of offer) {
+    const { stat, value } = riteOfferPeaks.get(adj)!;
+    const color = qualityColor(value);
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'adj-chip' + (picked.has(adj) ? ' picked' : '');
-    chip.textContent = adj;
+    chip.style.setProperty('--chip-color', color);
+    chip.append(adj + ' ');
+    const tag = document.createElement('i');
+    tag.className = 'adj-stat';
+    tag.textContent = STAT_ABBR[stat];
+    chip.appendChild(tag);
     chip.addEventListener('click', () => {
       if (picked.has(adj)) picked.delete(adj);
       else if (picked.size < 5) picked.add(adj);
@@ -405,8 +446,7 @@ function renderRiteChoices(): void {
     });
     box.appendChild(chip);
   }
-  $('rite-count').textContent = `${picked.size} / 5 chosen`;
-  $<HTMLButtonElement>('begin-run').disabled = picked.size !== 5;
+  $('rite-count').textContent = `${picked.size} chosen (up to 5)`;
 }
 
 function renderRiteStats(): void {
@@ -590,6 +630,12 @@ function playCastVfx(e: DuelEvent): void {
     vfxSpawn(caster, 'vfx-mote', 4, 1000);
     vfxFloat(caster, `+${e.healed}`, CHANNEL_COLORS.heal);
   }
+  if (e.selfHarm > 0) {
+    const mag = magFor(e.selfHarm);
+    vfxBurst(caster, CHANNEL_COLORS.damage, mag);
+    vfxFloat(caster, `−${e.selfHarm}`, CHANNEL_COLORS.damage);
+    vfxShake(caster, mag);
+  }
 
   // Beat 3 (delayed to STREAK_MS): effects landing ON the target — damage
   // and hex both travel, so their payoff (burst/shake/tendrils/numbers) is
@@ -655,6 +701,7 @@ function startRun(): void {
   run = new SpireRun(scorer, (Math.random() * 2 ** 31) | 0);
   picked.clear();
   lastRiteStats = null;
+  riteOfferPeaks = null;
   practiceDuel = null;
   enemyThinking = false;
   log.replaceChildren();

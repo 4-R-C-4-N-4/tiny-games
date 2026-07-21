@@ -1,7 +1,13 @@
-import { evaluateWord, fatigueRecency, type FloorSpec, type FloorWordEffect } from './floors.ts';
+import {
+  BULWARK_START_WARD,
+  evaluateWord,
+  fatigueRecency,
+  type FloorSpec,
+  type FloorWordEffect,
+} from './floors.ts';
 import type { SpriteArt } from './sprites.ts';
-import { NEUTRAL_STATS, type Stats } from './stats.ts';
-import type { Scorer, SpellProfile } from './types.ts';
+import { NEUTRAL_STATS, weakestStat, type Stats, type StatName } from './stats.ts';
+import type { Channel, Scorer, SpellProfile } from './types.ts';
 
 // The duel loop: strict alternation, headless, deterministic (seeded RNG for
 // enemy policy). Everything the UI shows comes out of the DuelEvent stream.
@@ -50,6 +56,8 @@ export interface CastEvent {
   hexApplied: number;
   /** Offense redirected onto the caster by a taboo floor. */
   tabooed: boolean;
+  /** Bloodprice floors: heal magnitude that hurt the caster instead. */
+  selfHarm: number;
 }
 
 export interface DrainEvent {
@@ -69,10 +77,12 @@ export interface FalterEvent {
   actor: string;
 }
 
-/** The enemy has endured long enough to learn the player's True Name. */
+/** The enemy has endured long enough to learn the player's True Name — and
+ * with it, which of the player's stats they invested in least. */
 export interface TruenameEvent {
   kind: 'truename';
   actor: string;
+  exploitedStat: StatName;
 }
 
 export interface DefeatEvent {
@@ -123,7 +133,28 @@ const MANA_REGEN = 4;
 const ECHO_FACTOR = 0.5;
 /** Survive this many of the enemy's turns and it learns your True Name. */
 const TRUENAME_ROUNDS = 7;
-const TRUENAME_BOOST = 1.15;
+/** A knowing enemy's casts sharpen a little across the board — the "extremity
+ * has narrative cost" flavor — but the real bite is targeted, below. */
+const TRUENAME_BOOST = 1.08;
+/**
+ * A True Name doesn't just make an enemy hit harder — it tells them which of
+ * your five stats you invested in least, and they use it against you. Three
+ * stats have a direct incoming angle and map onto the channel that exploits
+ * them precisely (aim); the other two govern only your own economy, so a
+ * boss that reads them stops holding back instead (relentlessness).
+ *   Ferocity weak  -> your blows can't threaten it, so it turtles behind ward.
+ *   Guile weak     -> your hex resistance is thin, so curses sink deep.
+ *   Stone weak     -> your wards are fragile, so it presses raw damage through.
+ *   Grace / Resonance weak -> no channel to aim at (they govern your own
+ *   sustain/economy, not an incoming vector), so instead the boss drops its
+ *   own self-restraint: no more waiting for a fresher word, just its best
+ *   shot, every turn.
+ */
+const EXPLOIT_CHANNEL: Partial<Record<StatName, Channel>> = {
+  ferocity: 'ward',
+  guile: 'hex',
+  stone: 'damage',
+};
 
 export const PLAYER_MAX_HP = 60;
 export const PLAYER_MAX_MANA = 20;
@@ -171,6 +202,8 @@ export class Duel {
   winner: 'player' | 'enemy' | null = null;
   /** True once the enemy has endured TRUENAME_ROUNDS turns: its casts sharpen. */
   nameKnown = false;
+  /** The player's weakest stat, read the moment the name is learned — null until then. */
+  nameExploit: StatName | null = null;
   private enemyRounds = 0;
   private readonly rng: () => number;
   private readonly recency: number[];
@@ -188,9 +221,12 @@ export class Duel {
     this.player.mana = Math.min(maxMana, opts.playerMana ?? maxMana);
     if (opts.playerHex) this.player.hex = { ...opts.playerHex };
     this.enemy = makeCombatant(opponent.name, opponent.maxHp, PLAYER_MAX_MANA);
-    this.enemy.ward = opts.enemyWard ?? 0;
-    this.stats = opts.stats ?? NEUTRAL_STATS;
     this.floor = opts.floor ?? null;
+    // Bulwark floors: both duelists start already shielded.
+    const bulwark = this.floor?.archetype === 'bulwark' ? BULWARK_START_WARD : 0;
+    this.player.ward = bulwark;
+    this.enemy.ward = Math.max(opts.enemyWard ?? 0, bulwark);
+    this.stats = opts.stats ?? NEUTRAL_STATS;
     this.rng = mulberry32(seed);
     this.recency = fatigueRecency(this.floor);
   }
@@ -246,7 +282,9 @@ export class Duel {
   /** Runs at the start of an actor's turn: hex drains and decays, ward fades. */
   private tickTurnStart(actor: Combatant, events: DuelEvent[]): void {
     if (actor.hex) {
-      const drain = Math.round(actor.hex.potency * HEX_DRAIN_RATE);
+      // Fading floors: curses burn out twice as fast.
+      const rate = this.floor?.archetype === 'fading' ? HEX_DRAIN_RATE * 2 : HEX_DRAIN_RATE;
+      const drain = Math.round(actor.hex.potency * rate);
       if (drain > 0) {
         actor.hp = Math.max(0, actor.hp - drain);
         events.push({ kind: 'drain', actor: actor.name, drain });
@@ -291,22 +329,30 @@ export class Duel {
       offenseTarget === this.player ? 1.25 - 0.5 * this.stats.guile : 1;
     const hexApplied = Math.round(eff * profile.mix.hex * chAmp('hex') * hexMul * hexResist);
     if (hexApplied > 0) {
+      // Fading floors: reapplication tops up potency but never resets the clock.
+      const keepTurns = this.floor?.archetype === 'fading' ? offenseTarget.hex?.turns : undefined;
       offenseTarget.hex = {
         potency: Math.min(HEX_POTENCY_CAP, (offenseTarget.hex?.potency ?? 0) + hexApplied),
-        turns: HEX_TURNS,
+        turns: keepTurns ?? HEX_TURNS,
       };
     }
 
     const healMul = isPlayer ? this.statMul(this.stats.grace) : ENEMY_HEAL_MUL;
-    const healed = Math.min(
-      attacker.maxHp - attacker.hp,
-      Math.round(eff * profile.mix.heal * chAmp('heal') * healMul * utilityScale),
-    );
-    attacker.hp += healed;
-    // Heal cleanses: potency scrubbed by half the heal magnitude.
-    if (attacker.hex && healed > 0) {
-      attacker.hex.potency = Math.max(0, attacker.hex.potency - Math.round(healed / 2));
-      if (attacker.hex.potency === 0) attacker.hex = null;
+    const rawHeal = Math.round(eff * profile.mix.heal * chAmp('heal') * healMul * utilityScale);
+    let healed = 0;
+    let selfHarm = 0;
+    if (floor.healInverted && rawHeal > 0) {
+      // Bloodprice floors: healing hurts its caster instead of restoring them.
+      selfHarm = rawHeal;
+      attacker.hp = Math.max(0, attacker.hp - selfHarm);
+    } else {
+      healed = Math.min(attacker.maxHp - attacker.hp, rawHeal);
+      attacker.hp += healed;
+      // Heal cleanses: potency scrubbed by half the heal magnitude.
+      if (attacker.hex && healed > 0) {
+        attacker.hex.potency = Math.max(0, attacker.hex.potency - Math.round(healed / 2));
+        if (attacker.hex.potency === 0) attacker.hex = null;
+      }
     }
 
     const wardMul = isPlayer ? this.statMul(this.stats.stone) : 1;
@@ -331,6 +377,7 @@ export class Duel {
       wardGained,
       hexApplied,
       tabooed: floor.tabooed,
+      selfHarm,
     };
     events.push(event);
 
@@ -381,7 +428,8 @@ export class Duel {
     this.enemyRounds += 1;
     if (this.enemyRounds === TRUENAME_ROUNDS && !this.nameKnown) {
       this.nameKnown = true;
-      events.push({ kind: 'truename', actor: this.enemy.name });
+      this.nameExploit = weakestStat(this.stats);
+      events.push({ kind: 'truename', actor: this.enemy.name, exploitedStat: this.nameExploit });
     }
 
     const word = this.pickEnemyWord();
@@ -405,6 +453,14 @@ export class Duel {
   private pickEnemyWord(): string | null {
     const affordable = this.affordableWords();
     if (affordable.length === 0) return null;
+
+    // Knowing the True Name overrides normal policy — even a floor-1 random
+    // boss reads your weak point once it's learned your name.
+    if (this.nameKnown && this.nameExploit) {
+      const exploited = this.pickNameExploit(affordable, this.nameExploit);
+      if (exploited) return exploited;
+    }
+
     switch (this.opponent.policy) {
       case 'random':
         return affordable[Math.floor(this.rng() * affordable.length)];
@@ -414,6 +470,21 @@ export class Duel {
       case 'mirror':
         return this.pickExploit(affordable);
     }
+  }
+
+  /**
+   * Reads the player's weakest stat: for Ferocity/Guile/Stone, aim precisely
+   * at the channel that punishes it (falls through to normal policy if
+   * nothing affordable matches this turn). For Grace/Resonance — stats with
+   * no incoming channel to aim at — the boss instead drops its own
+   * self-restraint and always takes its single best shot, no freshness
+   * caution held in reserve.
+   */
+  private pickNameExploit(affordable: string[], stat: StatName): string | null {
+    const channel = EXPLOIT_CHANNEL[stat];
+    if (!channel) return this.bestByPower(affordable);
+    const matches = affordable.filter((w) => this.scorer.score(w).dominant === channel);
+    return matches.length > 0 ? this.bestByPower(matches) : null;
   }
 
   /** Mid-floor tier: answer the player's last dominant channel orthogonally. */
