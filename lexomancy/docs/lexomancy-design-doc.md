@@ -122,7 +122,7 @@ Each offered adjective's chip is color-coded by its own standalone peak stat pul
 Offer up to 5 adjectives per run from a rotating pool of ~12 (no free-form "omnipotent" exploits; natural balance and run variety for free) — **none required**, **plus one free-form "flaw" adjective** (also optional) that grants bonus points — creative self-sabotage the player writes themself.
 
 ### True Name
-The chosen adjectives seed the character's True Name. Enemies that survive enough rounds "learn" it and gain a bonus against the player's dominant stat: extremity has narrative cost.
+The chosen adjectives seed the character's True Name. Enemies that survive 7 rounds "learn" it — and a name known is a weakness known: the boss reads the player's *weakest* stat, not the dominant one, and turns it against them specifically, plus a small (+8%) sharpening across the board. **Three stats map onto a precise counter, because they govern an incoming vector:** Ferocity weak → the boss stops fearing your damage and turtles behind ward; Guile weak → your hex resistance is thin, so it presses hex; Stone weak → your wards are fragile, so it presses raw damage through. **Grace and Resonance have no incoming angle** (they govern the player's own sustain/economy, not a defensive lever), so a boss that reads either one instead drops its own self-restraint — no more waiting for a fresher word, just its best shot, every turn. A persistent 🗝 badge on the boss's status line reminds the player which stat is being read once known. *(Redesigned post-launch, 2026-07-21 — the original was a flat, undifferentiated power multiplier with no connection to what a "true name" should actually expose.)*
 
 ---
 

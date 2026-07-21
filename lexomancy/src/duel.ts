@@ -6,8 +6,8 @@ import {
   type FloorWordEffect,
 } from './floors.ts';
 import type { SpriteArt } from './sprites.ts';
-import { NEUTRAL_STATS, type Stats } from './stats.ts';
-import type { Scorer, SpellProfile } from './types.ts';
+import { NEUTRAL_STATS, weakestStat, type Stats, type StatName } from './stats.ts';
+import type { Channel, Scorer, SpellProfile } from './types.ts';
 
 // The duel loop: strict alternation, headless, deterministic (seeded RNG for
 // enemy policy). Everything the UI shows comes out of the DuelEvent stream.
@@ -77,10 +77,12 @@ export interface FalterEvent {
   actor: string;
 }
 
-/** The enemy has endured long enough to learn the player's True Name. */
+/** The enemy has endured long enough to learn the player's True Name — and
+ * with it, which of the player's stats they invested in least. */
 export interface TruenameEvent {
   kind: 'truename';
   actor: string;
+  exploitedStat: StatName;
 }
 
 export interface DefeatEvent {
@@ -131,7 +133,28 @@ const MANA_REGEN = 4;
 const ECHO_FACTOR = 0.5;
 /** Survive this many of the enemy's turns and it learns your True Name. */
 const TRUENAME_ROUNDS = 7;
-const TRUENAME_BOOST = 1.15;
+/** A knowing enemy's casts sharpen a little across the board — the "extremity
+ * has narrative cost" flavor — but the real bite is targeted, below. */
+const TRUENAME_BOOST = 1.08;
+/**
+ * A True Name doesn't just make an enemy hit harder — it tells them which of
+ * your five stats you invested in least, and they use it against you. Three
+ * stats have a direct incoming angle and map onto the channel that exploits
+ * them precisely (aim); the other two govern only your own economy, so a
+ * boss that reads them stops holding back instead (relentlessness).
+ *   Ferocity weak  -> your blows can't threaten it, so it turtles behind ward.
+ *   Guile weak     -> your hex resistance is thin, so curses sink deep.
+ *   Stone weak     -> your wards are fragile, so it presses raw damage through.
+ *   Grace / Resonance weak -> no channel to aim at (they govern your own
+ *   sustain/economy, not an incoming vector), so instead the boss drops its
+ *   own self-restraint: no more waiting for a fresher word, just its best
+ *   shot, every turn.
+ */
+const EXPLOIT_CHANNEL: Partial<Record<StatName, Channel>> = {
+  ferocity: 'ward',
+  guile: 'hex',
+  stone: 'damage',
+};
 
 export const PLAYER_MAX_HP = 60;
 export const PLAYER_MAX_MANA = 20;
@@ -179,6 +202,8 @@ export class Duel {
   winner: 'player' | 'enemy' | null = null;
   /** True once the enemy has endured TRUENAME_ROUNDS turns: its casts sharpen. */
   nameKnown = false;
+  /** The player's weakest stat, read the moment the name is learned — null until then. */
+  nameExploit: StatName | null = null;
   private enemyRounds = 0;
   private readonly rng: () => number;
   private readonly recency: number[];
@@ -403,7 +428,8 @@ export class Duel {
     this.enemyRounds += 1;
     if (this.enemyRounds === TRUENAME_ROUNDS && !this.nameKnown) {
       this.nameKnown = true;
-      events.push({ kind: 'truename', actor: this.enemy.name });
+      this.nameExploit = weakestStat(this.stats);
+      events.push({ kind: 'truename', actor: this.enemy.name, exploitedStat: this.nameExploit });
     }
 
     const word = this.pickEnemyWord();
@@ -427,6 +453,14 @@ export class Duel {
   private pickEnemyWord(): string | null {
     const affordable = this.affordableWords();
     if (affordable.length === 0) return null;
+
+    // Knowing the True Name overrides normal policy — even a floor-1 random
+    // boss reads your weak point once it's learned your name.
+    if (this.nameKnown && this.nameExploit) {
+      const exploited = this.pickNameExploit(affordable, this.nameExploit);
+      if (exploited) return exploited;
+    }
+
     switch (this.opponent.policy) {
       case 'random':
         return affordable[Math.floor(this.rng() * affordable.length)];
@@ -436,6 +470,21 @@ export class Duel {
       case 'mirror':
         return this.pickExploit(affordable);
     }
+  }
+
+  /**
+   * Reads the player's weakest stat: for Ferocity/Guile/Stone, aim precisely
+   * at the channel that punishes it (falls through to normal policy if
+   * nothing affordable matches this turn). For Grace/Resonance — stats with
+   * no incoming channel to aim at — the boss instead drops its own
+   * self-restraint and always takes its single best shot, no freshness
+   * caution held in reserve.
+   */
+  private pickNameExploit(affordable: string[], stat: StatName): string | null {
+    const channel = EXPLOIT_CHANNEL[stat];
+    if (!channel) return this.bestByPower(affordable);
+    const matches = affordable.filter((w) => this.scorer.score(w).dominant === channel);
+    return matches.length > 0 ? this.bestByPower(matches) : null;
   }
 
   /** Mid-floor tier: answer the player's last dominant channel orthogonally. */

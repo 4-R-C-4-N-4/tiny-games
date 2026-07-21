@@ -111,3 +111,10 @@ export function dominantStat(stats: Stats): StatName {
   for (const s of STATS) if (stats[s] > stats[best]) best = s;
   return best;
 }
+
+/** Weakest stat — what a boss that has learned your True Name reads and exploits. */
+export function weakestStat(stats: Stats): StatName {
+  let worst: StatName = STATS[0];
+  for (const s of STATS) if (stats[s] < stats[worst]) worst = s;
+  return worst;
+}

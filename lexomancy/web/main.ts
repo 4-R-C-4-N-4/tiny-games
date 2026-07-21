@@ -6,6 +6,7 @@ import { SpireRun } from '../src/run.ts';
 import { STAT_HUES, enemyPalette, playerPalette, type SpriteArt } from '../src/sprites.ts';
 import { dominantStat, peakStat, performRite, STATS, type StatName } from '../src/stats.ts';
 import { StubScorer } from '../src/stub-scorer.ts';
+import { EXPLOIT_FLAVOR } from '../src/truename.ts';
 import { CHANNELS, type Channel, type Scorer } from '../src/types.ts';
 import { renderGallery } from './gallery.ts';
 import { spriteAnim } from './sprite-render.ts';
@@ -123,10 +124,13 @@ function renderPreview(): void {
   castBtn.classList.toggle('short', shortfall > 0);
 }
 
-function statusLine(c: Combatant): string {
+function statusLine(c: Combatant, exploit?: StatName | null): string {
   const parts: string[] = [];
   if (c.ward > 0) parts.push(`🛡 ${c.ward}`);
   if (c.hex) parts.push(`☠ ${c.hex.potency} (${c.hex.turns}t)`);
+  // Persistent reminder of what a name-knowing boss is reading, not just a
+  // one-off log line — the exploited stat drives its choices every turn.
+  if (exploit) parts.push(`🗝 ${STAT_ABBR[exploit]}`);
   return parts.join('  ');
 }
 
@@ -157,7 +161,7 @@ function renderCombatants(): void {
   setSprite($('player-sprite'), 'player');
   const enemy = duel?.enemy;
   $('enemy-hp').style.width = enemy ? `${(100 * enemy.hp) / enemy.maxHp}%` : '100%';
-  $('enemy-status').textContent = enemy ? statusLine(enemy) : '';
+  $('enemy-status').textContent = enemy ? statusLine(enemy, duel?.nameExploit) : '';
   const player = duel?.player;
   $('player-hp').style.width = player
     ? `${(100 * player.hp) / player.maxHp}%`
@@ -241,7 +245,7 @@ function describe(e: DuelEvent): string {
     case 'falter':
       return `${e.actor} falters, gathering mana…`;
     case 'truename':
-      return `${e.actor} speaks your True Name — ${run.trueName ?? 'it knows you'} — its casts sharpen!`;
+      return `${e.actor} speaks your True Name — ${run.trueName ?? 'it knows you'} — ${EXPLOIT_FLAVOR[e.exploitedStat]}.`;
     case 'defeat':
       return e.loser === 'player' ? 'You fall.' : `${e.loser} is undone.`;
   }
