@@ -34,6 +34,20 @@ export function statAffinity(scorer: Scorer, word: string, stat: StatName): numb
   return scorer.anchorAffinity(word, `stats:${stat}`);
 }
 
+/** A word's strongest stat pull, standalone — what the rite's draft grid shows before you pick. */
+export function peakStat(scorer: Scorer, word: string): { stat: StatName; value: number } {
+  let best: StatName = STATS[0];
+  let bestValue = -1;
+  for (const stat of STATS) {
+    const v = statAffinity(scorer, word, stat);
+    if (v > bestValue) {
+      best = stat;
+      bestValue = v;
+    }
+  }
+  return { stat: best, value: bestValue };
+}
+
 /**
  * Score a drafted self-description. Each pick's contribution is weighted by
  * how different it is from every earlier pick (squared similarity, so true
@@ -54,8 +68,14 @@ export function performRite(scorer: Scorer, picks: string[], flaw?: string): Rit
     for (const stat of STATS) raw[stat] += weight * statAffinity(scorer, pick, stat);
   });
 
-  const stats = { ...raw };
-  for (const stat of STATS) stats[stat] = Math.min(1, raw[stat] / RAW_SCALE);
+  // No picks isn't a penalty — it's a blank slate. Without this, 0 picks
+  // computes to a flat 0 on every stat (0.75x multiplier everywhere) instead
+  // of the neutral 1.0x baseline the live preview shows before you've chosen
+  // anything.
+  const stats: Stats =
+    picks.length === 0
+      ? { ...NEUTRAL_STATS }
+      : Object.fromEntries(STATS.map((stat) => [stat, Math.min(1, raw[stat] / RAW_SCALE)])) as Stats;
 
   let flawStat: StatName | null = null;
   let flawBonus = 0;

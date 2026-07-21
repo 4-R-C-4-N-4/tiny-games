@@ -4,7 +4,7 @@ import { arenaFor } from './arena-render.ts';
 import { ModelScorer } from '../src/model-scorer.ts';
 import { SpireRun } from '../src/run.ts';
 import { STAT_HUES, enemyPalette, playerPalette, type SpriteArt } from '../src/sprites.ts';
-import { dominantStat, performRite, STATS } from '../src/stats.ts';
+import { dominantStat, peakStat, performRite, STATS, type StatName } from '../src/stats.ts';
 import { StubScorer } from '../src/stub-scorer.ts';
 import { CHANNELS, type Channel, type Scorer } from '../src/types.ts';
 import { renderGallery } from './gallery.ts';
@@ -398,14 +398,42 @@ function renderThreshold(): void {
 const picked = new Set<string>();
 let lastRiteStats: Record<string, number> | null = null;
 
+const STAT_ABBR: Record<StatName, string> = {
+  ferocity: 'FER',
+  guile: 'GUI',
+  stone: 'STO',
+  grace: 'GRA',
+  resonance: 'RES',
+};
+
+/** Green (weak pull) -> purple (strong, decisive pull), so the handful of
+ * genuinely "meh" words in the offer visibly stand out from the rest. */
+function qualityColor(value: number): string {
+  const hue = 140 + 140 * Math.min(1, Math.max(0, value));
+  return `hsl(${hue} 55% 60%)`;
+}
+
+/** Cached per rendered offer so repeated re-renders (every click) don't
+ * re-run anchor-affinity lookups for all 12 words each time. */
+let riteOfferPeaks: Map<string, { stat: StatName; value: number }> | null = null;
+
 function renderRiteChoices(): void {
   const box = $('rite-choices');
   box.replaceChildren();
-  for (const adj of run.offer()) {
+  const offer = run.offer();
+  riteOfferPeaks ??= new Map(offer.map((w) => [w, peakStat(scorer, w)]));
+  for (const adj of offer) {
+    const { stat, value } = riteOfferPeaks.get(adj)!;
+    const color = qualityColor(value);
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'adj-chip' + (picked.has(adj) ? ' picked' : '');
-    chip.textContent = adj;
+    chip.style.setProperty('--chip-color', color);
+    chip.append(adj + ' ');
+    const tag = document.createElement('i');
+    tag.className = 'adj-stat';
+    tag.textContent = STAT_ABBR[stat];
+    chip.appendChild(tag);
     chip.addEventListener('click', () => {
       if (picked.has(adj)) picked.delete(adj);
       else if (picked.size < 5) picked.add(adj);
@@ -414,8 +442,7 @@ function renderRiteChoices(): void {
     });
     box.appendChild(chip);
   }
-  $('rite-count').textContent = `${picked.size} / 5 chosen`;
-  $<HTMLButtonElement>('begin-run').disabled = picked.size !== 5;
+  $('rite-count').textContent = `${picked.size} chosen (up to 5)`;
 }
 
 function renderRiteStats(): void {
@@ -670,6 +697,7 @@ function startRun(): void {
   run = new SpireRun(scorer, (Math.random() * 2 ** 31) | 0);
   picked.clear();
   lastRiteStats = null;
+  riteOfferPeaks = null;
   practiceDuel = null;
   enemyThinking = false;
   log.replaceChildren();
