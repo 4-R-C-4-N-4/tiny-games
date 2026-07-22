@@ -69,7 +69,7 @@ jobs:
             [ -f "$meta" ] || continue
             slug=$(basename "$(dirname "$meta")")
             jq -c --arg slug "$slug" \
-              '{slug:$slug, file:(.file // ($slug+".html")), name, rune, tagline, note}' \
+              '{slug:$slug, file:(.file // ($slug+".html")), name, rune, tagline, note, embed:(.embed // true)}' \
               "$meta" >> /tmp/games.ndjson
           done
           jq -s '.' /tmp/games.ndjson > _site/games.json
@@ -83,7 +83,7 @@ jobs:
           echo '<meta name="viewport" content="width=device-width,initial-scale=1">'
           echo '<body style="font:16px/1.6 system-ui,sans-serif;background:#0a0a0f;color:#e9e3d4;padding:3rem 1.5rem">'
           echo '<main style="max-width:34rem;margin:auto"><h1 style="font-weight:400">tiny-games</h1>'
-          echo '<p style="color:#a8a08d">Small games, each with a tiny client-side adversary.</p>'
+          echo '<p style="color:#a8a08d">Small games — experiments in fitting a tiny AI into one self-contained page.</p>'
           for d in _site/*/; do g=$(basename "$d");
             printf '<p><a href="%s/" style="color:#c4a35a;font-size:1.3rem;text-decoration:none">%s &rsaquo;</a></p>\n' "$g" "$g"; done
           echo '<p><a href="https://github.com/4-R-C-4-N-4/tiny-games" style="color:#6d6857">source on GitHub</a></p></main>'

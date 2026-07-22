@@ -1,24 +1,28 @@
 # tiny-games
 
-Small games, each an experiment in one idea: **give the player a real opponent** — a tiny,
-learned, adversarial AI that reads what you're doing and attacks it, running **entirely
-client-side**. No backend, no API key, nothing phoned home at play time. The whole game is a
-static page you can open offline.
+Small games, each an experiment in **plugging a tiny AI into a single page of HTML** — a
+learned adversary that reads what you're doing and attacks it, a distilled scorer that
+grades your vocabulary as spellcraft, a pocket LLM that reads your tarot spread — all
+running **entirely client-side**. No backend, no API key, nothing phoned home at play time.
+Every game is a static page you can open offline.
 
 ## The idea
 
 Most game "AI" is either a scripted state machine or a call out to a cloud model. This repo
-chases a third path: the opponent is a **small model distilled from search over the game's
-own deterministic simulator**, plus a few hand-authored strategist layers on top — all
-shipped as a self-contained file.
+chases a third path: **small models that ship with the page**. That takes different shapes
+per game — an opponent distilled from search over the game's own deterministic simulator
+(wiz-tower), an embedding-space word scorer distilled from a local-LLM teacher (lexomancy),
+a quantized instruct model pulled into a Web Worker to interpret a spread (tarot) — but the
+bar is always the same: a client-side intelligence that feels like it's thinking, in one
+self-contained file.
 
-The interesting behaviour doesn't come from a big model writing clever things. It comes from
-the **arms race**: an attacker that partially conceals its plan, commits a hidden reserve
-based on where your fire *actually* goes, remembers your habits across a run, and probes the
-specific board you built — so every run diverges because it's genuinely responding to *you*.
-WASM and LLM-emitted content are tools in the box (the wave format is a tiny grammar a model
-could emit), but the bar is a client-side opponent that feels like it's thinking, not the
-size of the model behind it.
+In the adversarial games the interesting behaviour comes from the **arms race**: an attacker
+that partially conceals its plan, commits a hidden reserve based on where your fire
+*actually* goes, remembers your habits across a run, and probes the specific board you built
+— so every run diverges because it's genuinely responding to *you*. In the oracular ones it
+comes from **grounding**: the page pre-computes what the model can't be trusted to notice
+(spread positions, suit currents, repeated ranks) and hands the small model a reading it
+only has to voice.
 
 ## Games
 
