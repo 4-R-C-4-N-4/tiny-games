@@ -3,7 +3,7 @@ name: Deploy games to Pages
 on:
   push:
     branches: [main]
-    paths: ['wiz-tower/**', 'lexomancy/**']
+    paths: ['wiz-tower/**', 'lexomancy/**', 'tarot/**']
   workflow_dispatch:
 
 permissions:
@@ -48,6 +48,16 @@ jobs:
       - run: npm run single
         working-directory: lexomancy
       - run: mkdir -p _site/lexomancy && cp -r lexomancy/dist/. _site/lexomancy/ && cp lexomancy/game.json _site/lexomancy/game.json
+
+      - run: npm ci
+        working-directory: tarot
+      - run: npm run typecheck
+        working-directory: tarot
+      - run: npm test
+        working-directory: tarot
+      - run: npm run single
+        working-directory: tarot
+      - run: mkdir -p _site/tarot && cp -r tarot/dist/. _site/tarot/ && cp tarot/game.json _site/tarot/game.json
       # ───────────────────────────────────────────────────────────────────
 
       # games.json — machine-readable manifest built from each game's game.json,
