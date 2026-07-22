@@ -1,0 +1,27 @@
+{
+  "name": "tarot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Daily tarot — deterministic draws, procedural card art, a tiny in-browser LLM reads your spread.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "preview": "vite preview --port 5301 --strictPort",
+    "single": "tsc --noEmit && vite build && cp dist/index.html dist/tarot.html"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^26.1.1",
+    "autoprefixer": "^10.5.4",
+    "postcss": "^8.5.21",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+body {
+  margin: 0;
+}
+
+/* 3D card flip */
+.perspective { perspective: 1400px; }
+.flip-inner {
+  transform-style: preserve-3d;
+  transition: transform 0.7s cubic-bezier(0.4, 0.2, 0.2, 1);
+}
+.flip-inner.flipped { transform: rotateY(180deg); }
+.flip-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flip-face--back { transform: rotateY(180deg); }
+
+/* deal-in stagger */
+.deal-in { opacity: 0; transform: translateY(24px); }
+.deal-in.dealt {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.pixelated { image-rendering: pixelated; }
