@@ -1,0 +1,6 @@
+{
+  "name": "tarot",
+  "rune": "🔮",
+  "tagline": "daily draws · a tiny oracle reads your spread",
+  "note": "deterministic daily spreads, 1909 Waite–Smith card art (public domain); ~360M-param LLM interpreter runs in-browser (fetched on first use, cached)"
+}

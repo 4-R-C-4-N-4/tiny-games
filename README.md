@@ -113,6 +113,46 @@ Full details, the phase-by-phase build log, and the design docs live in
 [`wiz-tower/docs/kickoff/`](wiz-tower/docs/kickoff) (design plan, engine contract, wave
 grammar).
 
+### 🔮 tarot — a tiny oracle reads your spread
+
+A daily tarot table. Ask a question (or don't), draw a 3-card or Celtic Cross spread from
+the full 78-card deck, flip the cards, then let a **tiny LLM running in your browser** weave
+the spread into a reading.
+
+**What makes it tick:**
+
+- **The deck is bound to the day.** Spreads are seeded from `date::spread::question` — the
+  same question on the same day always deals the same cards (Fisher–Yates over an LCG, no
+  card repeats). Readings are shareable as deep links (`?spread=three-card&q=…&rev=1`).
+- **Reversals are off by default** — flip them on in the settings pane (gear, top right).
+  Toggling never changes *which* cards you draw, only whether they may land inverted.
+- **The 1909 deck.** Card faces are Pamela Colman Smith's original Waite–Smith artwork
+  (public domain: US pre-1931 publication; UK/EU since 2022, 70 years after Smith's death),
+  sourced from Wikimedia Commons scans of the 1909 printing and bundled as ~2.8MB of WebP.
+  Note the deck is deliberately *not* branded "Rider-Waite" — that name is a U.S. Games
+  trademark, and their modern recolored editions remain copyrighted; only the original
+  printing's art is used. Procedural pixel sigils (mirrored cellular-automata glyphs,
+  suit-tinted) remain as the fallback for any card without a scan.
+- **The spread reads itself before the model does.** Every position carries its meaning
+  into the prompt, every card brings its imagery, and cheap pre-computed "currents" —
+  suit dominance, repeated ranks (The Empress counts among the Threes), Major Arcana
+  density, reversal skew — hand the small model the cross-card patterns it would never
+  spot alone. The same currents surface in the UI.
+- **The oracle.** SmolLM2-360M-Instruct via transformers.js — WebGPU when a real adapter
+  answers the probe, WASM otherwise. Weights (~270MB q4) are fetched once on first
+  "Interpret Spread" and cached by the browser; the game page itself stays a ~30KB static
+  file. Offline or blocked? A deterministic template reading steps in, currents included.
+
+**Play it:**
+
+```bash
+cd tarot
+npm install
+npm run dev          # play in the browser
+npm run single       # → dist/tarot.html, one self-contained offline file
+npm test             # engine suite
+```
+
 ## Repo layout
 
 ```
@@ -122,6 +162,8 @@ tiny-games/
 │   ├── web/            # portrait battle stage, live spell preview, lexicon.bin asset
 │   ├── train/          # reusable distillation pipeline: vocab → teacher labels → head → pack
 │   └── docs/           # design doc
+├── tarot/              # daily tarot with an embedded in-browser LLM interpreter
+│   └── src/            # spread engine, procedural card art, oracle (transformers.js)
 ├── wiz-tower/          # the first game — adversarial tower defense
 │   ├── src/            # deterministic sim + attacker tiers (search, strategist, distilled net)
 │   ├── web/            # Canvas renderer, DOM HUD, start screen, theming
