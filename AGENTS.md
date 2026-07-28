@@ -17,7 +17,12 @@ starting a new game (with a worked example). This file is only the summary.
 5. **Feel first**: each game has a numbered feel contract; never touch its constants to
    balance the AI. Playtest the first 20 seconds after every change; feel regression =
    revert first, discuss second.
-6. **PR flow**: branch from `origin/main` (worktrees in `../tiny-games-worktrees/<slug>`),
+6. **Look at what you built**: verify rendering with headless-browser screenshots
+   (start / mid-action / fail state) diffed against the brief's visual checklist —
+   passing sim checks does not mean the game looks right.
+7. **Baseline player expectations**: pause (+ auto-pause on tab hide), instant restart,
+   seed sharing — and in real-time games the null strategy must lose (harness-proved).
+8. **PR flow**: branch from `origin/main` (worktrees in `../tiny-games-worktrees/<slug>`),
    PR, merge. Never push main directly.
 
 ## Starting a new game

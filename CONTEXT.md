@@ -70,6 +70,11 @@ and the design must be sharp enough to not hide behind content volume.
    `games.json` with zero site edits.
 6. **PR flow.** Branch from `origin/main`, PR, merge. Worktrees live in
    `../tiny-games-worktrees/<slug>`.
+7. **Baseline player expectations ship with every game**: pause (key + touch target +
+   auto-pause when the tab hides, any tap resumes), instant restart, seed sharing, and
+   sane idle behaviour. In any real-time game **the null strategy must lose** — hands
+   off the controls is a losing strategy, and the harness proves it. (A harness full of
+   competent bots will never notice that doing nothing is safe; test incompetence too.)
 
 ## III. Hard-won lessons (each cost a rewrite somewhere)
 
@@ -102,6 +107,16 @@ and the design must be sharp enough to not hide behind content volume.
 - **Art is generative and mechanics-driven.** Procedural sprites, palettes keyed to
   game state, VFX that literally display the model's output vector. Same data drives
   mechanics and visuals. (lexomancy, tarot sigils)
+- **An agent that never looks at its own output ships bad art.** Every sim check can
+  pass while the game looks broken — first-gen boulder-rush did exactly that. Rendering
+  claims only become falsifiable as screenshots: drive the game headless (firefox
+  `--headless --screenshot`, fast-forward the sim, force a `draw()`), capture start /
+  mid-action / fail-state frames, and diff them against the brief's visual checklist
+  *by looking at them*. This is the lexomancy gallery loop, generalized. (boulder-rush)
+- **Derive cameras and projections from one continuous function.** Piecewise mappings
+  kink where the pieces meet and modulo-windowed effects pop as elements enter their
+  window — players report it as "phasing in and out." One smooth `1/distance` mapping
+  for everything on the track fixed it. (boulder-rush)
 - **Keep decisions visible.** Resolved open questions get struck through and dated in
   the intent doc, never deleted — the doc is a living changelog of *why*. (robo-smash §6)
 
@@ -137,12 +152,23 @@ F2. <movement character rule>
 F3. <...3–10 numbered rules; every physics/timing constant hangs off one>
 Current tuned constants: <table, or TBD>.
 
-## 4. Verbs & knobs
+## 4. Art direction
+Palette: <hex swatches, or "inherit the house palette — slate #2b3442 / cyan #7fd8e8 /
+amber #e8a33d accents on #0b0e14">. Visual touchstone: <"reads like X" — a separate
+anchor from the mechanics touchstone>. Technique: <procedural canvas / pixel grids /…;
+same data drives mechanics and visuals>. Negative space: <what it must NOT look like —
+name the clichés to avoid, e.g. "no browns, no default-canvas look">.
+Visual checklist (falsifiable, screenshot-diffable):
+1. <e.g. "the pursuer rests ON the road — never spills past its contact line">
+2. <e.g. "no seams, no popping, no elements phasing in and out">
+3. <3–6 total; each one checkable by looking at a single frame>
+
+## 5. Verbs & knobs
 Player verbs: <the complete input surface — spend it deliberately, it will fill up>.
 Adversary knobs: <every parameter the AI may tune, with ranges; it never touches
 anything outside this list>.
 
-## 5. The AI angle
+## 6. The AI angle
 Pattern: <search-distilled MLP | teacher-distilled scorer | in-browser LLM | new>.
 It studies: <the player signals — with the telemetry tuple spelled out>.
 Objective: <stated WITH its fairness envelope, e.g. "maximize near-misses subject to:
@@ -150,43 +176,51 @@ solvable path ≥ N frames margin, death rate ≤ X/min">.
 Legibility tell: <how the player is shown they're being studied>.
 Call sites: <exact function signatures where heuristic → model swap happens>.
 
-## 6. Determinism plan
+## 7. Determinism plan
 State RNG: <seeded generator, what flows through it>. Cosmetic RNG: unseeded, never
 touches state. Seed sharing: ?seed=N + share button. Replay implications: <notes>.
 
-## 7. Phase ladder
+## 8. Phase ladder
 Phase 0 — substrate (no ML): telemetry, heuristic adversary at the named call sites,
   generative content grammar with knobs. SHIP TARGET for first gen.
 Phase 1 — heuristic director/policy using telemetry.
 Phase 2 — distilled model (local training → ONNX/weights → pure-JS inference).
 Phase 3 — verifier in the loop (fairness floors enforced by search/solver).
 
-## 8. Guardrails for the agent
+## 9. Guardrails for the agent
 - Never touch Feel Contract constants to balance the AI.
 - Hard floors (NUMBERS, or "TBD before Phase 1 ships"): <telegraph ≥ __ms, margin ≥
   __frames, death rate ≤ __/min, ...>
 - Single-file ship path. Deterministic core. Playtest-first-20-seconds after changes.
 
-## 9. Harness expectations
+## 10. Harness expectations
 Headless Node driver over the real sim. Checks: <generation validity across ≥100
-seeds, determinism, each fairness floor, input latches, soak ≥ 20k ticks>. Wired as
-the deploy gate. Count goes in game.json.note.
+seeds, determinism, each fairness floor, input latches, the null-strategy-loses test,
+soak ≥ 20k ticks>. Wired as the deploy gate. Count goes in game.json.note.
+Render gate: headless-browser screenshots (start / mid-action / fail state), diffed
+BY EYE against §4's visual checklist before first-gen is called done.
 
-## 10. Ship path
+## 11. Ship path
 game.json: {name, rune, tagline, note, embed}. Deploy block in deploy.yml. Mobile:
 <touch controls / pointer scheme>. embed: <true|false + why>.
 
-## 11. Definition of first-gen done
-Touchstone parity list green in playtest + Phase 0 substrate live + harness green +
-deployed. Then STOP and hand off with this doc updated.
+## 12. Definition of first-gen done
+Touchstone parity list green in playtest + §4 visual checklist green in screenshots +
+Phase 0 substrate live + harness green (null strategy loses) + deployed. Then STOP and
+hand off with this doc updated.
 
-## 12. Open questions (deliberately unresolved)
+## 13. Open questions (deliberately unresolved)
 - <...; resolved ones get struck through and dated, never deleted>
 ```
 
 ## V. Worked example — BOULDER-RUSH brief
 
 *A brief, not a commitment — the starting prompt for the next game.*
+*(Postscript: the game has since shipped from this brief —
+[boulder-rush/BOULDER-RUSH-INTENT.md](boulder-rush/BOULDER-RUSH-INTENT.md) is the
+living version. The first build validated the mechanics slots and exposed the ones this
+brief originally lacked: the art-direction section below, the screenshot render gate,
+and the null-strategy test all exist because their absence cost a playtest round.)*
 
 # BOULDER-RUSH — Design Intent & Handoff
 
@@ -229,13 +263,27 @@ F5. Obstacles slow, only the boulder kills. No instant deaths from the course.
 F6. Camera fixed; the road does the motion. No lateral camera movement.
 Constants: TBD in build (document them in a table here as they're tuned).
 
-## 4. Verbs & knobs
+## 4. Art direction
+Palette: inherit the house palette — slate `#2b3442` / cyan `#7fd8e8` / amber
+`#e8a33d` accents on `#0b0e14`. Visual touchstone: a midnight foundry causeway — neon
+edge rails converging to the horizon, lit pylons, tower silhouettes. Technique:
+procedural canvas; proximity data drives the visuals (boulder scale, crack heat,
+vignette, rumble all read the gap). Negative space: no browns, no dirt-canyon
+default, no gradients-as-texture.
+Visual checklist:
+1. The boulder rests ON the road — it never spills past its own contact line.
+2. No seams on the track; nothing pops or phases — one continuous projection.
+3. The three obstacle intents are tellable apart at a glance (hop / hop / never-touch).
+4. Proximity is readable in a single frame with the HUD covered.
+5. A frame at rest gap and a frame at near-catch look like different emotional states.
+
+## 5. Verbs & knobs
 Player verbs: steer (pointer x), hop (tap / click / space). That is the entire
 surface — mobile-first means two verbs, spent.
 Adversary knobs: obstacle density, pattern mix, lateral gap width & placement,
 pickup-line placement, boulder target-gap curve, surge magnitude/cooldown.
 
-## 5. The AI angle
+## 6. The AI angle
 Pattern: heuristic chase director now → search-distilled policy later (wiz-tower
 recipe).
 It studies: steering-position histogram, dodge direction bias, jump timing
@@ -248,17 +296,17 @@ Legibility tell: boulder "roars" (audio + shake + shadow) before every surge; a
 between-runs line names what it learned ("you dodge left. it knows.").
 Call sites: `boulderPolicy(state) -> accel`; `spawnPattern(rng, knobs) -> row`.
 
-## 6. Determinism plan
+## 7. Determinism plan
 Seeded mulberry32 over course generation and director decisions; cosmetic dust/shake
 unseeded. `?seed=N` + share button + C, robo-smash-style. Telemetry export with T.
 
-## 7. Phase ladder
+## 8. Phase ladder
 Phase 0 (SHIP TARGET): seeded course grammar + heuristic boulder policy with the
 fairness floor + full telemetry + near-miss beats. Phase 1: director tunes knobs from
 the histograms between stretches. Phase 2: distilled steering-prediction model places
 obstacles at habitual paths. Phase 3: passability verifier on every spawned row.
 
-## 8. Guardrails for the agent
+## 9. Guardrails for the agent
 - Never touch F1–F6 constants to make the boulder scarier; scare via the knobs.
 - Floors: surge telegraph ≥ 500ms *(fixed)*; reveal-to-arrival ≥ 700ms *(fixed)*;
   min gap without recent stumble ≥ TBD frames *(set before Phase 1)*.
@@ -266,21 +314,23 @@ obstacles at habitual paths. Phase 3: passability verifier on every spawned row.
   all-jumpable. Enforce in the spawner AND check in the harness.
 - Single file, portrait-friendly canvas, touch-first. Playtest 30s after each change.
 
-## 9. Harness expectations
+## 10. Harness expectations
 Headless driver (vm + stubs). Checks: row passability across ≥ 200 seeds,
 determinism (same seed = same course + same director decisions under scripted
 input), fairness floor (perfect bot is never caught; gap ≥ floor without stumbles),
-stumble/surge mechanics, telemetry shape, ≥ 30k-tick pointer-fuzz soak. Deploy gate.
+the null strategy loses (hands-off is caught within ~40s), stumble/surge mechanics,
+telemetry shape, ≥ 30k-tick pointer-fuzz soak. Deploy gate. Render gate: headless
+screenshots vs the §4 checklist.
 
-## 10. Ship path
+## 11. Ship path
 game.json: rune 🪨, embed:false (fullscreen — pointer tracking wants the whole
 screen). Deploy block mirrors robo-smash (no build; harness gate; copy single file).
 
-## 11. Definition of first-gen done
+## 12. Definition of first-gen done
 Touchstone list 1–7 green in playtest, Phase 0 live, harness green, deployed. Stop;
 update this doc; hand off.
 
-## 12. Open questions (deliberately unresolved)
+## 13. Open questions (deliberately unresolved)
 - Endless-only, or distance milestones with escalating biomes?
 - Daily seed (everyone runs the same canyon, compare distances)?
 - Does the runner share the robo-smash robot's identity (same universe) or get its own?
