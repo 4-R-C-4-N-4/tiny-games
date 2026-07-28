@@ -80,10 +80,11 @@ jobs:
             [ -f "$meta" ] || continue
             slug=$(basename "$(dirname "$meta")")
             jq -c --arg slug "$slug" \
-              '{slug:$slug, file:(.file // ($slug+".html")), name, rune, tagline, note, embed:(if has("embed") then .embed else true end)}' \
+              '{slug:$slug, file:(.file // ($slug+".html")), name, rune, tagline, note, embed:(if has("embed") then .embed else true end), order:(.order // 99)}' \
               "$meta" >> /tmp/games.ndjson
           done
-          jq -s '.' /tmp/games.ndjson > _site/games.json
+          # cabinet order: game.json "order" (ascending, unset = 99), then slug
+          jq -s 'sort_by(.order, .slug)' /tmp/games.ndjson > _site/games.json
           cat _site/games.json
 
       # Auto-generated landing page listing whatever games are in _site/.

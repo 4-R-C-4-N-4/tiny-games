@@ -1,6 +1,7 @@
 {
   "name": "lexomancy",
   "rune": "📖",
+  "order": 1,
   "tagline": "a war of words · cast your vocabulary",
   "note": "full spire playable — distilled 80k-word scorer, 50 tests green"
 }
