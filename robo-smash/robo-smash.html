@@ -51,7 +51,7 @@ const VW = 960, VH = 540, TILE = 48;
    ?seed=N replays a layout). Cosmetic Math.random stays unseeded —
    the sim itself uses no randomness at all. */
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
-const SEED=(()=>{const m=location.search.match(/[?&]seed=(\d+)/);return m?(+m[1]>>>0):(Math.random()*4294967296)>>>0;})();
+const SEED=(()=>{const m=location.search.match(/[?&]seed=(\d+)/);return m?(+m[1]>>>0):((Date.now()^(Math.random()*4294967296))>>>0);})();
 let rng=null;                       // re-seeded per sector in buildLevel
 function ri(a,b){return a+Math.floor(rng()*(b-a+1));}
 
@@ -203,6 +203,17 @@ function telLand(outcome){
   jrec.outcome=outcome; jrec.landX=+p.x.toFixed(1); jrec.dy=+(p.y-jrec.y).toFixed(1); jrec.air=perf-jrec.t;
   telem[telemN%TEL_CAP]=jrec; telemN++; jrec=null;
 }
+/* share this run: same seed = same layout, drops and all */
+let copiedT=0;
+function copySeed(){
+  let s;
+  try{ const u=new URL(location.href); u.searchParams.set("seed",String(SEED)); u.hash=""; s=u.toString(); }
+  catch(e){ s="?seed="+SEED; }
+  const done=()=>{ copiedT=160; };
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(s).then(done,()=>{ try{prompt("copy this link:",s);}catch(e){} done(); });
+  else { try{prompt("copy this link:",s);}catch(e){} done(); }
+}
 function telExport(){
   const blob=new Blob([JSON.stringify({seed:SEED,stages:N_STAGES,cells:allCells,records:telem,events})],{type:"application/json"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
@@ -351,7 +362,7 @@ const KEYMAP={
   j:"s",J:"s",k:"s",K:"s",x:"s",X:"s",Shift:"s",
   ArrowDown:"n",s:"n",S:"n"
 };
-addEventListener("keydown",e=>{ audio(); const k=KEYMAP[e.key]; if(k){key[k]=true; e.preventDefault();} if(e.key==="r"||e.key==="R") requestReset=true; if(e.key==="t"||e.key==="T") telExport(); });
+addEventListener("keydown",e=>{ audio(); const k=KEYMAP[e.key]; if(k){key[k]=true; e.preventDefault();} if(e.key==="r"||e.key==="R") requestReset=true; if(e.key==="t"||e.key==="T") telExport(); if(e.key==="c"||e.key==="C") copySeed(); });
 addEventListener("keyup",e=>{ const k=KEYMAP[e.key]; if(k) key[k]=false; });
 
 // touch buttons
@@ -367,7 +378,15 @@ const pointers=new Map();
 function canvasPos(e){ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)*VW/r.width, y:(e.clientY-r.top)*VH/r.height}; }
 function hitBtn(p){ for(const b of tbtn){ const dx=p.x-(b.x+b.r), dy=p.y-(b.y+b.r); if(dx*dx+dy*dy<=(b.r+14)*(b.r+14)) return b.id; } return null; }
 function syncTouch(){ key.l=key.r=false; let j=false,s=false,n=false; for(const id of pointers.values()){ if(id==="l")key.l=true; if(id==="r")key.r=true; if(id==="j")j=true; if(id==="s")s=true; if(id==="n")n=true;} key.j=j; key.s=s; key.n=n; }
-cv.addEventListener("pointerdown",e=>{ if(e.pointerType==="mouse")return; audio(); touchSeen=true; const b=hitBtn(canvasPos(e)); if(b){pointers.set(e.pointerId,b); syncTouch();} e.preventDefault(); },{passive:false});
+/* share button (drawn on the run-complete screen) */
+const SHARE_BTN={x:VW/2-150,y:VH/2+96,w:300,h:44};
+function shareTap(pos){
+  if(!(p.win&&stage===N_STAGES-1)) return false;
+  if(pos.x<SHARE_BTN.x||pos.x>SHARE_BTN.x+SHARE_BTN.w||pos.y<SHARE_BTN.y||pos.y>SHARE_BTN.y+SHARE_BTN.h) return false;
+  copySeed(); return true;
+}
+cv.addEventListener("click",e=>{ shareTap(canvasPos(e)); });
+cv.addEventListener("pointerdown",e=>{ if(e.pointerType==="mouse")return; audio(); touchSeen=true; if(shareTap(canvasPos(e))){e.preventDefault();return;} const b=hitBtn(canvasPos(e)); if(b){pointers.set(e.pointerId,b); syncTouch();} e.preventDefault(); },{passive:false});
 cv.addEventListener("pointermove",e=>{ if(!pointers.has(e.pointerId))return; const b=hitBtn(canvasPos(e)); pointers.set(e.pointerId,b); syncTouch(); },{passive:false});
 function upT(e){ if(pointers.has(e.pointerId)){ pointers.delete(e.pointerId); syncTouch(); } }
 cv.addEventListener("pointerup",upT); cv.addEventListener("pointercancel",upT);
@@ -1034,8 +1053,17 @@ function draw(){
       ctx.fillText(`crates ${broken}/${totalBoxes}${broken===totalBoxes?"  — ALL CLEAR!":""}`, VW/2, VH/2);
       ctx.fillText(`scrap ${scrap} · deaths ${deaths} · seed ${SEED}`, VW/2, VH/2+30);
       ctx.fillStyle="#9aa5b1"; ctx.font="15px monospace"; ctx.fillText("press R to run it back", VW/2, VH/2+72);
+      // share this level
+      const hot=copiedT>0;
+      ctx.fillStyle= hot ? "rgba(127,232,163,0.18)" : "rgba(127,216,232,0.14)";
+      ctx.fillRect(SHARE_BTN.x,SHARE_BTN.y,SHARE_BTN.w,SHARE_BTN.h);
+      ctx.strokeStyle= hot ? "#7fe8a3" : "#7fd8e8"; ctx.lineWidth=2;
+      ctx.strokeRect(SHARE_BTN.x,SHARE_BTN.y,SHARE_BTN.w,SHARE_BTN.h);
+      ctx.fillStyle= hot ? "#7fe8a3" : "#7fd8e8"; ctx.font="bold 17px monospace";
+      ctx.fillText(hot ? "link copied ✓" : "C · share this level ⧉", VW/2, SHARE_BTN.y+28);
     }
   }
+  if(copiedT>0) copiedT--;
 }
 
 function drawTowers(f,col,step,hmax){
