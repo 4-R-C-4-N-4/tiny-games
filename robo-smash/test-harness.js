@@ -223,12 +223,58 @@ function check(name, cond, extra) {
     check("scuttler patrols horizontally", maxX - minX > 20, `range ${(maxX-minX).toFixed(0)}`);
     check("scuttler never falls off its platform", e.y === y0 && Math.abs(e.x - x0) < 400);
     // spin launch
-    G.p.x = e.x - 50; G.p.y = e.y + e.h - 42; G.p.vx = 0;
+    G.p.x = e.x - 30; G.p.y = e.y + e.h - 42; G.p.vx = 0;
     G.key.s = true; G.tick(); G.key.s = false;
     let launched = false;
     for (let i = 0; i < 10 && !launched; i++) { G.tick(); launched = e.launched > 0 || !e.alive; }
     check("spin launches the scuttler", launched);
   }
+}
+
+// ---- 6.5 belly flop + bolted crates ----
+{
+  const G = boot("42");
+  for (let i = 0; i < 30; i++) G.tick();
+  check("sector 1 start pad has a bolted tutorial crate", G.boxes.some(b => b.rf && b.alive));
+  // synthetic flat-ground fixtures on the start pad
+  const mk = (x, rf) => ({x, y:432, w:48, h:48, tnt:false, rf, alive:true, fuse:-1, wob:0, drop:{kind:"bolt",n:4}});
+  const rfBox = mk(240, true), plain = mk(192, false);
+  G.boxes.push(rfBox, plain);
+  // spin does NOT crack bolted
+  G.p.x = 204; G.p.y = 438; G.p.vx = 0;
+  G.key.s = true; G.tick(); G.key.s = false;
+  for (let i = 0; i < 25; i++) G.tick();
+  check("spin cannot break a bolted crate", rfBox.alive && rfBox.wob >= 0);
+  // slam cracks it and the shockwave takes the neighbor
+  const pickupsBefore = G.pickups.length, scrapBefore = G.scrap;
+  G.p.x = 249; G.p.y = 300; G.p.vx = 0; G.p.vy = 0;
+  G.key.n = true; G.tick(); G.key.n = false;
+  for (let i = 0; i < 40; i++) G.tick();
+  check("belly flop breaks the bolted crate", !rfBox.alive);
+  check("shockwave breaks the adjacent plain crate", !plain.alive);
+  check("bolted crate paid out a drop", G.pickups.length > pickupsBefore || G.scrap > scrapBefore,
+        `pickups ${pickupsBefore}->${G.pickups.length} scrap ${scrapBefore}->${G.scrap}`);
+  check("slam ends on landing", G.p.slam === 0 && G.p.grounded);
+  const sEv = G.events.find(e => e && e.type === "slam");
+  check("slam logged in events", !!sEv);
+}
+{
+  // explosions do NOT crack bolted crates
+  const G = boot("42");
+  for (let i = 0; i < 30; i++) G.tick();
+  const rfBox = {x:288, y:432, w:48, h:48, tnt:false, rf:true, alive:true, fuse:-1, wob:0, drop:null};
+  const tnt = {x:240, y:432, w:48, h:48, tnt:true, rf:false, alive:true, fuse:1, wob:0, drop:null};
+  G.boxes.push(rfBox, tnt);
+  for (let i = 0; i < 5; i++) G.tick();
+  check("TNT went off", !tnt.alive);
+  check("explosion cannot crack a bolted crate", rfBox.alive);
+  // slam kills a scuttler without bouncing
+  const e = {x:400, y:454, w:36, h:26, vx:-0.7, sp:0.7, alive:true, launched:0, lvx:0, sx:400, sy:454};
+  G.enemies.push(e);
+  G.p.x = e.x + 3; G.p.y = 320; G.p.vx = 0; G.p.vy = 0;
+  G.key.n = true; G.tick(); G.key.n = false;
+  for (let i = 0; i < 40; i++) G.tick();
+  check("slam squishes a scuttler on the way down", !e.alive && G.p.dead === 0);
 }
 
 // ---- 7. run structure: goal advances sector, 3rd goal = run complete ----
@@ -270,6 +316,7 @@ function check(name, cond, extra) {
       if (i % 7 === 0) { G.key.r = rnd() < 0.7; G.key.l = !G.key.r && rnd() < 0.3; }
       if (i % 11 === 0) G.key.j = rnd() < 0.4;
       if (i % 23 === 0) G.key.s = rnd() < 0.2;
+      if (i % 31 === 0) G.key.n = rnd() < 0.15;
       G.tick();
     }
   }

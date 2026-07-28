@@ -135,22 +135,23 @@ const CELLS={
       return w;
     }
   },
-  patrolYard:{minStage:1, // scuttlers debut in sector 2; knobs: count, patrol speed
-    knobs:st=>({n:ri(1,st), speed:+(0.6+rng()*0.5).toFixed(2)}),
+  patrolYard:{minStage:1, // scuttlers debut in sector 2; knobs: count, patrol speed, bolted corner crate
+    knobs:st=>({n:ri(1,st), speed:+(0.6+rng()*0.5).toFixed(2), rf:rng()<0.3*st}),
     build(x,k){
       const w=6+k.n*4;
       ground(x,x+w-1);
       for(let i=0;i<k.n;i++) put(x+3+i*4,9,"E");
-      put(x+1,9,"B"); put(x+w-2,9,"B");
+      put(x+1,9,k.rf?"R":"B"); put(x+w-2,9,"B");
       return w;
     }
   },
-  crateVault:{minStage:0, // reward stack; knob: height, TNT booby-trap chance rises with stage
-    knobs:st=>({h:ri(2,3), tnt:rng()<0.15+st*0.2}),
+  crateVault:{minStage:0, // reward stack; knobs: height, TNT booby-trap, bolted topper (slam-only loot)
+    knobs:st=>({h:ri(2,3), tnt:rng()<0.15+st*0.2, rf:rng()<0.25+st*0.2}),
     build(x,k){
       ground(x,x+5);
       for(let i=0;i<k.h;i++){ put(x+2,9-i,"B"); put(x+3,9-i,"B"); }
       if(k.tnt) put(x+2,9-((k.h-1)>>1),"T");
+      if(k.rf) put(x+3,9-(k.h-1),"R");
       return 6;
     }
   },
@@ -171,6 +172,13 @@ function rollDrop(){
   if(r<0.92) return {kind:"emp"};
   return {kind:"shield"};
 }
+function rollDropRich(){                  // bolted crates always pay out
+  const r=rng();
+  if(r<0.40) return {kind:"bolt",n:ri(4,6)};
+  if(r<0.60) return {kind:"cool"};
+  if(r<0.80) return {kind:"emp"};
+  return {kind:"shield"};
+}
 function solidAt(tx,ty){ if(tx<0||tx>=LW) return true; if(ty<0||ty>=LH) return false; const c=grid[ty][tx]; return c==="#"||c==="="; }
 
 /* ---------------- telemetry (Phase 0.1) ----------------
@@ -184,7 +192,7 @@ function telTakeoff(kind){
   if(jrec) telLand("chain:"+kind);            // djump/bounce chains close the previous arc
   const c=cellAt(p.x+p.w/2);
   jrec={t:perf,stage,kind,x:+p.x.toFixed(1),y:+p.y.toFixed(1),vx:+p.vx.toFixed(2),vy:+p.vy.toFixed(2),
-        hold:0,spin:false,cell:c?c.name+"#"+c.i:"start",knobs:c?c.knobs:null};
+        hold:0,spin:false,slam:false,cell:c?c.name+"#"+c.i:"start",knobs:c?c.knobs:null};
 }
 /* event stream — the non-jump director signals: pickups, shield
    absorbs, enemy kills, deaths-with-cause. Same ring, same export. */
@@ -231,6 +239,7 @@ function buildLevel(st){
   if(st===0){
     ground(0,17);
     put(8,9,"B"); put(9,9,"B"); put(9,8,"B");
+    put(11,9,"R");                                       // belly-flop tutorial crate
     put(13,9,"B");put(14,9,"B");put(15,9,"B");put(13,8,"B");put(14,8,"B");put(13,7,"B");
     X=18;
   } else {
@@ -264,7 +273,7 @@ function buildLevel(st){
   /* entities from grid */
   for(let y=0;y<LH;y++) for(let x=0;x<LW;x++){
     const c=grid[y][x], px=x*TILE, py=y*TILE;
-    if(c==="B"||c==="T"){ boxes.push({x:px,y:py,w:TILE,h:TILE,tnt:c==="T",alive:true,fuse:-1,wob:0,drop:c==="B"?rollDrop():null}); totalBoxes++; grid[y][x]=" "; }
+    if(c==="B"||c==="T"||c==="R"){ boxes.push({x:px,y:py,w:TILE,h:TILE,tnt:c==="T",rf:c==="R",alive:true,fuse:-1,wob:0,drop:c==="R"?rollDropRich():(c==="B"?rollDrop():null)}); totalBoxes++; grid[y][x]=" "; }
     else if(c==="M"){
       let ty=y+1; while(ty<LH && grid[ty][x]!=="#") ty++;
       crushers.push({x:px,anchor:py,rest:py,max:ty*TILE - 40,head:py,state:0,t:0,tele:0,cool:60,slack:6});
@@ -282,7 +291,7 @@ function buildLevel(st){
   for(const e of enemies){ const cell=cellAt(e.x+e.w/2); if(cell&&cell.knobs.speed){ e.sp=cell.knobs.speed; e.vx=-e.sp; } }
 
   /* player + per-sector state (scrap/shield/deaths persist) */
-  p.x=2*TILE; p.y=8*TILE; p.vx=0; p.vy=0; p.spin=0; p.heat=0; p.overheat=0;
+  p.x=2*TILE; p.y=8*TILE; p.vx=0; p.vy=0; p.spin=0; p.slam=0; p.heat=0; p.overheat=0;
   p.jumps=0; p.dead=0; p.win=false; p.sx=1; p.sy=1; p.face=1;
   p.spawn={x:2*TILE,y:8*TILE};
   p.buffer=0; sLatch=0; jrec=null; winT=0; empT=0; coolT=0; invT=0; iframes=0;
@@ -328,15 +337,19 @@ const sfx={
   cool:()=>{tone(300,900,0.25,"sine",0.10); noiseHit(0.15,0.05,6000);},
   squish:()=>{tone(500,120,0.12,"triangle",0.12); noiseHit(0.08,0.08,2000);},
   launch:()=>{tone(200,950,0.14,"sawtooth",0.10);},
+  clank:()=>{tone(420,380,0.08,"square",0.09); noiseHit(0.05,0.06,5200);},
+  slamStart:()=>tone(620,170,0.13,"sawtooth",0.08),
+  slamHit:()=>{noiseHit(0.22,0.22,700); tone(110,45,0.25,"sine",0.16);},
 };
 
 /* ---------------- input ---------------- */
-const key={l:false,r:false,j:false,s:false};
-let prevJ=false, prevS=false, jPressed=false, sPressed=false, sLatch=0;
+const key={l:false,r:false,j:false,s:false,n:false};
+let prevJ=false, prevS=false, prevN=false, jPressed=false, sPressed=false, nPressed=false, sLatch=0, nLatch=0;
 const KEYMAP={
   ArrowLeft:"l",a:"l",A:"l", ArrowRight:"r",d:"r",D:"r",
   " ":"j",w:"j",W:"j",ArrowUp:"j",
-  j:"s",J:"s",k:"s",K:"s",x:"s",X:"s",Shift:"s"
+  j:"s",J:"s",k:"s",K:"s",x:"s",X:"s",Shift:"s",
+  ArrowDown:"n",s:"n",S:"n"
 };
 addEventListener("keydown",e=>{ audio(); const k=KEYMAP[e.key]; if(k){key[k]=true; e.preventDefault();} if(e.key==="r"||e.key==="R") requestReset=true; if(e.key==="t"||e.key==="T") telExport(); });
 addEventListener("keyup",e=>{ const k=KEYMAP[e.key]; if(k) key[k]=false; });
@@ -346,13 +359,14 @@ let touchSeen=false;
 const tbtn=[
   {id:"l", x:24,  y:VH-104, r:44, label:"◀"},
   {id:"r", x:128, y:VH-104, r:44, label:"▶"},
+  {id:"n", x:VW-348, y:VH-104, r:42, label:"SLAM"},
   {id:"s", x:VW-232, y:VH-104, r:48, label:"SPIN"},
   {id:"j", x:VW-108, y:VH-104, r:48, label:"JUMP"},
 ];
 const pointers=new Map();
 function canvasPos(e){ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)*VW/r.width, y:(e.clientY-r.top)*VH/r.height}; }
 function hitBtn(p){ for(const b of tbtn){ const dx=p.x-(b.x+b.r), dy=p.y-(b.y+b.r); if(dx*dx+dy*dy<=(b.r+14)*(b.r+14)) return b.id; } return null; }
-function syncTouch(){ key.l=key.r=false; let j=false,s=false; for(const id of pointers.values()){ if(id==="l")key.l=true; if(id==="r")key.r=true; if(id==="j")j=true; if(id==="s")s=true;} key.j=j; key.s=s; }
+function syncTouch(){ key.l=key.r=false; let j=false,s=false,n=false; for(const id of pointers.values()){ if(id==="l")key.l=true; if(id==="r")key.r=true; if(id==="j")j=true; if(id==="s")s=true; if(id==="n")n=true;} key.j=j; key.s=s; key.n=n; }
 cv.addEventListener("pointerdown",e=>{ if(e.pointerType==="mouse")return; audio(); touchSeen=true; const b=hitBtn(canvasPos(e)); if(b){pointers.set(e.pointerId,b); syncTouch();} e.preventDefault(); },{passive:false});
 cv.addEventListener("pointermove",e=>{ if(!pointers.has(e.pointerId))return; const b=hitBtn(canvasPos(e)); pointers.set(e.pointerId,b); syncTouch(); },{passive:false});
 function upT(e){ if(pointers.has(e.pointerId)){ pointers.delete(e.pointerId); syncTouch(); } }
@@ -368,10 +382,13 @@ const ACCEL=0.85, AIR_ACCEL=0.50, FRICTION=0.76, MAXRUN=4.6;
 const JUMP_V=-9.2, DJUMP_V=-8.4, SUSTAIN_G=0.34, RELEASE_G=0.92, GRAV_DOWN=0.84, MAXFALL=13, CUT=0.45;
 const COYOTE=7, BUFFER=8;
 const SPIN_T=20, SPIN_FALL=3.2, SPIN_GRAV=0.32, HEAT_MAX=4, OVERHEAT_T=55;
+/* belly flop: brief hang, then a straight slam faster than MAXFALL.
+   The only thing that cracks bolted (rf) crates. */
+const SLAM_HANG=4, SLAM_V=15, SLAM_RADIUS=78;
 
 const p={x:2*TILE,y:8*TILE,w:30,h:42,vx:0,vy:0,face:1,grounded:false,
   coyote:0,buffer:0,jumps:0,jumpHeld:false,
-  spin:0,heat:0,overheat:0,heatRelax:0,
+  spin:0,heat:0,overheat:0,heatRelax:0,slam:0,slamT:0,
   sx:1,sy:1,run:0,dead:0,win:false,spawn:{x:2*TILE,y:8*TILE}};
 let deaths=0, broken=0, requestReset=false;
 let shake=0, hitstop=0, flashT=0;
@@ -386,8 +403,9 @@ function spawnParts(x,y,n,cols,spd,life,grav){
     parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-1,life:life*(0.6+Math.random()*0.7),max:life,c:cols[(Math.random()*cols.length)|0],g:grav,sz:2+Math.random()*4}); }
 }
 
-function breakBox(b,byExplosion){
+function breakBox(b,byExplosion,force){
   if(!b.alive) return;
+  if(b.rf&&!force){ b.wob=10; sfx.clank(); return; }   // bolted: only the belly flop cracks it
   b.alive=false; broken++;
   if(b.tnt){ explode(b.x+24,b.y+24); return; }
   sfx.box();
@@ -418,13 +436,35 @@ function collect(k){
   else if(k.kind==="emp"){ empT=EMP_T; sfx.emp(); flashT=Math.max(flashT,3); }
   else if(k.kind==="shield") addShield();
 }
+/* belly-flop landing: dust ring, crack everything close (bolted
+   included), squish scuttlers, light nearby TNT fuses */
+function shockwave(cx,cy){
+  sfx.slamHit(); hitstop=Math.max(hitstop,3); shake=Math.max(shake,8);
+  spawnParts(cx,cy,18,["#9aa5b1","#5a6673","#39424e","#ffd98a"],5,24,0.2);
+  evLog("slam",{x:Math.round(cx)});
+  for(const b of boxes){
+    if(!b.alive) continue;
+    const dx=(b.x+24)-cx, dy=(b.y+24)-cy;
+    if(dx*dx+dy*dy>SLAM_RADIUS*SLAM_RADIUS) continue;
+    if(b.tnt){ if(b.fuse<0){ b.fuse=30; sfx.tick(); } }
+    else breakBox(b,false,true);
+  }
+  for(const e of enemies){
+    if(!e.alive||e.launched>0) continue;
+    const dx=(e.x+e.w/2)-cx, dy=(e.y+e.h/2)-cy;
+    if(dx*dx+dy*dy<(SLAM_RADIUS+12)*(SLAM_RADIUS+12)){
+      e.alive=false; sfx.squish(); evLog("enemyKill",{by:"slam"});
+      spawnParts(e.x+18,e.y+13,10,["#b8452e","#9aa5b1"],4,20,0.2);
+    }
+  }
+}
 /* impact damage funnel: invincibility/iframes shrug it off, shield
    absorbs one hit. Falls NEVER route through here — pits kill outright. */
 function damage(cause){
   if(p.dead||p.win||invT>0||iframes>0) return;
   if(shield>0){
     shield--; iframes=IFR_T;
-    p.vx=-p.face*3.5; p.vy=-4.5; p.grounded=false;   // Crash-style hop-back
+    p.vx=-p.face*3.5; p.vy=-4.5; p.grounded=false; p.slam=0;   // Crash-style hop-back (cancels a slam)
     sfx.shieldHit(); hitstop=Math.max(hitstop,3); shake=Math.max(shake,5);
     spawnParts(p.x+p.w/2,p.y+p.h/2,16,["#7fe8a3","#7fd8e8","#d7ffe6"],5,26,0.1);
     evLog("shieldHit",{cause,x:Math.round(p.x)});
@@ -447,7 +487,7 @@ function kill(cause){
   spawnParts(p.x+p.w/2,p.y+p.h/2,26,["#7fd8e8","#9aa5b1","#3f4854","#ffd98a"],5.5,40,0.2);
 }
 function respawn(){
-  p.x=p.spawn.x; p.y=p.spawn.y; p.vx=0; p.vy=0; p.spin=0; p.heat=0; p.overheat=0;
+  p.x=p.spawn.x; p.y=p.spawn.y; p.vx=0; p.vy=0; p.spin=0; p.slam=0; p.heat=0; p.overheat=0;
   p.jumps=0; p.dead=0; p.sx=1; p.sy=1;
   p.buffer=0; sLatch=0; jrec=null; empT=0; coolT=0; iframes=0;
   for(const c of crushers){ c.head=c.rest; c.state=0; c.tele=0; c.cool=45; }
@@ -469,12 +509,13 @@ function collideRects(r){
 
 /* ---------------- sim tick (60Hz) ---------------- */
 function tick(){
-  jPressed = key.j && !prevJ;  sPressed = key.s && !prevS;
-  prevJ=key.j; prevS=key.s;
-  /* C1 fix: latch presses BEFORE any early-return — a jump or spin
-     tapped inside a 2-6f hitstop must never be eaten. */
+  jPressed = key.j && !prevJ;  sPressed = key.s && !prevS;  nPressed = key.n && !prevN;
+  prevJ=key.j; prevS=key.s; prevN=key.n;
+  /* C1 fix: latch presses BEFORE any early-return — a jump, spin or
+     slam tapped inside a 2-6f hitstop must never be eaten. */
   if(jPressed) p.buffer=BUFFER;
   if(sPressed) sLatch=4;
+  if(nPressed) nLatch=4;
 
   if(requestReset){ requestReset=false; if(p.win){location.reload();} else respawn(); }
 
@@ -508,7 +549,10 @@ function tick(){
     if(!e.alive) continue;
     if(e.launched>0){
       e.x+=e.lvx; e.launched--;
-      for(const b of boxes) if(b.alive&&rectsOverlap(e,b)){ if(b.tnt){b.alive=false;broken++;explode(b.x+24,b.y+24);} else breakBox(b); }
+      for(const b of boxes) if(b.alive&&rectsOverlap(e,b)){
+        if(b.tnt){b.alive=false;broken++;explode(b.x+24,b.y+24);}
+        else { breakBox(b); if(b.alive&&b.rf){ e.launched=0; e.alive=false; spawnParts(e.x+18,e.y+13,12,["#b8452e","#5a6673"],4.5,22,0.2); noiseHit(0.08,0.10,2200); } }
+      }
       for(const o of enemies) if(o!==e&&o.alive&&o.launched===0&&rectsOverlap(e,o)){ o.alive=false; evLog("enemyKill",{by:"launched"}); sfx.squish(); spawnParts(o.x+18,o.y+13,10,["#b8452e","#9aa5b1"],4,20,0.2); }
       const fx=Math.floor((e.x+(e.lvx>0?e.w+2:-2))/TILE);
       if(solidAt(fx,Math.floor((e.y+e.h/2)/TILE))||e.launched===0){
@@ -548,8 +592,9 @@ function tick(){
     else { c.head-=2.4; if(c.head<=c.rest){c.head=c.rest;c.state=0;c.cool=45;} }
   }
 
-  // TNT fuses
+  // TNT fuses + bolted-crate wobble
   for(const b of boxes){
+    if(b.wob>0) b.wob--;
     if(b.alive&&b.tnt&&b.fuse>0){
       b.fuse--;
       if(b.fuse%60===0&&b.fuse>0) sfx.tick();
@@ -581,7 +626,7 @@ function tick(){
   if(p.heatRelax>18) p.heat=0;
   if(p.overheat>0) p.overheat--;
   if(sLatch>0) sLatch--;
-  if((sPressed||sLatch>0) && p.spin===0 && p.overheat===0){
+  if((sPressed||sLatch>0) && p.spin===0 && p.overheat===0 && p.slam===0){
     sLatch=0;
     p.spin=SPIN_T; if(coolT===0) p.heat++; sfx.spin();   // coolant: free spins
     if(p.heat>=HEAT_MAX){ p.overheat=OVERHEAT_T; sfx.overheat(); }
@@ -605,10 +650,17 @@ function tick(){
     for(const e of enemies) if(e.alive&&e.launched===0&&rectsOverlap(p,e)){ e.alive=false; sfx.squish(); evLog("enemyKill",{by:"invincible"}); spawnParts(e.x+18,e.y+13,10,["#b8452e","#9aa5b1"],4,20,0.2); }
   }
 
+  /* ---- belly flop ---- */
+  if(nLatch>0) nLatch--;
+  if(nLatch>0 && !p.grounded && p.slam===0){
+    nLatch=0; p.slam=1; p.slamT=SLAM_HANG; p.spin=0; sfx.slamStart();
+    if(jrec) jrec.slam=true;
+  }
+
   /* ---- jump (C3, C5) ---- */
   if(!jPressed && p.buffer>0) p.buffer--;   // buffer is latched at tick top (C1)
   if(p.coyote>0) p.coyote--;
-  if(p.buffer>0){
+  if(p.buffer>0 && p.slam===0){
     if(p.grounded||p.coyote>0){
       p.vy=JUMP_V; p.grounded=false; p.coyote=0; p.buffer=0; p.jumps=1; p.jumpHeld=true;
       p.sx=0.78; p.sy=1.24; sfx.jump();
@@ -623,15 +675,23 @@ function tick(){
   if(!key.j && p.jumpHeld){ p.jumpHeld=false; if(p.vy<-3) p.vy*=CUT; }  // C3
   if(jrec && p.jumpHeld && key.j && p.vy<0) jrec.hold++;
 
-  /* ---- gravity (C4 + C7 hover) ---- */
+  /* ---- gravity (C4 + C7 hover) — the slam overrides it entirely ---- */
   const spinningAir = p.spin>0 && !p.grounded;
-  let g;
-  if(p.vy<0) g = (p.jumpHeld && key.j) ? SUSTAIN_G : RELEASE_G;
-  else g = GRAV_DOWN;
-  if(spinningAir) g=SPIN_GRAV;
-  p.vy+=g;
-  const cap = spinningAir ? SPIN_FALL : MAXFALL;
-  if(p.vy>cap) p.vy=cap;
+  if(p.slam===1){
+    p.vy=0; p.vx*=0.6;
+    if(--p.slamT<=0){ p.slam=2; p.vy=SLAM_V; }
+  } else if(p.slam===2){
+    p.vy=SLAM_V; p.vx*=0.75; p.sx=0.82; p.sy=1.22;
+    if(Math.random()<0.6) parts.push({x:p.x+p.w/2+(Math.random()*20-10),y:p.y,vx:0,vy:-2.2,life:9,max:9,c:"#9aa5b1",g:0,sz:2});
+  } else {
+    let g;
+    if(p.vy<0) g = (p.jumpHeld && key.j) ? SUSTAIN_G : RELEASE_G;
+    else g = GRAV_DOWN;
+    if(spinningAir) g=SPIN_GRAV;
+    p.vy+=g;
+    const cap = spinningAir ? SPIN_FALL : MAXFALL;
+    if(p.vy>cap) p.vy=cap;
+  }
   if(spinningAir && jrec) jrec.spin=true;
   if(spinningAir && Math.random()<0.5)
     parts.push({x:p.x+p.w/2+(Math.random()*16-8),y:p.y+p.h,vx:0,vy:1.6,life:10,max:10,c:"#7fd8e8",g:0,sz:2});
@@ -641,7 +701,8 @@ function tick(){
   p.x+=p.vx;
   for(const r of collideRects(p)){
     if(!rectsOverlap(p,r)) continue;
-    if(!r.tile && (p.spin>0||invT>0)){ if(r.tnt){r.alive=false;broken++;explode(r.x+24,r.y+24);} else breakBox(r); continue; }  // C6: plow through
+    if(!r.tile && (p.spin>0||invT>0) && !r.rf){ if(r.tnt){r.alive=false;broken++;explode(r.x+24,r.y+24);} else breakBox(r); continue; }  // C6: plow through (bolted stays solid)
+    if(!r.tile && r.rf && (p.spin>0||invT>0)) breakBox(r);   // clank feedback, no break
     if(p.vx>0) p.x=r.x-p.w; else if(p.vx<0) p.x=r.x+r.w; else { p.x = (p.x+p.w/2)<(r.x+r.w/2) ? r.x-p.w : r.x+r.w; }
     p.vx=0;
   }
@@ -652,7 +713,12 @@ function tick(){
   for(const r of collideRects(p)){
     if(!rectsOverlap(p,r)) continue;
     if(p.vy>0){
-      if(!r.tile && wasBottom<=r.y+10){                 // C8: crate bounce
+      if(!r.tile && p.slam===2){                        // slam smashes straight through
+        if(r.tnt){ r.alive=false; broken++; explode(r.x+24,r.y+24); }
+        else breakBox(r,false,true);
+        continue;
+      }
+      if(!r.tile && wasBottom<=r.y+10 && !r.rf){        // C8: crate bounce (bolted = plain platform)
         if(r.tnt){
           if(r.fuse<0){ r.fuse=180; sfx.tick(); }
           p.y=r.y-p.h; p.vy = key.j?-9.4:-7.8; p.jumps=1; p.sx=1.2;p.sy=0.8; sfx.bounce();
@@ -666,7 +732,7 @@ function tick(){
       }
       p.y=r.y-p.h; p.vy=0; landed=true;
     } else if(p.vy<0){
-      if(!r.tile && (p.spin>0||invT>0)){ if(r.tnt){r.alive=false;broken++;explode(r.x+24,r.y+24);} else breakBox(r); continue; }
+      if(!r.tile && (p.spin>0||invT>0) && !r.rf){ if(r.tnt){r.alive=false;broken++;explode(r.x+24,r.y+24);} else breakBox(r); continue; }
       p.y=r.y+r.h; p.vy=0;
     }
   }
@@ -674,7 +740,8 @@ function tick(){
   p.grounded=landed;
   if(landed){
     p.coyote=COYOTE; p.jumps=0;
-    if(wasAir){ telLand("land"); p.sx=1.28; p.sy=0.72; if(Math.abs(p.vx)>1||true) spawnParts(p.x+p.w/2,p.y+p.h,6,["#39424e","#5a6673"],2.2,12,0.15); }
+    if(p.slam>0){ shockwave(p.x+p.w/2,p.y+p.h); p.slam=0; p.sx=1.45; p.sy=0.6; }
+    if(wasAir){ telLand("land"); p.sx=Math.max(p.sx,1.28); p.sy=Math.min(p.sy,0.72); if(Math.abs(p.vx)>1||true) spawnParts(p.x+p.w/2,p.y+p.h,6,["#39424e","#5a6673"],2.2,12,0.15); }
   } else {
     if(!wasAir && !jrec) telTakeoff("fall");             // walked off a ledge
     if(p.coyote===0 && p.jumps===0) p.jumps=1;           // keep double jump only
@@ -696,6 +763,11 @@ function tick(){
     if(!e.alive||e.launched>0||!rectsOverlap(pr,e)) continue;
     if(invT>0) continue;                                // handled in the invincibility sweep
     if(p.spin>0) continue;                              // spin hitbox sweep will catch it
+    if(p.slam>0){                                       // slam kills clean, keeps falling
+      e.alive=false; sfx.squish(); evLog("enemyKill",{by:"slam"});
+      spawnParts(e.x+18,e.y+13,12,["#b8452e","#9aa5b1"],4,22,0.2);
+      continue;
+    }
     if(p.vy>1.5 && (p.y+p.h)-e.y<16){
       e.alive=false; sfx.squish(); evLog("enemyKill",{by:"stomp"});
       spawnParts(e.x+18,e.y+13,12,["#b8452e","#9aa5b1","#5a6673"],4,22,0.2);
@@ -807,6 +879,16 @@ function draw(){
       ctx.fillStyle="#ffe9c9"; ctx.font="bold 15px monospace"; ctx.textAlign="center";
       ctx.fillText(b.fuse>0?String(Math.ceil(b.fuse/60)):"TNT", b.x+24, b.y+30);
       if(b.fuse>0&&(b.fuse%20<10)){ ctx.fillStyle="rgba(255,120,60,0.25)"; ctx.fillRect(b.x,b.y,48,48); }
+    } else if(b.rf){
+      const wx=b.wob>0?Math.sin(b.wob*1.4)*2:0;
+      ctx.fillStyle="#6b7686"; ctx.fillRect(b.x+3+wx,b.y+3,42,42);
+      ctx.fillStyle="#8f9aa8"; ctx.fillRect(b.x+3+wx,b.y+3,42,6);
+      ctx.fillStyle="#4a5568"; ctx.fillRect(b.x+3+wx,b.y+39,42,6);
+      ctx.strokeStyle="#39424e"; ctx.lineWidth=4; ctx.strokeRect(b.x+9+wx,b.y+9,30,30);
+      ctx.fillStyle="#2b3442";
+      for(const [qx,qy] of [[11,11],[37,11],[11,37],[37,37]]){ ctx.beginPath(); ctx.arc(b.x+qx+wx,b.y+qy,3,0,7); ctx.fill(); }
+      ctx.fillStyle="#dfe8f2"; ctx.font="bold 14px monospace"; ctx.textAlign="center";
+      ctx.fillText("▼", b.x+24+wx, b.y+29);
     } else {
       ctx.fillStyle="#c97b2d"; ctx.fillRect(b.x+3,b.y+3,42,42);
       ctx.fillStyle="#e8a33d"; ctx.fillRect(b.x+3,b.y+3,42,7);
@@ -893,6 +975,7 @@ function draw(){
     ctx.fillStyle="rgba(210,220,235,0.5)"; ctx.font="14px monospace"; ctx.textAlign="left";
     ctx.fillText("◀ ▶ move · SPACE jump (tap short / hold high) · again in air = double jump", 60, 350);
     ctx.fillText("J / K = SPIN — breaks crates, hover-spins in the air", 60, 372);
+    ctx.fillText("S / ▼ in air = BELLY FLOP — the only thing that cracks bolted ▼ crates", 60, 394);
     ctx.fillText("bounce on crates to break them ↑", 560, 300);
   }
   ctx.restore();
