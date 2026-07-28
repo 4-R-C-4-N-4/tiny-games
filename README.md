@@ -157,6 +157,51 @@ npm run single       # → dist/tarot.html, one self-contained offline file
 npm test             # engine suite
 ```
 
+### 🤖 robo-smash — the level studies you
+
+A Crash Bandicoot–style side-scroller starring a robot: crates to smash, death pits,
+things that smash *you*. The long game is an **adversarial level director** — the stage
+watches how you play and places danger where you habitually go, inside a provably-fair
+envelope. Crash's magic was authored malice; this chases the same malice from a model,
+with a solver as the fairness court of appeal.
+
+**What makes it tick:**
+
+- **The Feel Contract.** Ten non-negotiable rules (C1–C10, documented in the file header)
+  tuned from PS1-vs-remake post-mortems: zero perceived input latency, snappy "jerky"
+  ground movement, sustain-model variable jumps, coyote time + jump buffering, generous
+  spin, calm camera. Every physics constant hangs off a rule; the adversary is never
+  allowed to touch them.
+- **Phase-locked crushers.** Ceiling slammers read your approach velocity and schedule
+  their slam to intersect you — with a hard ≥250ms telegraph *before* the slam on top of
+  travel time, so it always feels like a duel, never a cheap shot. The arrival-estimate
+  call site is where a learned model slots in later.
+- **Chunk grammar + seeded runs.** Levels compose from parameterized challenge cells
+  (pit bridges, crusher corridors, TNT landing traps, bounce ladders, spike gauntlets,
+  patrol yards, crate vaults), each exposing cruelty knobs. Three escalating sectors per
+  run; `?seed=N` replays a layout exactly, drops included.
+- **A full verb kit.** Spin (crates offer zero resistance), air-spin hover with gyro heat,
+  stomp bounces, double jump, and a belly flop that's the only thing that cracks bolted
+  crates. Scuttler enemies launch as crate-breaking projectiles when spun. Shield drones
+  absorb impact hits (never pit falls); crates drop bolts, coolant, and EMPs — 50 scrap
+  auto-builds a shield.
+- **Telemetry as training data.** Every takeoff→landing tuple (state, hold frames, cell
+  context, outcome) plus an event stream, ring-buffered; press `T` in-game to export
+  JSON. It's the dataset for the planned landing predictor (numpy → ONNX → pure-JS
+  forward pass, the wiz-tower recipe) that will let the director place hazards at your
+  *habitual* landing spot — offset by a guaranteed dodge window.
+- **Headless test suite.** The 60Hz sim runs under Node with stubbed browser APIs:
+  45 checks covering layout validity across seeds, input-latch fixes, the telegraph
+  floor, shield semantics, consumables, and a 45k-tick fuzz soak.
+
+**Play it:**
+
+```bash
+cd robo-smash
+xdg-open robo-smash.html     # the whole game — one hand-authored file, no build, no deps
+node test-harness.js         # 45-check headless suite (drives the sim directly)
+```
+
 ## Repo layout
 
 ```
@@ -166,6 +211,10 @@ tiny-games/
 │   ├── web/            # portrait battle stage, live spell preview, lexicon.bin asset
 │   ├── train/          # reusable distillation pipeline: vocab → teacher labels → head → pack
 │   └── docs/           # design doc
+├── robo-smash/         # feel-first Crash-style platformer growing an adversarial director
+│   ├── robo-smash.html      # the whole game — single hand-authored file
+│   ├── test-harness.js      # headless Node driver + 45-check suite
+│   └── ROBO-SMASH-INTENT.md # design intent / living handoff doc
 ├── tarot/              # daily tarot with an embedded in-browser LLM interpreter
 │   └── src/            # spread engine, procedural card art, oracle (transformers.js)
 ├── wiz-tower/          # the first game — adversarial tower defense

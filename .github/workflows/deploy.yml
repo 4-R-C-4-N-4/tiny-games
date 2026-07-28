@@ -3,7 +3,7 @@ name: Deploy games to Pages
 on:
   push:
     branches: [main]
-    paths: ['wiz-tower/**', 'lexomancy/**', 'tarot/**']
+    paths: ['wiz-tower/**', 'lexomancy/**', 'tarot/**', 'robo-smash/**']
   workflow_dispatch:
 
 permissions:
@@ -58,6 +58,12 @@ jobs:
       - run: npm run single
         working-directory: tarot
       - run: mkdir -p _site/tarot && cp -r tarot/dist/. _site/tarot/ && cp tarot/game.json _site/tarot/game.json
+
+      # robo-smash is a hand-authored single file — no build; run the headless
+      # check suite as the gate, then ship the file as both index and slug.html.
+      - run: node test-harness.js
+        working-directory: robo-smash
+      - run: mkdir -p _site/robo-smash && cp robo-smash/robo-smash.html _site/robo-smash/index.html && cp robo-smash/robo-smash.html _site/robo-smash/robo-smash.html && cp robo-smash/game.json _site/robo-smash/game.json
       # ───────────────────────────────────────────────────────────────────
 
       # games.json — machine-readable manifest built from each game's game.json,
