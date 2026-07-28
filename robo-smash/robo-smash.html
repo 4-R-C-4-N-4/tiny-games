@@ -46,46 +46,117 @@
 const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
 const VW = 960, VH = 540, TILE = 48;
 
-/* ---------------- level ---------------- */
-const LW = 122, LH = 12;
-const grid = Array.from({length: LH}, () => Array(LW).fill(" "));
-function put(x, y, c) { if (x>=0&&x<LW&&y>=0&&y<LH) grid[y][x] = c; }
+/* ---------------- seeded sequencer RNG ----------------
+   ALL layout/director randomness flows through this (loggable seed,
+   ?seed=N replays a layout). Cosmetic Math.random stays unseeded —
+   the sim itself uses no randomness at all. */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const SEED=(()=>{const m=location.search.match(/[?&]seed=(\d+)/);return m?(+m[1]>>>0):(Math.random()*4294967296)>>>0;})();
+const rng=mulberry32(SEED);
+function ri(a,b){return a+Math.floor(rng()*(b-a+1));}
+
+/* ---------------- chunk grammar (Phase 0.3) ----------------
+   The level is a sequence of parameterized challenge cells; the
+   sequencer picks cells and cruelty knobs. Nothing places raw tiles
+   outside a cell definition — the future director only turns knobs. */
+const LH = 12;
+let LW = 0;
+const grid = Array.from({length: LH}, () => []);
+function put(x, y, c) {
+  if (x<0||y<0||y>=LH) return;
+  if (x>=LW){ for (const row of grid) while (row.length<=x) row.push(" "); LW=grid[0].length; }
+  grid[y][x] = c;
+}
 function ground(a, b) { for (let x=a; x<=b; x++){ put(x,10,"#"); put(x,11,"#"); } }
 
-ground(0,25); ground(29,56); ground(62,80); ground(91,111); ground(116,121);
-for (let y=7;y<=11;y++) put(121,y,"#");                 // endcap wall
+const cells=[];   // {name,i,x0,x1,knobs} — telemetry context + the director's surface
+const CELLS={
+  pitBoxBridge:{   // gap crossing; knobs: gap width, optional crate-topped slab bridge
+    knobs:()=>({gap:ri(2,4), bridge:rng()<0.6}),
+    build(x,k){
+      ground(x,x+3);
+      const g0=x+4, bx=g0+((k.gap-1)>>1);
+      if(k.bridge){ put(bx,8,"="); if(k.gap>=3) put(bx+1,8,"="); put(bx,7,"B"); }
+      ground(g0+k.gap,g0+k.gap+3);
+      put(g0+k.gap+1,9,"B");
+      return 4+k.gap+4;
+    }
+  },
+  crusherCorridor:{ // knobs: crusher count, spacing, telegraph slack (0 = max aggression)
+    knobs:()=>({n:ri(2,3), gap:ri(3,4), slack:ri(0,10)}),
+    build(x,k){
+      const w=2+k.n*k.gap+2;
+      ground(x,x+w-1);
+      for(let i=0;i<k.n;i++){
+        put(x+2+i*k.gap,4,"M");
+        if(i<k.n-1) put(x+2+i*k.gap+(k.gap>>1),9,"B");
+      }
+      return w;
+    }
+  },
+  tntTrap:{        // gap whose landing zone is mined; knob: TNT offset from the natural landing column
+    knobs:()=>({gap:ri(2,3), off:ri(0,2)}),
+    build(x,k){
+      ground(x,x+3);
+      const land=x+4+k.gap;
+      ground(land,land+5);
+      put(land+k.off,9,"T"); put(land+k.off+1,9,"B");
+      return 4+k.gap+6;
+    }
+  },
+  bounceLadder:{   // stepped climb over a wide pit; knobs: step count, crate topper
+    knobs:()=>({steps:ri(2,3), topCrate:rng()<0.7}),
+    build(x,k){
+      ground(x,x+2);
+      let cx=x+3;
+      for(let s=0;s<k.steps;s++){
+        const y=8-s*2;
+        put(cx,y,"="); put(cx+1,y,"=");
+        if(s===k.steps-1&&k.topCrate) put(cx,y-1,"B");
+        cx+=3;
+      }
+      ground(cx+1,cx+3);
+      return (cx+4)-x;
+    }
+  },
+  spikeGauntlet:{  // knobs: spike run length, crate stepping stone before the run
+    knobs:()=>({len:ri(2,3), stone:rng()<0.5}),
+    build(x,k){
+      const w=3+k.len+3;
+      ground(x,x+w-1);
+      if(k.stone) put(x+2,9,"B");
+      for(let i=0;i<k.len;i++) put(x+3+i,9,"^");
+      return w;
+    }
+  },
+};
 
-// tutorial crates
+/* start pad — authored tutorial, outside the grammar */
+ground(0,17);
 put(8,9,"B"); put(9,9,"B"); put(9,8,"B");
-// pyramid
-put(18,9,"B");put(19,9,"B");put(20,9,"B");put(18,8,"B");put(19,8,"B");put(18,7,"B");
-// after pit 1
-put(31,9,"!");
-put(34,9,"^"); put(35,9,"^");
-put(38,9,"B");
-// crusher corridor
-put(44,4,"M"); put(48,4,"M"); put(52,4,"M");
-put(46,9,"B"); put(50,9,"B");
-// pit 2 crossing
-put(58,8,"="); put(59,8,"="); put(59,7,"B");
-// TNT cluster
-put(66,9,"B"); put(67,9,"T"); put(68,9,"B"); put(67,8,"B");
-put(72,9,"!");
-// climb over pit 3
-put(82,8,"=");put(83,8,"=");
-put(85,6,"=");put(86,6,"=");
-put(88,4,"=");put(89,4,"=");put(88,3,"B");
-// gauntlet
-put(94,4,"M");
-put(96,9,"B");
-put(97,9,"^");put(98,9,"^");
-put(101,9,"!");
-// crate wall — plow through it
-put(104,7,"B");put(104,8,"B");put(104,9,"B");
-put(105,7,"B");put(105,8,"B");put(105,9,"B");
-put(107,9,"T");
-// finale
-put(118,9,"G");
+put(13,9,"B");put(14,9,"B");put(15,9,"B");put(13,8,"B");put(14,8,"B");put(13,7,"B");
+
+/* sequencer: N cells, no immediate repeats, breather+checkpoint every 2 */
+{
+  const names=Object.keys(CELLS), N_CELLS=7;
+  let X=18, lastName=null;
+  for(let i=0;i<N_CELLS;i++){
+    let name; do{ name=names[Math.floor(rng()*names.length)]; }while(name===lastName);
+    lastName=name;
+    const def=CELLS[name], k=def.knobs();
+    const x0=X;
+    X+=def.build(X,k);
+    cells.push({name,i,x0,x1:X,knobs:k});
+    if(i%2===1&&i<N_CELLS-1){ ground(X,X+2); put(X+1,9,"!"); X+=3; }
+  }
+  /* finale — crate wall to plow through, then goal */
+  ground(X,X+12);
+  put(X+2,7,"B");put(X+2,8,"B");put(X+2,9,"B");
+  put(X+3,7,"B");put(X+3,8,"B");put(X+3,9,"B");
+  put(X+5,9,"T");
+  put(X+9,9,"G");
+  for(let y=7;y<=11;y++) put(X+12,y,"#");               // endcap wall
+}
 
 /* ---------------- entities from grid ---------------- */
 const boxes=[], crushers=[], checkpoints=[], spikes=[];
@@ -95,7 +166,7 @@ for (let y=0;y<LH;y++) for (let x=0;x<LW;x++){
   if (c==="B"||c==="T"){ boxes.push({x:px,y:py,w:TILE,h:TILE,tnt:c==="T",alive:true,fuse:-1,wob:0}); totalBoxes++; grid[y][x]=" "; }
   else if (c==="M"){
     let ty=y+1; while(ty<LH && grid[ty][x]!=="#") ty++;
-    crushers.push({x:px,anchor:py,rest:py,max:ty*TILE - 40,head:py,state:0,t:60+((x*37)%50)});
+    crushers.push({x:px,anchor:py,rest:py,max:ty*TILE - 40,head:py,state:0,t:0,tele:0,cool:60,slack:6});
     grid[y][x]=" ";
   }
   else if (c==="!"){ checkpoints.push({x:px,y:py,on:false}); grid[y][x]=" "; }
@@ -103,6 +174,46 @@ for (let y=0;y<LH;y++) for (let x=0;x<LW;x++){
   else if (c==="G"){ goal={x:px,y:py}; grid[y][x]=" "; }
 }
 function solidAt(tx,ty){ if(tx<0||tx>=LW) return true; if(ty<0||ty>=LH) return false; const c=grid[ty][tx]; return c==="#"||c==="="; }
+
+/* ---------------- telemetry (Phase 0.1) ----------------
+   Every takeoff->landing tuple with cell context + seed — the
+   training data for the Phase 2 landing predictor. Ring buffer;
+   press T to download JSON. */
+const TEL_CAP=4096;
+const telem=[]; let telemN=0, jrec=null;
+function cellAt(px){ const tx=px/TILE; for(const c of cells) if(tx>=c.x0&&tx<c.x1) return c; return null; }
+function telTakeoff(kind){
+  if(jrec) telLand("chain:"+kind);            // djump/bounce chains close the previous arc
+  const c=cellAt(p.x+p.w/2);
+  jrec={t:perf,kind,x:+p.x.toFixed(1),y:+p.y.toFixed(1),vx:+p.vx.toFixed(2),vy:+p.vy.toFixed(2),
+        hold:0,spin:false,cell:c?c.name+"#"+c.i:"start",knobs:c?c.knobs:null};
+}
+function telLand(outcome){
+  if(!jrec) return;
+  jrec.outcome=outcome; jrec.landX=+p.x.toFixed(1); jrec.dy=+(p.y-jrec.y).toFixed(1); jrec.air=perf-jrec.t;
+  telem[telemN%TEL_CAP]=jrec; telemN++; jrec=null;
+}
+function telExport(){
+  const blob=new Blob([JSON.stringify({seed:SEED,cells,records:telem})],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=`robo-smash-telemetry-${SEED}.json`; a.click(); URL.revokeObjectURL(a.href);
+}
+
+/* ---------------- phase-locking crushers (Phase 0.2) ----------------
+   CRUSH_TELE = 16f ≈ 267ms ≥ the 250ms fairness floor. This is
+   warning time BEFORE the slam begins — slam travel is on top of it,
+   never part of it. estimateArrival is the future learned-model call
+   site: heuristic now, same signature later. */
+const CRUSH_TELE=16, CRUSH_SPEED=15;
+function estimateArrival(c,pl){       // -> frames until player is under the head, or -1
+  const d=(c.x+TILE/2)-(pl.x+pl.w/2);
+  if(pl.dead>0||pl.win||Math.abs(d)>16*TILE) return -1;
+  if(Math.abs(pl.vx)<0.8||Math.sign(d)!==Math.sign(pl.vx)) return -1;
+  return Math.abs(d)/Math.abs(pl.vx);
+}
+/* crusher <- cell knob wiring (slack = extra telegraph earliness above
+   the floor; 0 = max aggression) */
+for(const c of crushers){ const cell=cellAt(c.x+TILE/2); c.slack=(cell&&cell.knobs.slack!=null)?cell.knobs.slack:6; }
 
 /* ---------------- audio (tiny synth) ---------------- */
 let AC=null;
@@ -135,17 +246,18 @@ const sfx={
   check:()=>{tone(520,520,0.09,"square",0.09); setTimeout(()=>tone(780,780,0.14,"square",0.09),90);},
   win:()=>{[440,554,659,880].forEach((f,i)=>setTimeout(()=>tone(f,f,0.18,"square",0.10),i*110));},
   overheat:()=>tone(200,120,0.2,"square",0.06),
+  alarm:()=>{tone(920,920,0.06,"square",0.07); setTimeout(()=>tone(920,920,0.06,"square",0.07),110);},
 };
 
 /* ---------------- input ---------------- */
 const key={l:false,r:false,j:false,s:false};
-let prevJ=false, prevS=false, jPressed=false, sPressed=false;
+let prevJ=false, prevS=false, jPressed=false, sPressed=false, sLatch=0;
 const KEYMAP={
   ArrowLeft:"l",a:"l",A:"l", ArrowRight:"r",d:"r",D:"r",
   " ":"j",w:"j",W:"j",ArrowUp:"j",
   j:"s",J:"s",k:"s",K:"s",x:"s",X:"s",Shift:"s"
 };
-addEventListener("keydown",e=>{ audio(); const k=KEYMAP[e.key]; if(k){key[k]=true; e.preventDefault();} if(e.key==="r"||e.key==="R") requestReset=true; });
+addEventListener("keydown",e=>{ audio(); const k=KEYMAP[e.key]; if(k){key[k]=true; e.preventDefault();} if(e.key==="r"||e.key==="R") requestReset=true; if(e.key==="t"||e.key==="T") telExport(); });
 addEventListener("keyup",e=>{ const k=KEYMAP[e.key]; if(k) key[k]=false; });
 
 // touch buttons
@@ -206,13 +318,15 @@ function explode(cx,cy){
 }
 function kill(){
   if(p.dead||p.win) return;
+  telLand("death");
   p.dead=60; deaths++; sfx.die(); shake=8;
   spawnParts(p.x+p.w/2,p.y+p.h/2,26,["#7fd8e8","#9aa5b1","#3f4854","#ffd98a"],5.5,40,0.2);
 }
 function respawn(){
   p.x=p.spawn.x; p.y=p.spawn.y; p.vx=0; p.vy=0; p.spin=0; p.heat=0; p.overheat=0;
   p.jumps=0; p.dead=0; p.sx=1; p.sy=1;
-  for(const c of crushers){ c.head=c.rest; c.state=0; c.t=60; }
+  p.buffer=0; sLatch=0; jrec=null;
+  for(const c of crushers){ c.head=c.rest; c.state=0; c.tele=0; c.cool=45; }
   for(const b of boxes){ if(b.tnt) b.fuse=-1; }
 }
 
@@ -231,6 +345,10 @@ function collideRects(r){
 function tick(){
   jPressed = key.j && !prevJ;  sPressed = key.s && !prevS;
   prevJ=key.j; prevS=key.s;
+  /* C1 fix: latch presses BEFORE any early-return — a jump or spin
+     tapped inside a 2-6f hitstop must never be eaten. */
+  if(jPressed) p.buffer=BUFFER;
+  if(sPressed) sLatch=4;
 
   if(requestReset){ requestReset=false; if(p.win){location.reload();} else respawn(); }
 
@@ -240,12 +358,24 @@ function tick(){
   for(let i=parts.length-1;i>=0;i--){ const q=parts[i]; q.x+=q.vx;q.y+=q.vy;q.vy+=q.g;q.life--; if(q.life<=0)parts.splice(i,1); }
   for(let i=ghosts.length-1;i>=0;i--){ ghosts[i].life--; if(ghosts[i].life<=0)ghosts.splice(i,1); }
 
-  // crushers
+  // crushers — phase-locked (Phase 0.2): schedule the slam to intersect
+  // the player's estimated arrival; telegraph floor makes it dodgeable.
+  // More slack = fires earlier = arrives ahead of the player = mercy.
   for(const c of crushers){
-    if(c.state===0){ if(--c.t<=0){c.state=1; sfx.tick();} }
-    else if(c.state===1){ c.head+=15; if(c.head>=c.max){c.head=c.max;c.state=2;c.t=22; shake=Math.max(shake,5); noiseHit(0.12,0.14,900); spawnParts(c.x+24,c.head+40,8,["#9aa5b1","#5a6673"],3.5,18,0.3);} }
+    if(c.state===0){
+      if(c.cool>0) c.cool--;
+      else{
+        const eta=estimateArrival(c,p);
+        const travel=(c.max-c.rest)/CRUSH_SPEED;
+        if(eta>=0 && eta<=travel+CRUSH_TELE+c.slack){
+          c.state=4; c.tele=Math.max(CRUSH_TELE, Math.round(eta-travel)); sfx.alarm();
+        }
+      }
+    }
+    else if(c.state===4){ if(--c.tele<=0) c.state=1; }
+    else if(c.state===1){ c.head+=CRUSH_SPEED; if(c.head>=c.max){c.head=c.max;c.state=2;c.t=22; shake=Math.max(shake,5); noiseHit(0.12,0.14,900); spawnParts(c.x+24,c.head+40,8,["#9aa5b1","#5a6673"],3.5,18,0.3);} }
     else if(c.state===2){ if(--c.t<=0)c.state=3; }
-    else { c.head-=2.4; if(c.head<=c.rest){c.head=c.rest;c.state=0;c.t=70;} }
+    else { c.head-=2.4; if(c.head<=c.rest){c.head=c.rest;c.state=0;c.cool=45;} }
   }
 
   // TNT fuses
@@ -276,7 +406,9 @@ function tick(){
   p.heatRelax = p.grounded && p.spin===0 ? p.heatRelax+1 : 0;
   if(p.heatRelax>18) p.heat=0;
   if(p.overheat>0) p.overheat--;
-  if(sPressed && p.spin===0 && p.overheat===0){
+  if(sLatch>0) sLatch--;
+  if((sPressed||sLatch>0) && p.spin===0 && p.overheat===0){
+    sLatch=0;
     p.spin=SPIN_T; p.heat++; sfx.spin();
     if(p.heat>=HEAT_MAX){ p.overheat=OVERHEAT_T; sfx.overheat(); }
   }
@@ -291,19 +423,22 @@ function tick(){
   }
 
   /* ---- jump (C3, C5) ---- */
-  if(jPressed) p.buffer=BUFFER; else if(p.buffer>0) p.buffer--;
+  if(!jPressed && p.buffer>0) p.buffer--;   // buffer is latched at tick top (C1)
   if(p.coyote>0) p.coyote--;
   if(p.buffer>0){
     if(p.grounded||p.coyote>0){
       p.vy=JUMP_V; p.grounded=false; p.coyote=0; p.buffer=0; p.jumps=1; p.jumpHeld=true;
       p.sx=0.78; p.sy=1.24; sfx.jump();
+      telTakeoff("jump");
     } else if(p.jumps<2){
       p.vy=DJUMP_V; p.jumps=2; p.buffer=0; p.jumpHeld=true;
       p.sx=0.8; p.sy=1.2; sfx.djump();
       spawnParts(p.x+p.w/2,p.y+p.h,8,["#7fd8e8","#cfeef5"],2.8,14,0.05);
+      telTakeoff("djump");
     }
   }
   if(!key.j && p.jumpHeld){ p.jumpHeld=false; if(p.vy<-3) p.vy*=CUT; }  // C3
+  if(jrec && p.jumpHeld && key.j && p.vy<0) jrec.hold++;
 
   /* ---- gravity (C4 + C7 hover) ---- */
   const spinningAir = p.spin>0 && !p.grounded;
@@ -314,6 +449,7 @@ function tick(){
   p.vy+=g;
   const cap = spinningAir ? SPIN_FALL : MAXFALL;
   if(p.vy>cap) p.vy=cap;
+  if(spinningAir && jrec) jrec.spin=true;
   if(spinningAir && Math.random()<0.5)
     parts.push({x:p.x+p.w/2+(Math.random()*16-8),y:p.y+p.h,vx:0,vy:1.6,life:10,max:10,c:"#7fd8e8",g:0,sz:2});
 
@@ -342,6 +478,7 @@ function tick(){
           p.y=r.y-p.h; p.vy = key.j?-9.4:-7.8; p.jumps=1; p.sx=1.2;p.sy=0.8; sfx.bounce();
         }
         p.jumpHeld=key.j;
+        telTakeoff("bounce");
         continue;
       }
       p.y=r.y-p.h; p.vy=0; landed=true;
@@ -354,8 +491,11 @@ function tick(){
   p.grounded=landed;
   if(landed){
     p.coyote=COYOTE; p.jumps=0;
-    if(wasAir){ p.sx=1.28; p.sy=0.72; if(Math.abs(p.vx)>1||true) spawnParts(p.x+p.w/2,p.y+p.h,6,["#39424e","#5a6673"],2.2,12,0.15); }
-  } else if(p.coyote===0 && p.jumps===0) p.jumps=1;      // walked off a ledge: keep double jump only
+    if(wasAir){ telLand("land"); p.sx=1.28; p.sy=0.72; if(Math.abs(p.vx)>1||true) spawnParts(p.x+p.w/2,p.y+p.h,6,["#39424e","#5a6673"],2.2,12,0.15); }
+  } else {
+    if(!wasAir && !jrec) telTakeoff("fall");             // walked off a ledge
+    if(p.coyote===0 && p.jumps===0) p.jumps=1;           // keep double jump only
+  }
 
   // squash/stretch spring (C9)
   p.sx+=(1-p.sx)*0.18; p.sy+=(1-p.sy)*0.18;
@@ -376,7 +516,7 @@ function tick(){
       spawnParts(cp.x+24,cp.y+10,12,["#7fe8a3","#d7ffe6"],3,22,0.05);
     }
   }
-  if(goal && rectsOverlap(p,{x:goal.x,y:goal.y-TILE,w:TILE,h:TILE*2})){ p.win=true; sfx.win(); }
+  if(goal && rectsOverlap(p,{x:goal.x,y:goal.y-TILE,w:TILE,h:TILE*2})){ p.win=true; sfx.win(); telLand("win"); }
 
   if(shake>0) shake*=0.86;
   if(flashT>0) flashT--;
@@ -444,14 +584,20 @@ function draw(){
     ctx.beginPath(); ctx.moveTo(goal.x+28,goal.y-52); ctx.lineTo(goal.x+62,goal.y-38); ctx.lineTo(goal.x+28,goal.y-24); ctx.closePath(); ctx.fill();
   }
 
-  // crushers
+  // crushers (state 4 = telegraph: shake, red stripes, danger column)
   for(const c of crushers){
+    const jit = c.state===4 ? ((perf%2)?1.5:-1.5) : 0;
     ctx.fillStyle="#242c38"; ctx.fillRect(c.x+14,c.anchor,20,c.head-c.anchor+6);
     ctx.fillStyle="#39424e"; ctx.fillRect(c.x+18,c.anchor,4,c.head-c.anchor+6);
-    ctx.fillStyle="#4a5568"; ctx.fillRect(c.x+2,c.head,44,40);
-    ctx.fillStyle="#39424e"; ctx.fillRect(c.x+2,c.head+32,44,8);
-    for(let i=0;i<3;i++){ ctx.fillStyle=i%2?"#e8a33d":"#20262f"; ctx.fillRect(c.x+4+i*14,c.head+6,12,8); }
-    ctx.fillStyle="#20262f"; ctx.fillRect(c.x+2,c.head,44,4);
+    if(c.state===4){
+      ctx.fillStyle=`rgba(232,163,61,${0.08+0.07*Math.sin(perf*0.8)})`;
+      ctx.fillRect(c.x+4,c.head+40,40,c.max-c.head);
+    }
+    const hx=c.x+jit;
+    ctx.fillStyle="#4a5568"; ctx.fillRect(hx+2,c.head,44,40);
+    ctx.fillStyle="#39424e"; ctx.fillRect(hx+2,c.head+32,44,8);
+    for(let i=0;i<3;i++){ ctx.fillStyle= c.state===4 ? ((perf%8<4)?"#ff5d3a":"#20262f") : (i%2?"#e8a33d":"#20262f"); ctx.fillRect(hx+4+i*14,c.head+6,12,8); }
+    ctx.fillStyle="#20262f"; ctx.fillRect(hx+2,c.head,44,4);
   }
 
   // boxes
@@ -490,18 +636,20 @@ function draw(){
   ctx.fillStyle="rgba(210,220,235,0.5)"; ctx.font="14px monospace"; ctx.textAlign="left";
   ctx.fillText("◀ ▶ move · SPACE jump (tap short / hold high) · again in air = double jump", 60, 350);
   ctx.fillText("J / K = SPIN — breaks crates, hover-spins in the air", 60, 372);
-  ctx.fillText("bounce on crates to break them ↑", 340, 300);
+  ctx.fillText("bounce on crates to break them ↑", 560, 300);
   ctx.restore();
 
   // screen flash
   if(flashT>0){ ctx.fillStyle=`rgba(255,240,220,${flashT/6*0.5})`; ctx.fillRect(0,0,VW,VH); }
 
   /* HUD */
-  ctx.fillStyle="rgba(10,14,20,0.55)"; ctx.fillRect(14,12,196,64);
+  ctx.fillStyle="rgba(10,14,20,0.55)"; ctx.fillRect(14,12,196,84);
   ctx.fillStyle="#e8a33d"; ctx.font="bold 16px monospace"; ctx.textAlign="left";
   ctx.fillText(`CRATES ${broken} / ${totalBoxes}`, 26, 36);
   ctx.fillStyle="#9aa5b1"; ctx.font="13px monospace";
   ctx.fillText(`deaths ${deaths}   R restart`, 26, 58);
+  ctx.font="11px monospace";
+  ctx.fillText(`seed ${SEED} · T data (${telemN})`, 26, 76);
   // spin heat gauge
   ctx.fillStyle="rgba(10,14,20,0.55)"; ctx.fillRect(VW-150,12,136,40);
   ctx.fillStyle="#9aa5b1"; ctx.font="11px monospace"; ctx.fillText("GYRO", VW-140, 26);
@@ -528,7 +676,7 @@ function draw(){
     ctx.fillStyle="#e8a33d"; ctx.font="bold 44px monospace"; ctx.fillText("LEVEL CLEAR", VW/2, VH/2-40);
     ctx.fillStyle="#dfe8f2"; ctx.font="20px monospace";
     ctx.fillText(`crates ${broken} / ${totalBoxes}${broken===totalBoxes?"  — ALL CLEAR!":""}`, VW/2, VH/2+6);
-    ctx.fillText(`deaths ${deaths}`, VW/2, VH/2+36);
+    ctx.fillText(`deaths ${deaths} · seed ${SEED}`, VW/2, VH/2+36);
     ctx.fillStyle="#9aa5b1"; ctx.font="15px monospace"; ctx.fillText("press R to run it back", VW/2, VH/2+78);
   }
 }

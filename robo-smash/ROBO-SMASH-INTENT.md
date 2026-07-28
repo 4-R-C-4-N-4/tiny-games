@@ -1,6 +1,6 @@
 # ROBO-SMASH — Design Intent & Handoff
 
-**Status:** Playable single-file prototype (`robo-smash.html`) with finished movement feel. Next phase: adversarial/procedural intelligence layer.
+**Status:** Playable single-file prototype (`robo-smash.html`) with finished movement feel. **Phase 0 substrate implemented** (telemetry, phase-locked crushers, chunk grammar — see §4). Next phase: Phase 1 heuristic director.
 **Prime directive:** *Feel first.* Any change that degrades the Feel Contract (below) is wrong, no matter what it adds. When in doubt, playtest the first 20 seconds — if the robot doesn't feel snappy and obedient, revert.
 
 ---
@@ -43,17 +43,20 @@ Known tuning watch-item: sustain models can feel slightly "helium" at apex. If s
 
 ## 3. Current implementation notes
 
-- Single HTML file, canvas 960×540, tile size 48, level 122×12 built programmatically (ground spans + `put()` feature placement) — already halfway to a chunk grammar.
+- Single HTML file, canvas 960×540, tile size 48, level ~125×12 composed by the chunk grammar (§4 Phase 0.3): authored start pad → 7 sequenced cells → finale. `?seed=N` replays a layout; the seed shows in the HUD and win screen.
 - Entities: crates (`B`), TNT (`T`), ceiling crushers (`M`, slam-cast to ground), spikes (`^`), checkpoints (`!`), goal (`G`). Collision = swept AABB vs. tiles + live crates; crates are solid unless spinning.
 - Tiny WebAudio synth SFX; canvas touch controls (auto-appear on first touch); parallax scrap-tower backdrop; robot rendered procedurally with squash/stretch and spin gyro-ring + afterimages.
-- Sim *state* is deterministic (fixed timestep, no randomness in physics) — load-bearing for the solver in §4. Cosmetic `Math.random()` (particles, shake, dust) is unseeded, so replays match state, not visuals. If replays become a feature, seed cosmetics too.
-- **Known bug (violates C1):** during hitstop, `jPressed` is edge-computed and then the tick returns early — a jump tapped inside a 2–6f hitstop is eaten (buffer never set). Fix: accumulate `p.buffer` from `jPressed` *before* the hitstop early-return.
+- Sim *state* is deterministic (fixed timestep, no randomness in physics) — load-bearing for the solver in §4. Layout/director randomness flows through a seeded mulberry32 (`SEED`, loggable, exported with telemetry). Cosmetic `Math.random()` (particles, shake, dust) is unseeded, so replays match state, not visuals. If replays become a feature, seed cosmetics too.
+- ~~**Known bug (violates C1):** a jump tapped inside a 2–6f hitstop is eaten.~~ **Fixed:** `p.buffer` (and a spin latch, `sLatch`) is set from the edge-detect at the top of the tick, *before* the hitstop early-return. The buffer intentionally doesn't decay during hitstop, so intent survives the freeze. Note: if press *and* release both land inside the freeze, the C3 cut applies as soon as the buffered jump executes → minimum hop, which is the honest reading of a tap.
+- **Headless test harness:** `node test-harness.js` (Node `vm` + browser stubs, drives `tick()` directly; not part of the shipped file). Checks: layout validity over 200 seeds (7 cells, goal present, every >4-tile gap bridged by platforms), the C1 fix both tapped-in-freeze and held-through-freeze, the 250 ms crusher telegraph floor, telemetry tuple shape + hold tracking, seed determinism, and a 20k-tick random-input soak. The Phase 3 verifier should grow out of this driver — it already proves the sim runs headless.
 
 ## 4. Adversarial intelligence plan
 
 Principle: **the intelligence operates inside an authored grammar; it never places raw tiles.** And its objective is **near-misses, not deaths** — "maximize misses-by-<8-frames, subject to: a solvable path exists with ≥N frames of margin, and death rate ≤ X/min." An adversary maximizing near-misses is a great level designer; one maximizing deaths is a troll.
 
-### Phase 0 — Substrate (no ML)
+### Phase 0 — Substrate (no ML) — ✅ IMPLEMENTED
+Implementation notes: telemetry = takeoff→landing tuples (`jump`/`djump`/`bounce`/`fall` takeoffs; `land`/`death`/`win`/`chain:*` outcomes) each carrying cell id + knobs; 4096-entry ring buffer; **press T in-game to download JSON** (includes seed + full cell list). Crushers: `estimateArrival(c, player)` straight-line heuristic; `CRUSH_TELE=16f` (267 ms ≥ the 250 ms floor, on top of ~16.5f travel); per-crusher `slack` knob from its cell (0 = max aggression — more slack fires *earlier*, so the head lands ahead of the player = mercy). Grammar: 5 cell types (`pitBoxBridge`, `crusherCorridor`, `tntTrap`, `bounceLadder`, `spikeGauntlet`) + authored start pad + finale; sequencer draws 7 cells, no immediate repeats, checkpoint breather every 2.
+
 1. **Telemetry.** Log every jump/landing tuple: `(vx, vy at takeoff, takeoff x/y, height delta to landing, hold frames, spin used, landed x, outcome)` **plus context: chunk/cell id, cell knob values, and director seed** — without these you can predict landings but can't evaluate the director's choices. Ring buffer, export as JSON (training data for Phase 2).
 2. **Phase-locking crushers.** Crusher reads approach velocity, estimates arrival time, schedules its slam to intersect — with a hard floor of a **250 ms telegraph *before* the slam begins** (visual/audio tell). Note: current slam travel is already ~267 ms total (15 px/f over ~240 px); the 250 ms floor is *warning time on top of travel*, not total travel — misreading this makes phase-locked crushers undodgeable. Live, feels intelligent, ~20 lines. Interface: `estimateArrival(playerState) -> frames`; heuristic now, learned model later, same call site.
 3. **Chunk grammar.** Refactor level build into parameterized challenge cells — *pit-with-box-bridge*, *crusher corridor*, *TNT landing trap*, *bounce ladder*, *spike gauntlet* — each exposing cruelty knobs (gap width, crusher phase, TNT offset from natural landing spot, stack height). A sequencer composes cells per run.
