@@ -3,7 +3,7 @@ name: Deploy games to Pages
 on:
   push:
     branches: [main]
-    paths: ['wiz-tower/**', 'lexomancy/**', 'tarot/**', 'robo-smash/**']
+    paths: ['wiz-tower/**', 'lexomancy/**', 'tarot/**', 'robo-smash/**', 'boulder-rush/**']
   workflow_dispatch:
 
 permissions:
@@ -64,6 +64,11 @@ jobs:
       - run: node test-harness.js
         working-directory: robo-smash
       - run: mkdir -p _site/robo-smash && cp robo-smash/robo-smash.html _site/robo-smash/index.html && cp robo-smash/robo-smash.html _site/robo-smash/robo-smash.html && cp robo-smash/game.json _site/robo-smash/game.json
+
+      # boulder-rush: same single-file pattern — harness gate, then copy
+      - run: node test-harness.js
+        working-directory: boulder-rush
+      - run: mkdir -p _site/boulder-rush && cp boulder-rush/boulder-rush.html _site/boulder-rush/index.html && cp boulder-rush/boulder-rush.html _site/boulder-rush/boulder-rush.html && cp boulder-rush/game.json _site/boulder-rush/game.json
       # ───────────────────────────────────────────────────────────────────
 
       # games.json — machine-readable manifest built from each game's game.json,

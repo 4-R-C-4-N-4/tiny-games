@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>BOULDER-RUSH — outrun it</title>
+<style>
+  html,body{margin:0;padding:0;background:#0d0a08;height:100%;overflow:hidden;touch-action:none;}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+  canvas{background:#0d0a08;max-width:100vw;max-height:100vh;touch-action:none;cursor:crosshair;}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="cv" width="540" height="960"></canvas></div>
+<script>
+"use strict";
+/* ============================================================
+   BOULDER-RUSH — an endless chase down a stone canyon.
+   Touchstone: Crash Bandicoot's boulder chase. Parity list lives
+   in BOULDER-RUSH-INTENT.md; build toward it before diverging.
+
+   THE FEEL CONTRACT (non-negotiable):
+   F1. Pointer-to-player latency <= 1 sim tick; steering critically
+       damped - no overshoot, no jitter.
+   F2. Jump is a fixed, buffered arc (tap >= 1 frame registers).
+       No double jump.
+   F3. 60Hz fixed-timestep sim; rendering never gates input.
+   F4. Boulder pressure is always legible (a function of the gap):
+       scale + rumble + shake - readable in one glance.
+   F5. Obstacles slow, only the boulder kills. No instant deaths
+       from the course.
+   F6. Camera fixed; the road does the motion. No lateral camera
+       movement.
+   ============================================================ */
+
+const cv=document.getElementById("cv"), ctx=cv.getContext("2d");
+const VW=540, VH=960, CX=VW/2;
+const HORIZON=230, PLAYER_Y=640, BOTTOM=VH+40;
+
+/* ---------------- seeded RNG (state randomness only) ---------------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const SEED=(()=>{const m=location.search.match(/[?&]seed=(\d+)/);return m?(+m[1]>>>0):((Date.now()^(Math.random()*4294967296))>>>0);})();
+const rng=mulberry32(SEED);
+function ri(a,b){return a+Math.floor(rng()*(b-a+1));}
+
+/* ---------------- tuned constants (hang off F1-F6) ---------------- */
+/* z is metres. 60Hz. Fairness floors are NUMBERS (see intent doc §8):
+   reveal-to-arrival = LEAD/spd >= 42f (700ms) even at SPD_MAX;
+   lunge telegraph ROAR_T = 32f (533ms) >= 500ms;
+   gap floor without a recent stumble = GAP_FLOOR. */
+const LEAD=14, BEHIND=30;
+const SPD0=0.26, SPD_MAX=0.33, RAMP_Z=1100;         // F-floor: 14/0.33 = 42.4f
+const STEER_K=0.28, PW=0.16;                        // F1/F2: exp approach never overshoots
+const JUMP_T=24, JUMP_BUF=6, AIR_LO=4, AIR_HI=20;   // airborne clearance window
+const GAP0=22, GAP_FLOOR=6, CATCH=1.2, STUMBLE_WIN=240;
+const ROAR_T=32, LUNGE_GAP=4.5, GAPMIN=0.40;
+const STUMBLE_T=50, PIT_STUMBLE_T=62, INVULN_T=70;
+
+/* ---------------- state ---------------- */
+const p={x:0,tx:0,z:0,air:0,buf:0,stumble:0,invuln:0,dead:false,anim:0};
+let spd=SPD0, gap=GAP0, bSpd=SPD0, roll=0;
+let started=false, perf=0, bolts=0, shake=0;
+let lungeState=0, lungeT=0, nextLunge=0, lastStumble=-9999;
+const rows=[], picks=[], parts=[];
+let nextZ=18, nextBolt=30;
+let best=0; try{best=+localStorage.getItem("boulder-rush-best")||0;}catch(e){}
+
+/* ---------------- projection (F6: fixed camera) ----------------
+   World scrolls up-screen. rel = ob.z - p.z:
+   rel = LEAD  -> bottom edge (about to be revealed)
+   rel = 0     -> the player row
+   rel = -BEHIND -> the horizon. The boulder lives at rel = -gap. */
+function yOf(rel){
+  if(rel>=0){ const u=rel/LEAD; return PLAYER_Y+(BOTTOM-PLAYER_Y)*Math.pow(u,0.85); }
+  const u=Math.min(1,-rel/BEHIND); return PLAYER_Y-(PLAYER_Y-HORIZON)*Math.pow(u,0.55);
+}
+function scaleOf(y){ return 0.12+(y-HORIZON)/(BOTTOM-HORIZON)*(1.35-0.12); }
+function hwOf(y){ return 26+(y-HORIZON)/(BOTTOM-HORIZON)*(262-26); }
+
+/* ---------------- course grammar (Phase 0 substrate) ----------------
+   Every row must be passable BY CONSTRUCTION: rows containing
+   non-jumpable totems always leave a lateral gap >= GAPMIN; everything
+   else is jumpable. The director (Phase 1+) only turns these knobs. */
+function intensity(z){ return Math.min(1,z/RAMP_Z); }
+function knobs(z){
+  const q=intensity(z);
+  return {q, spacing:13.5-6*q, totemChance:0.18+0.22*q, boltRate:0.30, rockMax:q>0.55?3:2};
+}
+function spawnRow(z){
+  const k=knobs(z), r=rng(), obs=[];
+  if(r<k.totemChance){                       // totems: steer-only, gap guaranteed
+    const gapW=Math.max(GAPMIN,0.50-0.08*k.q), gc=(rng()*1.1-0.55);
+    const L=gc-gapW/2-0.15, R=gc+gapW/2+0.15;
+    if(L>-1.05) obs.push({x:Math.max(-0.85,L),w:0.30,type:"totem"});
+    if(R<1.05)  obs.push({x:Math.min(0.85,R),w:0.30,type:"totem"});
+    if(!obs.length) obs.push({x:gc>0?-0.7:0.7,w:0.30,type:"totem"});
+  }
+  else if(r<k.totemChance+0.22) obs.push({x:0,w:2.4,type:"wall"});      // jump it
+  else if(r<k.totemChance+0.40) obs.push({x:(rng()*0.8-0.4),w:0.95,type:"crack"}); // jump or go around
+  else{                                       // rocks: jumpable lumps
+    const n=ri(1,k.rockMax), used=[];
+    for(let i=0;i<n;i++){ let x,tries=0; do{x=rng()*1.7-0.85;tries++;}while(tries<9&&used.some(u=>Math.abs(u-x)<0.55)); used.push(x); obs.push({x,w:0.34,type:"rock"}); }
+  }
+  rows.push({z,obs,passed:false,crushed:false});
+  return k.spacing;
+}
+function spawnBolts(z){
+  const x0=rng()*1.2-0.6, x1=rng()*1.2-0.6;
+  for(let i=0;i<5;i++) picks.push({z:z+i*1.3,x:x0+(x1-x0)*(i/4),taken:false});
+}
+function ensureCourse(){
+  while(nextZ<p.z+LEAD+6){ const sp=spawnRow(nextZ); nextZ+=sp+rng()*1.5; }
+  while(nextBolt<p.z+LEAD+6){ if(rng()<knobs(nextBolt).boltRate) spawnBolts(nextBolt); nextBolt+=11+rng()*8; }
+}
+
+/* ---------------- telemetry (training data for Phase 2) ---------------- */
+const TEL_CAP=4096;
+const telem=[]; let telemN=0;
+const events=[]; let eventsN=0;
+const steerHist=new Array(12).fill(0);
+function telRow(row,outcome,extra){
+  telem[telemN%TEL_CAP]=Object.assign({t:perf,z:+row.z.toFixed(1),type:row.obs[0].type,
+    xs:row.obs.map(o=>+o.x.toFixed(2)),px:+p.x.toFixed(2),gap:+gap.toFixed(1),outcome},extra||{});
+  telemN++;
+}
+function evLog(type,data){ events[eventsN%TEL_CAP]=Object.assign({t:perf,type,z:+p.z.toFixed(1)},data); eventsN++; }
+function telExport(){
+  const blob=new Blob([JSON.stringify({seed:SEED,dist:Math.floor(p.z),steerHist,records:telem,events})],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=`boulder-rush-telemetry-${SEED}.json`; a.click(); URL.revokeObjectURL(a.href);
+}
+let copiedT=0;
+function copySeed(){
+  let s; try{const u=new URL(location.href);u.searchParams.set("seed",String(SEED));u.hash="";s=u.toString();}catch(e){s="?seed="+SEED;}
+  const done=()=>{copiedT=160;};
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(s).then(done,()=>{try{prompt("copy this link:",s);}catch(e){} done();});
+  else { try{prompt("copy this link:",s);}catch(e){} done(); }
+}
+
+/* ---------------- audio ---------------- */
+let AC=null, rumbleGain=null;
+function audio(){
+  if(!AC){ try{
+    AC=new (window.AudioContext||window.webkitAudioContext)();
+    const n=AC.sampleRate*2, buf=AC.createBuffer(1,n,AC.sampleRate), d=buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i]=Math.random()*2-1;
+    const src=AC.createBufferSource(); src.buffer=buf; src.loop=true;
+    const f=AC.createBiquadFilter(); f.type="lowpass"; f.frequency.value=90;
+    rumbleGain=AC.createGain(); rumbleGain.gain.value=0;
+    src.connect(f); f.connect(rumbleGain); rumbleGain.connect(AC.destination); src.start();
+  }catch(e){} }
+  if(AC&&AC.state==="suspended")AC.resume();
+}
+function tone(f0,f1,dur,type,vol){
+  if(!AC) return;
+  const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();
+  o.type=type;o.frequency.setValueAtTime(f0,t);o.frequency.exponentialRampToValueAtTime(Math.max(f1,1),t+dur);
+  g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g);g.connect(AC.destination);o.start(t);o.stop(t+dur);
+}
+function noiseHit(dur,vol,cut){
+  if(!AC) return;
+  const t=AC.currentTime,n=Math.floor(AC.sampleRate*dur),buf=AC.createBuffer(1,n,AC.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*(1-i/n);
+  const s=AC.createBufferSource();s.buffer=buf;
+  const f=AC.createBiquadFilter();f.type="lowpass";f.frequency.value=cut;
+  const g=AC.createGain();g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  s.connect(f);f.connect(g);g.connect(AC.destination);s.start(t);
+}
+const sfx={
+  jump:()=>tone(300,540,0.10,"square",0.08),
+  land:()=>noiseHit(0.05,0.06,1800),
+  pick:()=>tone(900,1350,0.06,"square",0.07),
+  stumble:()=>{tone(360,90,0.28,"sawtooth",0.12); noiseHit(0.2,0.16,1400);},
+  roar:()=>{tone(160,60,0.7,"sawtooth",0.16); noiseHit(0.5,0.14,600);},
+  death:()=>{noiseHit(0.7,0.32,500); tone(100,30,0.8,"sine",0.2);},
+};
+
+/* ---------------- input (F1: pointer polled, applied same tick) ---------------- */
+let pointerX=CX, pointerHeld=false, jumpQueued=false;
+function canvasPos(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*VW/r.width,y:(e.clientY-r.top)*VH/r.height};}
+function steerFrom(mx){ p.tx=Math.max(-1,Math.min(1,(mx-CX)/hwOf(PLAYER_Y))); }
+const SHARE_BTN={x:CX-140,y:VH/2+150,w:280,h:46};
+cv.addEventListener("pointermove",e=>{ pointerX=canvasPos(e).x; if(e.pointerType==="mouse"||pointerHeld) steerFrom(pointerX); });
+cv.addEventListener("pointerdown",e=>{
+  audio(); const pos=canvasPos(e);
+  if(!started){ started=true; return; }
+  if(p.dead){
+    if(pos.x>=SHARE_BTN.x&&pos.x<=SHARE_BTN.x+SHARE_BTN.w&&pos.y>=SHARE_BTN.y&&pos.y<=SHARE_BTN.y+SHARE_BTN.h){ copySeed(); return; }
+    location.reload(); return;
+  }
+  if(pointerHeld||e.pointerType==="mouse") jumpQueued=true;   // second finger / click = hop
+  pointerHeld=true; pointerX=pos.x; steerFrom(pos.x);
+  e.preventDefault();
+},{passive:false});
+function upP(e){ pointerHeld=false; }
+cv.addEventListener("pointerup",upP); cv.addEventListener("pointercancel",upP);
+const keys={l:false,r:false};
+addEventListener("keydown",e=>{
+  audio();
+  if(e.key===" "||e.key==="w"||e.key==="W"||e.key==="ArrowUp"){ if(!started)started=true; else if(p.dead)location.reload(); else jumpQueued=true; e.preventDefault(); }
+  if(e.key==="ArrowLeft"||e.key==="a"||e.key==="A") keys.l=true;
+  if(e.key==="ArrowRight"||e.key==="d"||e.key==="D") keys.r=true;
+  if(e.key==="r"||e.key==="R"){ if(p.dead||started) location.reload(); }
+  if(e.key==="t"||e.key==="T") telExport();
+  if(e.key==="c"||e.key==="C") copySeed();
+});
+addEventListener("keyup",e=>{
+  if(e.key==="ArrowLeft"||e.key==="a"||e.key==="A") keys.l=false;
+  if(e.key==="ArrowRight"||e.key==="d"||e.key==="D") keys.r=false;
+});
+
+/* ---------------- boulder policy ----------------
+   THE call site: heuristic now, learned model later, same signature.
+   Contract (F-floors): without a stumble in the last STUMBLE_WIN
+   frames the gap never drops below GAP_FLOOR; a catch (gap<=CATCH)
+   is only reachable through compounded recent stumbles; every lunge
+   is telegraphed by ROAR_T frames of roar before the gap closes. */
+function boulderPolicy(st){
+  const recent=perf-lastStumble<STUMBLE_WIN;
+  if(st.lungeState===1) return (spd-bSpd)*0.25;            // roaring: HOLD the gap — the telegraph never cheats
+  if(st.lungeState===2) return +0.010;                     // lunging: close hard
+  if(st.lungeState===3) return -0.008;                     // retreating
+  if(!recent&&st.gap<GAP_FLOOR) return -0.006;             // fairness floor
+  const target=Math.max(8,GAP0-6*intensity(p.z))-(recent?3.5:0);
+  return st.gap>target?+0.0035:-0.0025;
+}
+
+/* ---------------- sim tick (60Hz) ---------------- */
+function stumble(kind,dur){
+  if(p.invuln>0||p.dead) return;
+  p.stumble=dur; p.invuln=INVULN_T; lastStumble=perf;
+  bSpd=Math.max(bSpd,spd+0.09);      // the pounce: a mistake is punished within 250ms (touchstone #2)
+  shake=Math.max(shake,7); sfx.stumble();
+  evLog("stumble",{kind});
+  for(let i=0;i<10;i++) parts.push({x:CX+p.x*hwOf(PLAYER_Y)+(Math.random()*30-15),y:PLAYER_Y+(Math.random()*16-8),vx:Math.random()*3-1.5,vy:-Math.random()*3,life:22,max:22,c:"#c9a25a",sz:3});
+}
+function tick(){
+  if(!started||p.dead) { if(copiedT>0)copiedT--; return; }
+  perf++;
+  if(copiedT>0)copiedT--;
+
+  /* ---- steering (F1/F2: exponential approach, no overshoot) ---- */
+  if(keys.l) p.tx=Math.max(-1,p.tx-0.045);
+  if(keys.r) p.tx=Math.min(1,p.tx+0.045);
+  p.x+=(p.tx-p.x)*STEER_K;
+  if(perf%30===0){ const b=Math.min(11,Math.floor((p.x+1)/2*12)); steerHist[b]++; }
+
+  /* ---- jump (F2: buffered fixed arc) ---- */
+  if(jumpQueued){ p.buf=JUMP_BUF; jumpQueued=false; }
+  else if(p.buf>0) p.buf--;
+  if(p.buf>0&&p.air===0&&p.stumble===0){ p.air=JUMP_T; p.buf=0; sfx.jump(); }
+  if(p.air>0){ p.air--; if(p.air===0) sfx.land(); }
+
+  /* ---- run speed ---- */
+  const targetSpd=SPD0+(SPD_MAX-SPD0)*intensity(p.z);
+  if(p.stumble>0){ p.stumble--; spd+=((targetSpd*0.45)-spd)*0.3; }
+  else spd+=(targetSpd-spd)*0.02;
+  if(p.invuln>0) p.invuln--;
+  p.z+=spd; p.anim+=spd;
+
+  /* ---- boulder (F4/F5: the only killer) ---- */
+  if(lungeState===0&&perf>=nextLunge&&gap>10&&perf-lastStumble>STUMBLE_WIN){
+    lungeState=1; lungeT=ROAR_T; sfx.roar(); shake=Math.max(shake,5); evLog("roar",{gap:+gap.toFixed(1)});
+  }
+  if(lungeState===1){ if(--lungeT<=0){ lungeState=2; lungeT=60; evLog("lunge",{gap:+gap.toFixed(1)}); } }
+  else if(lungeState===2){ if(--lungeT<=0||gap<=LUNGE_GAP){ lungeState=3; lungeT=120; bSpd=Math.min(bSpd,spd-0.02); } }  // no overshoot past the floor
+  else if(lungeState===3){ if(--lungeT<=0||gap>=12){ lungeState=0; nextLunge=perf+1200+Math.floor(rng()*600); } }
+  bSpd+=boulderPolicy({gap,lungeState});
+  bSpd=Math.max(spd-0.10,Math.min(spd+0.12,bSpd));
+  gap+=spd-bSpd;
+  roll+=bSpd;
+  if(gap<=CATCH){
+    p.dead=true; sfx.death(); shake=18;
+    if(rumbleGain)rumbleGain.gain.value=0;
+    best=Math.max(best,Math.floor(p.z)); try{localStorage.setItem("boulder-rush-best",String(best));}catch(e){}
+    evLog("death",{cause:"boulder",dist:Math.floor(p.z),bolts});
+    return;
+  }
+  if(rumbleGain) rumbleGain.gain.value=Math.min(0.22,Math.max(0,(16-gap)/16*0.22));
+  shake=Math.max(shake,Math.max(0,(9-gap))*0.5);
+
+  /* ---- course ---- */
+  ensureCourse();
+  for(let i=rows.length-1;i>=0;i--){
+    const row=rows[i], rel=row.z-p.z;
+    if(!row.passed&&rel<0.5&&rel>-0.5){
+      const airborne=p.air>0&&p.air<=JUMP_T-AIR_LO&&p.air>=JUMP_T-AIR_HI;
+      let hit=null, minClear=9;
+      for(const o of row.obs){
+        const clear=Math.abs(p.x-o.x)-(o.w+PW)/2;
+        if(clear<minClear)minClear=clear;
+        if(clear<0){ if(o.type==="totem"||!airborne) hit=o; }
+      }
+      if(rel<0||hit){
+        row.passed=true;
+        if(hit){ stumble(hit.type,hit.type==="crack"?PIT_STUMBLE_T:STUMBLE_T); telRow(row,"stumble",{ob:hit.type}); }
+        else telRow(row,minClear<0.09||(minClear<9&&airborne&&p.air>=JUMP_T-AIR_HI&&p.air<=JUMP_T-AIR_HI+3)?"near":"clean",{clear:+minClear.toFixed(2)});
+      }
+    }
+    if(row.z-p.z<-BEHIND-4) rows.splice(i,1);
+    else if(!row.crushed&&row.z-p.z<-gap){ row.crushed=true;
+      for(let j=0;j<6;j++) parts.push({x:CX+(row.obs[0].x)*hwOf(yOf(row.z-p.z))+(Math.random()*24-12),y:yOf(row.z-p.z),vx:Math.random()*2-1,vy:-Math.random()*2.5,life:18,max:18,c:"#8f9aa8",sz:2.5});
+    }
+  }
+  for(let i=picks.length-1;i>=0;i--){
+    const k=picks[i], rel=k.z-p.z;
+    if(!k.taken&&rel<0.5&&rel>-0.5&&Math.abs(p.x-k.x)<0.16&&p.air===0){ k.taken=true; bolts++; sfx.pick(); evLog("pickup",{}); }
+    if(rel<-BEHIND-2) picks.splice(i,1);
+  }
+  for(let i=parts.length-1;i>=0;i--){ const q=parts[i]; q.x+=q.vx;q.y+=q.vy;q.vy+=0.15;q.life--; if(q.life<=0)parts.splice(i,1); }
+  if(shake>0) shake*=0.88;
+}
+
+/* ---------------- render ---------------- */
+function drawCanyon(){
+  const sky=ctx.createLinearGradient(0,0,0,HORIZON+140);
+  sky.addColorStop(0,"#1a1210"); sky.addColorStop(1,"#2a1d14");
+  ctx.fillStyle=sky; ctx.fillRect(0,0,VW,HORIZON+140);
+  // canyon walls: strata quads keyed to world z (scroll up-screen)
+  for(let side=-1;side<=1;side+=2){
+    for(let k=0;k<14;k++){
+      const z0=Math.floor(p.z/6)*6+k*6-36, rel=z0-p.z;
+      if(rel>LEAD||rel<-BEHIND) continue;
+      const y0=yOf(rel), y1=yOf(rel-6);
+      const xo0=CX+side*(hwOf(y0)+14), xo1=CX+side*(hwOf(y1)+14);
+      const shade=18+((Math.floor(z0/6)*97)%5)*7;
+      ctx.fillStyle=`rgb(${shade+26},${shade+14},${shade})`;
+      ctx.beginPath();
+      ctx.moveTo(xo0,y0); ctx.lineTo(side>0?VW:0,y0); ctx.lineTo(side>0?VW:0,y1); ctx.lineTo(xo1,y1);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+}
+function drawRoad(){
+  ctx.fillStyle="#3a2c1e";
+  ctx.beginPath();
+  ctx.moveTo(CX-hwOf(HORIZON),HORIZON); ctx.lineTo(CX+hwOf(HORIZON),HORIZON);
+  ctx.lineTo(CX+hwOf(BOTTOM),BOTTOM); ctx.lineTo(CX-hwOf(BOTTOM),BOTTOM);
+  ctx.closePath(); ctx.fill();
+  for(let k=0;k<26;k++){
+    const z0=Math.floor(p.z/2)*2+k*2-30, rel=z0-p.z;
+    if(rel>LEAD||rel<-BEHIND) continue;
+    if(Math.floor(z0/2)%2) continue;
+    const y0=yOf(rel), y1=yOf(rel-2);
+    ctx.fillStyle="rgba(0,0,0,0.10)";
+    ctx.beginPath();
+    ctx.moveTo(CX-hwOf(y0),y0); ctx.lineTo(CX+hwOf(y0),y0);
+    ctx.lineTo(CX+hwOf(y1),y1); ctx.lineTo(CX-hwOf(y1),y1);
+    ctx.closePath(); ctx.fill();
+  }
+  // darkening under the boulder = proximity read on the road itself (F4)
+  const by=yOf(-gap);
+  const g2=ctx.createLinearGradient(0,by,0,Math.min(PLAYER_Y,by+160));
+  g2.addColorStop(0,"rgba(10,6,4,0.55)"); g2.addColorStop(1,"rgba(10,6,4,0)");
+  ctx.fillStyle=g2; ctx.fillRect(0,by-10,VW,170);
+}
+function drawObstacle(row){
+  const rel=row.z-p.z, y=yOf(rel), s=scaleOf(y), hw=hwOf(y);
+  for(const o of row.obs){
+    const x=CX+o.x*hw, w=o.w*hw*0.5;
+    if(o.type==="rock"){
+      ctx.fillStyle="#6b5a48"; ctx.beginPath(); ctx.ellipse(x,y-10*s,w,16*s,0,0,7); ctx.fill();
+      ctx.fillStyle="#7d6b56"; ctx.beginPath(); ctx.ellipse(x-w*0.25,y-16*s,w*0.5,9*s,0,0,7); ctx.fill();
+    } else if(o.type==="wall"){
+      ctx.fillStyle="#5c4a38"; ctx.fillRect(CX-hw,y-22*s,hw*2,22*s);
+      ctx.fillStyle="#6e5944"; ctx.fillRect(CX-hw,y-22*s,hw*2,6*s);
+      ctx.fillStyle="rgba(0,0,0,0.25)"; for(let i=-3;i<=3;i++) ctx.fillRect(CX+i*hw/3.5-1,y-22*s,2,22*s);
+    } else if(o.type==="crack"){
+      ctx.fillStyle="#120c08"; ctx.beginPath();
+      ctx.moveTo(x-w,y); ctx.lineTo(x-w*0.5,y-7*s); ctx.lineTo(x+w*0.3,y-5*s); ctx.lineTo(x+w,y); ctx.lineTo(x+w*0.4,y+7*s); ctx.lineTo(x-w*0.5,y+6*s);
+      ctx.closePath(); ctx.fill();
+    } else { // totem: tall, unjumpable
+      ctx.fillStyle="#7a4434"; ctx.fillRect(x-w*0.55,y-58*s,w*1.1,58*s);
+      ctx.fillStyle="#8f5340"; ctx.fillRect(x-w*0.55,y-58*s,w*1.1,10*s);
+      ctx.fillStyle="#2a1a12"; ctx.fillRect(x-w*0.35,y-44*s,w*0.7,8*s);
+      ctx.fillStyle="#ffd98a"; ctx.fillRect(x-w*0.2,y-30*s,w*0.4,6*s);
+    }
+  }
+}
+function drawBolt(k){
+  const rel=k.z-p.z, y=yOf(rel), s=scaleOf(y), hw=hwOf(y);
+  const x=CX+k.x*hw, bob=Math.sin((perf+k.z*10)/9)*3*s;
+  ctx.save(); ctx.translate(x,y-14*s+bob); ctx.rotate(perf/16);
+  ctx.fillStyle="#ffd98a"; ctx.fillRect(-6*s,-6*s,12*s,12*s);
+  ctx.fillStyle="#c9932d"; ctx.fillRect(-2.5*s,-2.5*s,5*s,5*s);
+  ctx.restore();
+}
+function drawBoulder(){
+  const y=yOf(-gap), s=scaleOf(y), r=300*s;
+  const x=CX+Math.sin(roll*0.13)*8*s;
+  // dust skirt
+  ctx.fillStyle="rgba(90,70,50,0.35)";
+  ctx.beginPath(); ctx.ellipse(x,y+6,r*1.15,r*0.22,0,0,7); ctx.fill();
+  // body
+  const grad=ctx.createRadialGradient(x-r*0.3,y-r*0.5,r*0.2,x,y-r*0.28,r);
+  grad.addColorStop(0,"#8a7660"); grad.addColorStop(0.7,"#5c4c3c"); grad.addColorStop(1,"#3a2f24");
+  ctx.fillStyle=grad;
+  ctx.beginPath(); ctx.arc(x,y-r*0.28,r,0,7); ctx.fill();
+  // rotating cracks
+  ctx.strokeStyle="rgba(30,22,16,0.55)"; ctx.lineWidth=Math.max(1.5,4*s);
+  for(let i=0;i<5;i++){
+    const a=roll*0.9+i*1.257;
+    ctx.beginPath(); ctx.arc(x,y-r*0.28,r*(0.45+0.11*i),a,a+1.1); ctx.stroke();
+  }
+  // roar tell (>=500ms before any lunge closes)
+  if(lungeState===1){
+    ctx.fillStyle=`rgba(255,90,50,${0.5+0.4*Math.sin(perf*0.7)})`;
+    ctx.font="bold 46px monospace"; ctx.textAlign="center";
+    ctx.fillText("!",x,y-r*0.28-r-14);
+  }
+  // chips (cosmetic)
+  if(Math.random()<0.4) parts.push({x:x+(Math.random()*2-1)*r*0.8,y:y-Math.random()*8,vx:Math.random()*2-1,vy:-Math.random()*2-1,life:16,max:16,c:"#6e5944",sz:2+Math.random()*2});
+}
+function drawRunner(){
+  const hw=hwOf(PLAYER_Y), x=CX+p.x*hw;
+  const airU=p.air>0?Math.sin((1-p.air/JUMP_T)*Math.PI):0;
+  const y=PLAYER_Y-airU*54;
+  // shadow stays on the road (F6: the road does the motion)
+  ctx.fillStyle=`rgba(0,0,0,${0.32-airU*0.14})`;
+  ctx.beginPath(); ctx.ellipse(x,PLAYER_Y+4,16-airU*5,5,0,0,7); ctx.fill();
+  if(p.invuln>0&&perf%6<3&&!p.dead) return;   // stumble flicker
+  const run=Math.sin(p.anim*14)*(p.air>0?0.2:1);
+  ctx.save(); ctx.translate(x,y);
+  if(p.stumble>0) ctx.rotate(Math.sin(perf*0.8)*0.18);
+  // legs (facing camera, kicking toward viewer)
+  ctx.fillStyle="#39424e";
+  ctx.fillRect(-9,-14+run*3,7,16-run*3); ctx.fillRect(2,-14-run*3,7,16+run*3);
+  // torso
+  ctx.fillStyle="#4a5568"; ctx.fillRect(-12,-34,24,22);
+  ctx.fillStyle="#5a6673"; ctx.fillRect(-12,-34,24,5);
+  ctx.fillStyle="#e8a33d"; ctx.fillRect(-3,-26,6,5);           // chest light
+  // arms pumping
+  ctx.fillStyle="#39424e";
+  ctx.fillRect(-17,-32+run*4,5,13); ctx.fillRect(12,-32-run*4,5,13);
+  // head + visor (facing you — touchstone #1)
+  ctx.fillStyle="#5a6673"; ctx.fillRect(-9,-48,18,13);
+  ctx.fillStyle="#20262f"; ctx.fillRect(-7,-45,14,8);
+  ctx.fillStyle="#7fd8e8"; ctx.fillRect(-5,-43,10,4);
+  ctx.fillStyle="#9aa5b1"; ctx.fillRect(-1,-53,3,5);
+  ctx.fillStyle= gap<8 ? "#ff5d3a" : "#7fe8a3"; ctx.fillRect(-2,-56,5,4);  // antenna reads the gap
+  ctx.restore();
+}
+function draw(){
+  const ox=(Math.random()*2-1)*shake, oy=(Math.random()*2-1)*shake;
+  ctx.save(); ctx.translate(ox,oy);
+  drawCanyon(); drawRoad();
+  // passed rows (up-screen, behind => before boulder)
+  const behindRows=rows.filter(r=>r.z-p.z<-0.5&&!r.crushed).sort((a,b)=>a.z-b.z);
+  for(const r of behindRows) drawObstacle(r);
+  drawBoulder();
+  drawRunner();
+  // upcoming (below player, nearer camera, drawn over)
+  const aheadRows=rows.filter(r=>r.z-p.z>=-0.5).sort((a,b)=>b.z-a.z);
+  for(const r of aheadRows) drawObstacle(r);
+  for(const k of picks) if(!k.taken&&k.z-p.z>-BEHIND) drawBolt(k);
+  for(const q of parts){ ctx.globalAlpha=Math.max(0,q.life/q.max); ctx.fillStyle=q.c; ctx.fillRect(q.x-q.sz/2,q.y-q.sz/2,q.sz,q.sz); }
+  ctx.globalAlpha=1;
+  ctx.restore();
+  // proximity vignette (F4)
+  if(gap<9&&!p.dead){
+    const v=(9-gap)/9;
+    ctx.fillStyle=`rgba(120,20,10,${v*0.22})`; ctx.fillRect(0,0,VW,VH);
+  }
+  /* HUD */
+  ctx.textAlign="center";
+  ctx.fillStyle="#e8d9c2"; ctx.font="bold 34px monospace";
+  ctx.fillText(`${Math.floor(p.z)}m`,CX,54);
+  ctx.font="14px monospace"; ctx.fillStyle="#a8a08d";
+  ctx.fillText(`⚙ ${bolts}   best ${best}m`,CX,78);
+  ctx.font="11px monospace"; ctx.fillStyle="rgba(168,160,141,0.6)";
+  ctx.fillText(`seed ${SEED} · T data · C share`,CX,VH-14);
+  if(copiedT>0){ ctx.fillStyle="#7fe8a3"; ctx.font="bold 15px monospace"; ctx.fillText("link copied ✓",CX,VH-36); }
+
+  if(!started){
+    ctx.fillStyle="rgba(8,6,4,0.66)"; ctx.fillRect(0,0,VW,VH);
+    ctx.fillStyle="#e8a33d"; ctx.font="bold 44px monospace"; ctx.fillText("BOULDER-RUSH",CX,VH/2-90);
+    ctx.fillStyle="#e8d9c2"; ctx.font="17px monospace";
+    ctx.fillText("it is right behind you. run.",CX,VH/2-48);
+    ctx.fillStyle="#a8a08d"; ctx.font="14px monospace";
+    ctx.fillText("steer: move pointer / drag thumb",CX,VH/2+4);
+    ctx.fillText("hop: tap · click · space",CX,VH/2+28);
+    ctx.fillText("obstacles slow you. IT does the rest.",CX,VH/2+64);
+    ctx.fillStyle="#e8a33d"; ctx.font="bold 18px monospace";
+    ctx.fillText(`tap to run  ›`,CX,VH/2+120);
+  }
+  if(p.dead){
+    ctx.fillStyle="rgba(8,6,4,0.72)"; ctx.fillRect(0,0,VW,VH);
+    ctx.fillStyle="#ff5d3a"; ctx.font="bold 48px monospace"; ctx.fillText("RUN OVER",CX,VH/2-80);
+    ctx.fillStyle="#e8d9c2"; ctx.font="22px monospace";
+    ctx.fillText(`${Math.floor(p.z)}m · ⚙ ${bolts}`,CX,VH/2-30);
+    ctx.font="16px monospace"; ctx.fillStyle= Math.floor(p.z)>=best&&best>0?"#7fe8a3":"#a8a08d";
+    ctx.fillText(Math.floor(p.z)>=best?`NEW BEST`:`best ${best}m`,CX,VH/2+2);
+    ctx.fillStyle="#a8a08d"; ctx.font="15px monospace";
+    ctx.fillText("tap / R — run again",CX,VH/2+58);
+    const hot=copiedT>0;
+    ctx.fillStyle= hot?"rgba(127,232,163,0.18)":"rgba(127,216,232,0.14)";
+    ctx.fillRect(SHARE_BTN.x,SHARE_BTN.y,SHARE_BTN.w,SHARE_BTN.h);
+    ctx.strokeStyle= hot?"#7fe8a3":"#7fd8e8"; ctx.lineWidth=2;
+    ctx.strokeRect(SHARE_BTN.x,SHARE_BTN.y,SHARE_BTN.w,SHARE_BTN.h);
+    ctx.fillStyle= hot?"#7fe8a3":"#7fd8e8"; ctx.font="bold 16px monospace";
+    ctx.fillText(hot?"link copied ✓":"C · share this canyon ⧉",CX,SHARE_BTN.y+29);
+  }
+}
+
+/* ---------------- loop (F3: fixed timestep) ---------------- */
+ensureCourse();
+let acc=0,last=performance.now();
+function frame(now){
+  let dt=now-last; last=now;
+  if(dt>100)dt=100;
+  acc+=dt;
+  while(acc>=1000/60){ tick(); acc-=1000/60; }
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

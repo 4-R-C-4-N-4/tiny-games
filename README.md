@@ -202,6 +202,41 @@ xdg-open robo-smash.html     # the whole game — one hand-authored file, no bui
 node test-harness.js         # 45-check headless suite (drives the sim directly)
 ```
 
+### 🪨 boulder-rush — outrun it
+
+An endless chase down a stone canyon, mobile-first: the runner sprints toward the
+camera, the boulder fills the frame behind them, obstacles rush up from the bottom
+edge. Steer with the pointer (mouse or thumb), tap to hop. Obstacles never kill — they
+*slow* you, and the boulder is the only executioner, so every death is attributable to
+the mistakes of the last few seconds.
+
+**What makes it tick:**
+
+- **A feel contract for a two-verb game.** Pointer steering is critically damped (≤1
+  tick latency, provably no overshoot); jumps are buffered fixed arcs; the camera never
+  moves laterally — the road does the motion.
+- **A chase director with numbered fairness floors.** The boulder runs a policy
+  (`boulderPolicy(state) → accel` — heuristic now, learned later, same call site):
+  it pounces within 250ms of every stumble, relaxes when you run clean, and lunges for
+  scripted-feeling near-misses — but every lunge is telegraphed by a ≥500ms roar that
+  *holds the gap while roaring*, the gap has a hard floor without recent stumbles, and
+  a catch is only reachable through compounded mistakes.
+- **Seeded, shareable canyons.** The course grammar spawns passable-by-construction
+  rows from a seeded RNG; `?seed=N` replays the exact canyon and `C` copies the link.
+- **Telemetry as training data.** Steering histograms + per-obstacle outcome tuples +
+  the event stream, exported with `T` — the dataset for the planned steering-prediction
+  model that will place danger where you habitually drift.
+- **Headless test suite**: 27 checks — the floors as numbers, 200-seed passability,
+  course determinism, perfect-bot fairness (never caught), and a 30k-tick pointer fuzz.
+
+**Play it:**
+
+```bash
+cd boulder-rush
+xdg-open boulder-rush.html   # one hand-authored file, no build, no deps
+node test-harness.js         # 27-check headless suite
+```
+
 ## Repo layout
 
 ```
@@ -211,6 +246,10 @@ tiny-games/
 │   ├── web/            # portrait battle stage, live spell preview, lexicon.bin asset
 │   ├── train/          # reusable distillation pipeline: vocab → teacher labels → head → pack
 │   └── docs/           # design doc
+├── boulder-rush/       # mobile-first boulder chase with a fairness-floored chase director
+│   ├── boulder-rush.html    # the whole game — single hand-authored file
+│   ├── test-harness.js      # headless Node driver + 27-check suite
+│   └── BOULDER-RUSH-INTENT.md # intent doc (instantiated from CONTEXT.md's template)
 ├── robo-smash/         # feel-first Crash-style platformer growing an adversarial director
 │   ├── robo-smash.html      # the whole game — single hand-authored file
 │   ├── test-harness.js      # headless Node driver + 45-check suite
