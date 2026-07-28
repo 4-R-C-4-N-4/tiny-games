@@ -1,6 +1,6 @@
 # ROBO-SMASH — Design Intent & Handoff
 
-**Status:** Playable single-file prototype (`robo-smash.html`) with finished movement feel. **Phase 0 substrate implemented** (telemetry, phase-locked crushers, chunk grammar — see §4). Next phase: Phase 1 heuristic director.
+**Status:** Playable single-file prototype (`robo-smash.html`) with finished movement feel. **Phase 0 substrate implemented** (telemetry, phase-locked crushers, chunk grammar — see §4), plus the **content layer** (§3.5: scuttler enemies, shield, consumables, scrap economy, 3-sector run structure). Next phase: Phase 1 heuristic director — it now has vocabulary worth steering.
 **Prime directive:** *Feel first.* Any change that degrades the Feel Contract (below) is wrong, no matter what it adds. When in doubt, playtest the first 20 seconds — if the robot doesn't feel snappy and obedient, revert.
 
 ---
@@ -50,6 +50,16 @@ Known tuning watch-item: sustain models can feel slightly "helium" at apex. If s
 - ~~**Known bug (violates C1):** a jump tapped inside a 2–6f hitstop is eaten.~~ **Fixed:** `p.buffer` (and a spin latch, `sLatch`) is set from the edge-detect at the top of the tick, *before* the hitstop early-return. The buffer intentionally doesn't decay during hitstop, so intent survives the freeze. Note: if press *and* release both land inside the freeze, the C3 cut applies as soon as the buffered jump executes → minimum hop, which is the honest reading of a tap.
 - **Headless test harness:** `node test-harness.js` (Node `vm` + browser stubs, drives `tick()` directly; not part of the shipped file). Checks: layout validity over 200 seeds (7 cells, goal present, every >4-tile gap bridged by platforms), the C1 fix both tapped-in-freeze and held-through-freeze, the 250 ms crusher telegraph floor, telemetry tuple shape + hold tracking, seed determinism, and a 20k-tick random-input soak. The Phase 3 verifier should grow out of this driver — it already proves the sim runs headless.
 
+## 3.5 Content layer (director vocabulary)
+
+Rationale: a director is only as interesting as the knobs it can turn, so mechanics width is on the critical path of §4, not a detour. All of this is inside the grammar/economy — no Feel Contract constants were touched.
+
+- **Scuttler enemies** (`E` in cells; `patrolYard` cell, sector 2+). Tread-bots that patrol between walls/ledges/crates. Spin launches them as flat projectiles that break crates, detonate TNT, and kill other scuttlers (Crash 4 style); stomp squishes and springs like a crate bounce (refreshes double jump); walking into one is a hit. EMP-freezable.
+- **Shield** (Aku-Aku analog, robot-skinned as orbiting drones). Absorbs one *impact* hit (spike/crusher/TNT/enemy) with 50f iframes + Crash-style hop-back; **never saves from pits** — impact hazards are the adversary's tools so they get a mercy layer, pits are the solver's domain so falling stays lethal. Keep this boundary. 3rd stack = 8s invincibility (contact breaks crates, squishes scuttlers), then back to 2. Director relevance: shield state is the player's visible risk budget — a shielded player is licence to run the aggression hotter while staying inside the death-rate cap.
+- **Consumables** (crate drops, rolled at build time from the seeded rng — same seed, same economy): **bolts** (scrap currency), **coolant** (vents gyro heat, 4s free spins), **EMP** (freezes crushers mid-slam and scuttlers, 3.5s), **shield drone**. TNT-destroyed crates vaporize their contents — greed pathing around TNT stays a real choice.
+- **Scrap economy:** every 50 bolts auto-builds a shield stack. Answers the §6 crate-economy question: thoroughness buys risk budget.
+- **Run structure:** 3 escalating sectors per run (`N_STAGES`), rebuilt by `buildLevel(st)` on each goal. Stage gates the cell pool (`minStage` — scuttlers debut in sector 2) and scales cruelty knob ranges (crusher slack floor drops to 0, gaps/spike runs/TNT offsets widen, sectors lengthen 6→7→8 cells). Scrap/shield/deaths/telemetry persist across sectors; per-sector rng derives from the run seed. This staging is the hand-tuned precursor of the director's aggression dial — Phase 1 should subsume the knob-range scaling, keeping `minStage` gating authored.
+
 ## 4. Adversarial intelligence plan
 
 Principle: **the intelligence operates inside an authored grammar; it never places raw tiles.** And its objective is **near-misses, not deaths** — "maximize misses-by-<8-frames, subject to: a solvable path exists with ≥N frames of margin, and death rate ≤ X/min." An adversary maximizing near-misses is a great level designer; one maximizing deaths is a troll.
@@ -80,7 +90,8 @@ The sim is state-deterministic, but under the sustain jump model arcs are **piec
 
 ## 6. Open questions (deliberately unresolved)
 
-- Run structure: fixed-length levels vs. roguelike-ish escalating runs (there's adjacent design thinking in the Lexomancy project — anti-min-max systems, run-wide fingerprinting — that could transfer to the director's player model).
+- ~~Run structure~~ **Resolved:** roguelike-ish escalating 3-sector runs (§3.5). Still open: run-wide fingerprinting à la Lexomancy feeding the director's player model; daily/shared seeds.
 - Should the director's aggression be a visible dial/difficulty setting, or purely emergent?
-- Crate economy: does %-crates-broken feed the director (reward thoroughness with mercy, or punish greed with traps near optional crates)?
-- Enemy actors (patrollers the spin launches into other crates, à la Crash 4) — big juice payoff, new collision class.
+- ~~Crate economy~~ **Partially resolved:** scrap→shield converts thoroughness into risk budget (§3.5). Still open: should the *director* also read %-crates-broken (punish greed with traps near optional crates)?
+- ~~Enemy actors~~ **Resolved:** scuttlers (§3.5). Open: more actor classes (flyers that dodge the first spin? shielded scuttlers that must be stomped?) as director vocabulary widens.
+- Shield-aware direction: formalize "shielded player ⇒ hotter aggression" as a director input with its own fairness floor (never *require* a shield hit to pass — the verifier must still find a no-hit path).

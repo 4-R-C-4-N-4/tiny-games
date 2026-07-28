@@ -52,7 +52,7 @@ const VW = 960, VH = 540, TILE = 48;
    the sim itself uses no randomness at all. */
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 const SEED=(()=>{const m=location.search.match(/[?&]seed=(\d+)/);return m?(+m[1]>>>0):(Math.random()*4294967296)>>>0;})();
-const rng=mulberry32(SEED);
+let rng=null;                       // re-seeded per sector in buildLevel
 function ri(a,b){return a+Math.floor(rng()*(b-a+1));}
 
 /* ---------------- chunk grammar (Phase 0.3) ----------------
@@ -69,10 +69,16 @@ function put(x, y, c) {
 }
 function ground(a, b) { for (let x=a; x<=b; x++){ put(x,10,"#"); put(x,11,"#"); } }
 
-const cells=[];   // {name,i,x0,x1,knobs} — telemetry context + the director's surface
+/* run structure: N_STAGES escalating sectors per run. `st` (0-based)
+   gates the cell pool (minStage) and scales cruelty knob ranges — the
+   dumb precursor of the Phase 1 director's aggression dial. */
+const N_STAGES=3;
+let stage=0, winT=0;
+let cells=[];          // current sector's cells
+const allCells=[];     // every sector built this run, for telemetry export
 const CELLS={
-  pitBoxBridge:{   // gap crossing; knobs: gap width, optional crate-topped slab bridge
-    knobs:()=>({gap:ri(2,4), bridge:rng()<0.6}),
+  pitBoxBridge:{minStage:0, // gap crossing; knobs: gap width, optional crate-topped slab bridge
+    knobs:st=>({gap:ri(2,2+st), bridge:rng()<0.7-st*0.15}),
     build(x,k){
       ground(x,x+3);
       const g0=x+4, bx=g0+((k.gap-1)>>1);
@@ -82,8 +88,8 @@ const CELLS={
       return 4+k.gap+4;
     }
   },
-  crusherCorridor:{ // knobs: crusher count, spacing, telegraph slack (0 = max aggression)
-    knobs:()=>({n:ri(2,3), gap:ri(3,4), slack:ri(0,10)}),
+  crusherCorridor:{minStage:0, // knobs: crusher count, spacing, telegraph slack (0 = max aggression)
+    knobs:st=>({n:ri(2,st>0?3:2), gap:ri(3,4), slack:ri(Math.max(0,6-3*st),12-3*st)}),
     build(x,k){
       const w=2+k.n*k.gap+2;
       ground(x,x+w-1);
@@ -94,8 +100,8 @@ const CELLS={
       return w;
     }
   },
-  tntTrap:{        // gap whose landing zone is mined; knob: TNT offset from the natural landing column
-    knobs:()=>({gap:ri(2,3), off:ri(0,2)}),
+  tntTrap:{minStage:0, // gap whose landing zone is mined; knob: TNT offset from the natural landing column
+    knobs:st=>({gap:ri(2,st>1?3:2), off:ri(0,1+st)}),
     build(x,k){
       ground(x,x+3);
       const land=x+4+k.gap;
@@ -104,8 +110,8 @@ const CELLS={
       return 4+k.gap+6;
     }
   },
-  bounceLadder:{   // stepped climb over a wide pit; knobs: step count, crate topper
-    knobs:()=>({steps:ri(2,3), topCrate:rng()<0.7}),
+  bounceLadder:{minStage:0, // stepped climb over a wide pit; knobs: step count, crate topper
+    knobs:st=>({steps:ri(2,3), topCrate:rng()<0.7}),
     build(x,k){
       ground(x,x+2);
       let cx=x+3;
@@ -119,8 +125,8 @@ const CELLS={
       return (cx+4)-x;
     }
   },
-  spikeGauntlet:{  // knobs: spike run length, crate stepping stone before the run
-    knobs:()=>({len:ri(2,3), stone:rng()<0.5}),
+  spikeGauntlet:{minStage:0, // knobs: spike run length, crate stepping stone before the run
+    knobs:st=>({len:ri(2,2+st), stone:rng()<0.5}),
     build(x,k){
       const w=3+k.len+3;
       ground(x,x+w-1);
@@ -129,49 +135,41 @@ const CELLS={
       return w;
     }
   },
+  patrolYard:{minStage:1, // scuttlers debut in sector 2; knobs: count, patrol speed
+    knobs:st=>({n:ri(1,st), speed:+(0.6+rng()*0.5).toFixed(2)}),
+    build(x,k){
+      const w=6+k.n*4;
+      ground(x,x+w-1);
+      for(let i=0;i<k.n;i++) put(x+3+i*4,9,"E");
+      put(x+1,9,"B"); put(x+w-2,9,"B");
+      return w;
+    }
+  },
+  crateVault:{minStage:0, // reward stack; knob: height, TNT booby-trap chance rises with stage
+    knobs:st=>({h:ri(2,3), tnt:rng()<0.15+st*0.2}),
+    build(x,k){
+      ground(x,x+5);
+      for(let i=0;i<k.h;i++){ put(x+2,9-i,"B"); put(x+3,9-i,"B"); }
+      if(k.tnt) put(x+2,9-((k.h-1)>>1),"T");
+      return 6;
+    }
+  },
 };
 
-/* start pad — authored tutorial, outside the grammar */
-ground(0,17);
-put(8,9,"B"); put(9,9,"B"); put(9,8,"B");
-put(13,9,"B");put(14,9,"B");put(15,9,"B");put(13,8,"B");put(14,8,"B");put(13,7,"B");
-
-/* sequencer: N cells, no immediate repeats, breather+checkpoint every 2 */
-{
-  const names=Object.keys(CELLS), N_CELLS=7;
-  let X=18, lastName=null;
-  for(let i=0;i<N_CELLS;i++){
-    let name; do{ name=names[Math.floor(rng()*names.length)]; }while(name===lastName);
-    lastName=name;
-    const def=CELLS[name], k=def.knobs();
-    const x0=X;
-    X+=def.build(X,k);
-    cells.push({name,i,x0,x1:X,knobs:k});
-    if(i%2===1&&i<N_CELLS-1){ ground(X,X+2); put(X+1,9,"!"); X+=3; }
-  }
-  /* finale — crate wall to plow through, then goal */
-  ground(X,X+12);
-  put(X+2,7,"B");put(X+2,8,"B");put(X+2,9,"B");
-  put(X+3,7,"B");put(X+3,8,"B");put(X+3,9,"B");
-  put(X+5,9,"T");
-  put(X+9,9,"G");
-  for(let y=7;y<=11;y++) put(X+12,y,"#");               // endcap wall
-}
-
-/* ---------------- entities from grid ---------------- */
-const boxes=[], crushers=[], checkpoints=[], spikes=[];
+/* ---------------- entities ---------------- */
+const boxes=[], crushers=[], checkpoints=[], spikes=[], enemies=[], pickups=[];
 let goal=null, totalBoxes=0;
-for (let y=0;y<LH;y++) for (let x=0;x<LW;x++){
-  const c=grid[y][x], px=x*TILE, py=y*TILE;
-  if (c==="B"||c==="T"){ boxes.push({x:px,y:py,w:TILE,h:TILE,tnt:c==="T",alive:true,fuse:-1,wob:0}); totalBoxes++; grid[y][x]=" "; }
-  else if (c==="M"){
-    let ty=y+1; while(ty<LH && grid[ty][x]!=="#") ty++;
-    crushers.push({x:px,anchor:py,rest:py,max:ty*TILE - 40,head:py,state:0,t:0,tele:0,cool:60,slack:6});
-    grid[y][x]=" ";
-  }
-  else if (c==="!"){ checkpoints.push({x:px,y:py,on:false}); grid[y][x]=" "; }
-  else if (c==="^"){ spikes.push({x:px+4,y:py+26,w:TILE-8,h:22,dx:px,dy:py}); grid[y][x]=" "; }
-  else if (c==="G"){ goal={x:px,y:py}; grid[y][x]=" "; }
+
+/* crate contents — rolled at build time from the seeded rng, so a
+   given seed always yields the same economy (determinism + telemetry
+   hygiene). TNT crates carry nothing. */
+function rollDrop(){
+  const r=rng();
+  if(r<0.50) return {kind:"bolt",n:ri(1,3)};
+  if(r<0.75) return null;
+  if(r<0.84) return {kind:"cool"};
+  if(r<0.92) return {kind:"emp"};
+  return {kind:"shield"};
 }
 function solidAt(tx,ty){ if(tx<0||tx>=LW) return true; if(ty<0||ty>=LH) return false; const c=grid[ty][tx]; return c==="#"||c==="="; }
 
@@ -185,16 +183,20 @@ function cellAt(px){ const tx=px/TILE; for(const c of cells) if(tx>=c.x0&&tx<c.x
 function telTakeoff(kind){
   if(jrec) telLand("chain:"+kind);            // djump/bounce chains close the previous arc
   const c=cellAt(p.x+p.w/2);
-  jrec={t:perf,kind,x:+p.x.toFixed(1),y:+p.y.toFixed(1),vx:+p.vx.toFixed(2),vy:+p.vy.toFixed(2),
+  jrec={t:perf,stage,kind,x:+p.x.toFixed(1),y:+p.y.toFixed(1),vx:+p.vx.toFixed(2),vy:+p.vy.toFixed(2),
         hold:0,spin:false,cell:c?c.name+"#"+c.i:"start",knobs:c?c.knobs:null};
 }
+/* event stream — the non-jump director signals: pickups, shield
+   absorbs, enemy kills, deaths-with-cause. Same ring, same export. */
+const events=[]; let eventsN=0;
+function evLog(type,data){ events[eventsN%TEL_CAP]=Object.assign({t:perf,stage,type},data); eventsN++; }
 function telLand(outcome){
   if(!jrec) return;
   jrec.outcome=outcome; jrec.landX=+p.x.toFixed(1); jrec.dy=+(p.y-jrec.y).toFixed(1); jrec.air=perf-jrec.t;
   telem[telemN%TEL_CAP]=jrec; telemN++; jrec=null;
 }
 function telExport(){
-  const blob=new Blob([JSON.stringify({seed:SEED,cells,records:telem})],{type:"application/json"});
+  const blob=new Blob([JSON.stringify({seed:SEED,stages:N_STAGES,cells:allCells,records:telem,events})],{type:"application/json"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
   a.download=`robo-smash-telemetry-${SEED}.json`; a.click(); URL.revokeObjectURL(a.href);
 }
@@ -211,9 +213,80 @@ function estimateArrival(c,pl){       // -> frames until player is under the hea
   if(Math.abs(pl.vx)<0.8||Math.sign(d)!==Math.sign(pl.vx)) return -1;
   return Math.abs(d)/Math.abs(pl.vx);
 }
-/* crusher <- cell knob wiring (slack = extra telegraph earliness above
-   the floor; 0 = max aggression) */
-for(const c of crushers){ const cell=cellAt(c.x+TILE/2); c.slack=(cell&&cell.knobs.slack!=null)?cell.knobs.slack:6; }
+/* ---------------- sector builder ----------------
+   Rebuilds the whole level for sector `st`. Called at boot and on
+   every goal touch. Persistent across sectors: scrap, shield, deaths,
+   telemetry. Per-sector rng is derived from the run seed. */
+function buildLevel(st){
+  stage=st;
+  rng=mulberry32((SEED ^ Math.imul(st+1,0x9E3779B9))>>>0);
+  for(const row of grid) row.length=0;
+  LW=0;
+  boxes.length=0; crushers.length=0; checkpoints.length=0; spikes.length=0;
+  enemies.length=0; pickups.length=0;
+  goal=null; totalBoxes=0; broken=0; cells=[];
+
+  /* start pad — authored; tutorial crates only in sector 1 */
+  let X;
+  if(st===0){
+    ground(0,17);
+    put(8,9,"B"); put(9,9,"B"); put(9,8,"B");
+    put(13,9,"B");put(14,9,"B");put(15,9,"B");put(13,8,"B");put(14,8,"B");put(13,7,"B");
+    X=18;
+  } else {
+    ground(0,7); put(5,9,"B");
+    X=8;
+  }
+
+  /* sequencer: sector length grows with stage, no immediate repeats,
+     breather+checkpoint every 2 cells */
+  const names=Object.keys(CELLS).filter(n=>CELLS[n].minStage<=st);
+  const nCells=6+st;
+  let lastName=null;
+  for(let i=0;i<nCells;i++){
+    let name; do{ name=names[Math.floor(rng()*names.length)]; }while(name===lastName);
+    lastName=name;
+    const def=CELLS[name], k=def.knobs(st);
+    const x0=X;
+    X+=def.build(X,k);
+    const cell={name,i,x0,x1:X,knobs:k,stage:st};
+    cells.push(cell); allCells.push(cell);
+    if(i%2===1&&i<nCells-1){ ground(X,X+2); put(X+1,9,"!"); X+=3; }
+  }
+  /* finale — crate wall to plow through, then goal */
+  ground(X,X+12);
+  put(X+2,7,"B");put(X+2,8,"B");put(X+2,9,"B");
+  put(X+3,7,"B");put(X+3,8,"B");put(X+3,9,"B");
+  put(X+5,9,"T");
+  put(X+9,9,"G");
+  for(let y=7;y<=11;y++) put(X+12,y,"#");               // endcap wall
+
+  /* entities from grid */
+  for(let y=0;y<LH;y++) for(let x=0;x<LW;x++){
+    const c=grid[y][x], px=x*TILE, py=y*TILE;
+    if(c==="B"||c==="T"){ boxes.push({x:px,y:py,w:TILE,h:TILE,tnt:c==="T",alive:true,fuse:-1,wob:0,drop:c==="B"?rollDrop():null}); totalBoxes++; grid[y][x]=" "; }
+    else if(c==="M"){
+      let ty=y+1; while(ty<LH && grid[ty][x]!=="#") ty++;
+      crushers.push({x:px,anchor:py,rest:py,max:ty*TILE - 40,head:py,state:0,t:0,tele:0,cool:60,slack:6});
+      grid[y][x]=" ";
+    }
+    else if(c==="E"){ enemies.push({x:px+6,y:py+22,w:36,h:26,vx:-0.8,sp:0.8,alive:true,launched:0,lvx:0,sx:px+6,sy:py+22}); grid[y][x]=" "; }
+    else if(c==="!"){ checkpoints.push({x:px,y:py,on:false}); grid[y][x]=" "; }
+    else if(c==="^"){ spikes.push({x:px+4,y:py+26,w:TILE-8,h:22,dx:px,dy:py}); grid[y][x]=" "; }
+    else if(c==="G"){ goal={x:px,y:py}; grid[y][x]=" "; }
+  }
+
+  /* cell-knob wiring: crusher slack (extra telegraph earliness above
+     the floor; 0 = max aggression), scuttler patrol speed */
+  for(const c of crushers){ const cell=cellAt(c.x+TILE/2); c.slack=(cell&&cell.knobs.slack!=null)?cell.knobs.slack:6; }
+  for(const e of enemies){ const cell=cellAt(e.x+e.w/2); if(cell&&cell.knobs.speed){ e.sp=cell.knobs.speed; e.vx=-e.sp; } }
+
+  /* player + per-sector state (scrap/shield/deaths persist) */
+  p.x=2*TILE; p.y=8*TILE; p.vx=0; p.vy=0; p.spin=0; p.heat=0; p.overheat=0;
+  p.jumps=0; p.dead=0; p.win=false; p.sx=1; p.sy=1; p.face=1;
+  p.spawn={x:2*TILE,y:8*TILE};
+  p.buffer=0; sLatch=0; jrec=null; winT=0; empT=0; coolT=0; invT=0; iframes=0;
+}
 
 /* ---------------- audio (tiny synth) ---------------- */
 let AC=null;
@@ -247,6 +320,14 @@ const sfx={
   win:()=>{[440,554,659,880].forEach((f,i)=>setTimeout(()=>tone(f,f,0.18,"square",0.10),i*110));},
   overheat:()=>tone(200,120,0.2,"square",0.06),
   alarm:()=>{tone(920,920,0.06,"square",0.07); setTimeout(()=>tone(920,920,0.06,"square",0.07),110);},
+  pick:()=>tone(900,1350,0.06,"square",0.07),
+  shieldUp:()=>{tone(520,780,0.10,"triangle",0.10); setTimeout(()=>tone(780,1170,0.12,"triangle",0.10),80);},
+  shieldHit:()=>{tone(600,180,0.18,"sawtooth",0.10); noiseHit(0.12,0.10,2500);},
+  inv:()=>{[523,659,784,1047,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,f,0.09,"square",0.09),i*70));},
+  emp:()=>{tone(1400,200,0.35,"sawtooth",0.09); noiseHit(0.2,0.06,1600);},
+  cool:()=>{tone(300,900,0.25,"sine",0.10); noiseHit(0.15,0.05,6000);},
+  squish:()=>{tone(500,120,0.12,"triangle",0.12); noiseHit(0.08,0.08,2000);},
+  launch:()=>{tone(200,950,0.14,"sawtooth",0.10);},
 };
 
 /* ---------------- input ---------------- */
@@ -294,6 +375,9 @@ const p={x:2*TILE,y:8*TILE,w:30,h:42,vx:0,vy:0,face:1,grounded:false,
   sx:1,sy:1,run:0,dead:0,win:false,spawn:{x:2*TILE,y:8*TILE}};
 let deaths=0, broken=0, requestReset=false;
 let shake=0, hitstop=0, flashT=0;
+/* consumables + shield (impact mercy — NEVER saves from falls) */
+const SHIELD_MAX=3, INV_T=480, IFR_T=50, EMP_T=210, COOL_T=240, SCRAP_PER_SHIELD=50;
+let scrap=0, shield=0, invT=0, iframes=0, empT=0, coolT=0;
 const parts=[], ghosts=[], fuses=[];
 
 function rectsOverlap(a,b){ return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y; }
@@ -309,24 +393,66 @@ function breakBox(b,byExplosion){
   sfx.box();
   hitstop=Math.max(hitstop,2); shake=Math.max(shake,3);
   spawnParts(b.x+24,b.y+24,14,["#e8a33d","#c97b2d","#8a5320","#ffd98a"],4.5,26,0.25);
+  if(b.drop&&!byExplosion) spawnDrop(b);   // TNT blasts vaporize the contents
+}
+/* pickups pop out of crates with deterministic offsets — no sim randomness */
+function spawnDrop(b){
+  const d=b.drop;
+  if(d.kind==="bolt"){
+    for(let i=0;i<d.n;i++) pickups.push({kind:"bolt",x:b.x+24+(i-(d.n-1)/2)*10,y:b.y+16,vx:(i-(d.n-1)/2)*0.9,vy:-4-(i%2),t:0});
+  } else pickups.push({kind:d.kind,x:b.x+24,y:b.y+16,vx:0,vy:-4.5,t:0});
+}
+function addShield(){
+  if(shield>=SHIELD_MAX-1&&invT===0){ shield=SHIELD_MAX-1; invT=INV_T; sfx.inv(); evLog("invincible",{}); }
+  else if(invT===0){ shield++; sfx.shieldUp(); }
+  else sfx.shieldUp();                      // collected during invincibility: no-op, keep 2
+  spawnParts(p.x+p.w/2,p.y+p.h/2,10,["#7fe8a3","#d7ffe6","#7fd8e8"],3,20,0.05);
+}
+function collect(k){
+  evLog("pickup",{kind:k.kind,x:Math.round(k.x)});
+  if(k.kind==="bolt"){
+    scrap++; sfx.pick();
+    if(scrap%SCRAP_PER_SHIELD===0) addShield();   // robot builds armor from scrap
+  }
+  else if(k.kind==="cool"){ p.heat=0; p.overheat=0; coolT=COOL_T; sfx.cool(); }
+  else if(k.kind==="emp"){ empT=EMP_T; sfx.emp(); flashT=Math.max(flashT,3); }
+  else if(k.kind==="shield") addShield();
+}
+/* impact damage funnel: invincibility/iframes shrug it off, shield
+   absorbs one hit. Falls NEVER route through here — pits kill outright. */
+function damage(cause){
+  if(p.dead||p.win||invT>0||iframes>0) return;
+  if(shield>0){
+    shield--; iframes=IFR_T;
+    p.vx=-p.face*3.5; p.vy=-4.5; p.grounded=false;   // Crash-style hop-back
+    sfx.shieldHit(); hitstop=Math.max(hitstop,3); shake=Math.max(shake,5);
+    spawnParts(p.x+p.w/2,p.y+p.h/2,16,["#7fe8a3","#7fd8e8","#d7ffe6"],5,26,0.1);
+    evLog("shieldHit",{cause,x:Math.round(p.x)});
+    return;
+  }
+  kill(cause);
 }
 function explode(cx,cy){
   sfx.boom(); hitstop=Math.max(hitstop,6); shake=Math.max(shake,10); flashT=6;
   spawnParts(cx,cy,30,["#ff5d3a","#ffb03a","#fff1c9","#5a5a5a"],7,34,0.12);
   for(const b of boxes){ if(b.alive){ const dx=(b.x+24)-cx, dy=(b.y+24)-cy; if(dx*dx+dy*dy<110*110){ if(b.tnt&&b.fuse<0){b.fuse=12;} else breakBox(b,true); } } }
-  if(!p.dead&&!p.win){ const dx=(p.x+p.w/2)-cx, dy=(p.y+p.h/2)-cy; if(dx*dx+dy*dy<85*85) kill(); }
+  if(!p.dead&&!p.win){ const dx=(p.x+p.w/2)-cx, dy=(p.y+p.h/2)-cy; if(dx*dx+dy*dy<85*85) damage("tnt"); }
+  for(const e of enemies){ if(e.alive){ const dx=(e.x+e.w/2)-cx, dy=(e.y+e.h/2)-cy; if(dx*dx+dy*dy<95*95){ e.alive=false; evLog("enemyKill",{by:"tnt"}); spawnParts(e.x+18,e.y+13,10,["#b8452e","#5a6673"],4,22,0.2); } } }
 }
-function kill(){
+function kill(cause){
   if(p.dead||p.win) return;
   telLand("death");
+  evLog("death",{cause:cause||"?",x:Math.round(p.x)});
   p.dead=60; deaths++; sfx.die(); shake=8;
   spawnParts(p.x+p.w/2,p.y+p.h/2,26,["#7fd8e8","#9aa5b1","#3f4854","#ffd98a"],5.5,40,0.2);
 }
 function respawn(){
   p.x=p.spawn.x; p.y=p.spawn.y; p.vx=0; p.vy=0; p.spin=0; p.heat=0; p.overheat=0;
   p.jumps=0; p.dead=0; p.sx=1; p.sy=1;
-  p.buffer=0; sLatch=0; jrec=null;
+  p.buffer=0; sLatch=0; jrec=null; empT=0; coolT=0; iframes=0;
   for(const c of crushers){ c.head=c.rest; c.state=0; c.tele=0; c.cool=45; }
+  for(const e of enemies){ e.alive=true; e.launched=0; e.x=e.sx; e.y=e.sy; e.vx=-e.sp; }
+  pickups.length=0;
   for(const b of boxes){ if(b.tnt) b.fuse=-1; }
 }
 
@@ -358,10 +484,54 @@ function tick(){
   for(let i=parts.length-1;i>=0;i--){ const q=parts[i]; q.x+=q.vx;q.y+=q.vy;q.vy+=q.g;q.life--; if(q.life<=0)parts.splice(i,1); }
   for(let i=ghosts.length-1;i>=0;i--){ ghosts[i].life--; if(ghosts[i].life<=0)ghosts.splice(i,1); }
 
+  // consumable timers
+  if(empT>0) empT--;
+  if(coolT>0) coolT--;
+  if(invT>0) invT--;
+  if(iframes>0) iframes--;
+
+  // pickups: pop, fall, rest, collect (deterministic physics)
+  for(let i=pickups.length-1;i>=0;i--){
+    const k=pickups[i];
+    k.vy+=0.3; if(k.vy>7)k.vy=7;
+    k.y+=k.vy; k.x+=k.vx;
+    const ty=Math.floor((k.y+12)/TILE);
+    if(k.vy>0&&solidAt(Math.floor(k.x/TILE),ty)){ k.y=ty*TILE-12; k.vy=0; k.vx*=0.8; }
+    k.t++;
+    if(k.t>900||k.y>LH*TILE+100){ pickups.splice(i,1); continue; }
+    if(!p.dead&&!p.win&&Math.abs(k.x-(p.x+p.w/2))<30&&Math.abs(k.y-(p.y+p.h/2))<36){ collect(k); pickups.splice(i,1); }
+  }
+
+  // scuttlers: patrol between walls/ledges/crates; EMP freezes them;
+  // launched ones fly flat and break what they hit (Crash 4 style)
+  for(const e of enemies){
+    if(!e.alive) continue;
+    if(e.launched>0){
+      e.x+=e.lvx; e.launched--;
+      for(const b of boxes) if(b.alive&&rectsOverlap(e,b)){ if(b.tnt){b.alive=false;broken++;explode(b.x+24,b.y+24);} else breakBox(b); }
+      for(const o of enemies) if(o!==e&&o.alive&&o.launched===0&&rectsOverlap(e,o)){ o.alive=false; evLog("enemyKill",{by:"launched"}); sfx.squish(); spawnParts(o.x+18,o.y+13,10,["#b8452e","#9aa5b1"],4,20,0.2); }
+      const fx=Math.floor((e.x+(e.lvx>0?e.w+2:-2))/TILE);
+      if(solidAt(fx,Math.floor((e.y+e.h/2)/TILE))||e.launched===0){
+        e.alive=false; spawnParts(e.x+18,e.y+13,12,["#b8452e","#5a6673","#9aa5b1"],4.5,22,0.2); noiseHit(0.08,0.10,2200);
+      }
+      continue;
+    }
+    if(empT>0) continue;
+    const dir=Math.sign(e.vx)||1;
+    const aheadX=e.x+(dir>0?e.w+2:-2);
+    const wallT=solidAt(Math.floor(aheadX/TILE),Math.floor((e.y+e.h-6)/TILE));
+    const floorT=solidAt(Math.floor(aheadX/TILE),Math.floor((e.y+e.h+6)/TILE));
+    let crateBlock=false;
+    for(const b of boxes) if(b.alive&&rectsOverlap({x:aheadX-2,y:e.y,w:4,h:e.h},b)){ crateBlock=true; break; }
+    if(wallT||!floorT||crateBlock) e.vx=-e.vx;
+    else e.x+=e.vx;
+  }
+
   // crushers — phase-locked (Phase 0.2): schedule the slam to intersect
   // the player's estimated arrival; telegraph floor makes it dodgeable.
   // More slack = fires earlier = arrives ahead of the player = mercy.
-  for(const c of crushers){
+  // EMP freezes the whole state machine, mid-slam included.
+  if(empT===0) for(const c of crushers){
     if(c.state===0){
       if(c.cool>0) c.cool--;
       else{
@@ -387,7 +557,11 @@ function tick(){
     }
   }
 
-  if(p.win) return;
+  if(p.win){
+    winT++;
+    if(stage<N_STAGES-1 && winT>150) buildLevel(stage+1);   // next sector
+    return;
+  }
   if(p.dead>0){ p.dead--; if(p.dead===0) respawn(); return; }
 
   /* ---- horizontal (C2) ---- */
@@ -409,7 +583,7 @@ function tick(){
   if(sLatch>0) sLatch--;
   if((sPressed||sLatch>0) && p.spin===0 && p.overheat===0){
     sLatch=0;
-    p.spin=SPIN_T; p.heat++; sfx.spin();
+    p.spin=SPIN_T; if(coolT===0) p.heat++; sfx.spin();   // coolant: free spins
     if(p.heat>=HEAT_MAX){ p.overheat=OVERHEAT_T; sfx.overheat(); }
   }
   if(p.spin>0){
@@ -420,6 +594,15 @@ function tick(){
       if(b.tnt){ b.alive=false; broken++; explode(b.x+24,b.y+24); }  // spinning TNT = instant boom, stay clear
       else breakBox(b);
     }
+    for(const e of enemies) if(e.alive&&e.launched===0&&rectsOverlap(hb,e)){   // C6 generosity: spin hitbox launches
+      e.launched=80; e.lvx=((e.x+e.w/2)<(p.x+p.w/2)?-10:10);
+      sfx.launch(); hitstop=Math.max(hitstop,2); evLog("enemyLaunch",{x:Math.round(e.x)});
+    }
+  }
+  // invincibility: contact breaks crates and squishes scuttlers
+  if(invT>0){
+    for(const b of boxes) if(b.alive&&rectsOverlap(p,b)){ if(b.tnt){b.alive=false;broken++;explode(b.x+24,b.y+24);} else breakBox(b); }
+    for(const e of enemies) if(e.alive&&e.launched===0&&rectsOverlap(p,e)){ e.alive=false; sfx.squish(); evLog("enemyKill",{by:"invincible"}); spawnParts(e.x+18,e.y+13,10,["#b8452e","#9aa5b1"],4,20,0.2); }
   }
 
   /* ---- jump (C3, C5) ---- */
@@ -458,7 +641,7 @@ function tick(){
   p.x+=p.vx;
   for(const r of collideRects(p)){
     if(!rectsOverlap(p,r)) continue;
-    if(!r.tile && p.spin>0){ if(r.tnt){r.alive=false;broken++;explode(r.x+24,r.y+24);} else breakBox(r); continue; }  // C6: plow through
+    if(!r.tile && (p.spin>0||invT>0)){ if(r.tnt){r.alive=false;broken++;explode(r.x+24,r.y+24);} else breakBox(r); continue; }  // C6: plow through
     if(p.vx>0) p.x=r.x-p.w; else if(p.vx<0) p.x=r.x+r.w; else { p.x = (p.x+p.w/2)<(r.x+r.w/2) ? r.x-p.w : r.x+r.w; }
     p.vx=0;
   }
@@ -483,7 +666,7 @@ function tick(){
       }
       p.y=r.y-p.h; p.vy=0; landed=true;
     } else if(p.vy<0){
-      if(!r.tile && p.spin>0){ if(r.tnt){r.alive=false;broken++;explode(r.x+24,r.y+24);} else breakBox(r); continue; }
+      if(!r.tile && (p.spin>0||invT>0)){ if(r.tnt){r.alive=false;broken++;explode(r.x+24,r.y+24);} else breakBox(r); continue; }
       p.y=r.y+r.h; p.vy=0;
     }
   }
@@ -502,12 +685,26 @@ function tick(){
 
   /* ---- hazards ---- */
   const pr={x:p.x+4,y:p.y+4,w:p.w-8,h:p.h-8};
-  for(const s of spikes) if(rectsOverlap(pr,s)){ kill(); break; }
+  for(const s of spikes) if(rectsOverlap(pr,s)){ damage("spike"); break; }
   for(const c of crushers){
     const body={x:c.x+4,y:c.anchor,w:TILE-8,h:c.head-c.anchor+40};
-    if(c.head>c.rest+6 && rectsOverlap(pr,body)){ kill(); break; }
+    if(c.head>c.rest+6 && rectsOverlap(pr,body)){ damage("crusher"); break; }
   }
-  if(p.y>LH*TILE+80) kill();
+  // scuttler contact: spin already launched it above; stomp squishes
+  // and springs (refreshes double jump, like a crate); otherwise a hit
+  for(const e of enemies){
+    if(!e.alive||e.launched>0||!rectsOverlap(pr,e)) continue;
+    if(invT>0) continue;                                // handled in the invincibility sweep
+    if(p.spin>0) continue;                              // spin hitbox sweep will catch it
+    if(p.vy>1.5 && (p.y+p.h)-e.y<16){
+      e.alive=false; sfx.squish(); evLog("enemyKill",{by:"stomp"});
+      spawnParts(e.x+18,e.y+13,12,["#b8452e","#9aa5b1","#5a6673"],4,22,0.2);
+      p.y=e.y-p.h; p.vy=key.j?-9.4:-7.8; p.jumps=1; p.jumpHeld=key.j;
+      p.sx=1.2; p.sy=0.8; telTakeoff("bounce");
+    }
+    else damage("enemy");
+  }
+  if(p.y>LH*TILE+80) kill("pit");   // falls bypass the shield — always
 
   // checkpoints (C9: fast loop, generous saves)
   for(const cp of checkpoints){
@@ -598,6 +795,7 @@ function draw(){
     ctx.fillStyle="#39424e"; ctx.fillRect(hx+2,c.head+32,44,8);
     for(let i=0;i<3;i++){ ctx.fillStyle= c.state===4 ? ((perf%8<4)?"#ff5d3a":"#20262f") : (i%2?"#e8a33d":"#20262f"); ctx.fillRect(hx+4+i*14,c.head+6,12,8); }
     ctx.fillStyle="#20262f"; ctx.fillRect(hx+2,c.head,44,4);
+    if(empT>0){ ctx.fillStyle="rgba(159,210,255,0.20)"; ctx.fillRect(c.x+2,c.head,44,40); }
   }
 
   // boxes
@@ -619,6 +817,49 @@ function draw(){
     }
   }
 
+  // scuttlers
+  for(const e of enemies){
+    if(!e.alive) continue;
+    const dir=Math.sign(e.launched>0?e.lvx:e.vx)||1;
+    ctx.save(); ctx.translate(e.x+e.w/2,e.y+e.h);
+    if(e.launched>0) ctx.rotate(perf*0.5*dir);
+    ctx.fillStyle="#20262f"; ctx.fillRect(-16,-8,32,8);                       // treads
+    ctx.fillStyle="#39424e"; const tr=Math.floor(perf/4)%2;
+    for(let i=0;i<4;i++) ctx.fillRect(-14+i*8+(tr&&e.launched===0&&empT===0?2:0),-7,4,6);
+    ctx.fillStyle= empT>0&&e.launched===0 ? "#5a7d99" : "#b8452e";            // dome
+    ctx.beginPath(); ctx.arc(0,-12,14,Math.PI,0); ctx.fill();
+    ctx.fillRect(-14,-12,28,5);
+    ctx.fillStyle="#8f3322"; ctx.fillRect(-14,-9,28,2);
+    ctx.fillStyle= empT>0&&e.launched===0 ? "#9fd2ff" : "#ffd98a";            // eye
+    ctx.fillRect(dir>0?4:-9,-19,5,4);
+    ctx.restore();
+    if(empT>0&&e.launched===0){ ctx.fillStyle="rgba(159,210,255,0.6)"; ctx.font="10px monospace"; ctx.textAlign="left"; ctx.fillText("z",e.x+e.w-2,e.y-6+Math.sin(perf/10)*2); }
+  }
+
+  // pickups (blink when about to despawn)
+  for(const k of pickups){
+    const bob=Math.sin((perf+k.x)/9)*2;
+    if(k.t>780&&k.t%10<5) continue;
+    if(k.kind==="bolt"){
+      ctx.save(); ctx.translate(k.x,k.y+bob); ctx.rotate(perf/14);
+      ctx.fillStyle="#ffd98a"; ctx.fillRect(-5,-5,10,10);
+      ctx.fillStyle="#c97b2d"; ctx.fillRect(-2,-2,4,4);
+      ctx.restore();
+    } else if(k.kind==="cool"){
+      ctx.fillStyle="#7fd8e8"; ctx.fillRect(k.x-5,k.y-8+bob,10,16);
+      ctx.fillStyle="#cfeef5"; ctx.fillRect(k.x-5,k.y-8+bob,10,4);
+    } else if(k.kind==="emp"){
+      ctx.fillStyle="#ffe14d"; ctx.beginPath(); ctx.arc(k.x,k.y+bob,7,0,7); ctx.fill();
+      ctx.strokeStyle="rgba(255,225,77,0.5)"; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(k.x,k.y+bob,11+Math.sin(perf/6)*2,0,7); ctx.stroke();
+    } else {                                                                  // shield drone
+      ctx.fillStyle="#7fe8a3"; ctx.fillRect(k.x-7,k.y-4+bob,14,8);
+      ctx.fillStyle="#d7ffe6"; ctx.fillRect(k.x-3,k.y-2+bob,6,4);
+      ctx.strokeStyle="rgba(127,232,163,0.5)"; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.arc(k.x,k.y+bob,12,0,7); ctx.stroke();
+    }
+  }
+
   // spin ghosts
   for(const g of ghosts){
     ctx.globalAlpha=g.life/10*0.25;
@@ -630,33 +871,58 @@ function draw(){
   for(const q of parts){ ctx.globalAlpha=Math.max(0,q.life/q.max); ctx.fillStyle=q.c; ctx.fillRect(q.x-q.sz/2,q.y-q.sz/2,q.sz,q.sz); }
   ctx.globalAlpha=1;
 
-  if(!(p.dead>0)) drawRobot(p.x,p.y,p.face,p.sx,p.sy,p.spin>0,p.run,p.grounded,p.vy);
+  if(!(p.dead>0)){
+    if(!(iframes>0&&perf%6<3))                                               // post-hit flicker
+      drawRobot(p.x,p.y,p.face,p.sx,p.sy,p.spin>0,p.run,p.grounded,p.vy);
+    // shield drones orbit; invincibility = gold aura + frantic orbit
+    const stacks = invT>0?3:shield;
+    for(let i=0;i<stacks;i++){
+      const a=perf*(invT>0?0.25:0.08)+i*Math.PI*2/Math.max(stacks,1);
+      const dx=p.x+p.w/2+Math.cos(a)*30, dy=p.y+p.h/2+Math.sin(a)*16-6;
+      ctx.fillStyle= invT>0 ? "#ffd98a" : "#7fe8a3"; ctx.fillRect(dx-4,dy-2,8,5);
+      ctx.fillStyle="#d7ffe6"; ctx.fillRect(dx-1,dy-1,3,3);
+    }
+    if(invT>0){
+      ctx.strokeStyle=`rgba(255,217,138,${invT<90?(perf%8<4?0.15:0.6):0.55})`;  // blink when ending
+      ctx.lineWidth=3; ctx.beginPath(); ctx.ellipse(p.x+p.w/2,p.y+p.h/2,26,30,0,0,7); ctx.stroke();
+    }
+  }
 
-  // world hints
-  ctx.fillStyle="rgba(210,220,235,0.5)"; ctx.font="14px monospace"; ctx.textAlign="left";
-  ctx.fillText("◀ ▶ move · SPACE jump (tap short / hold high) · again in air = double jump", 60, 350);
-  ctx.fillText("J / K = SPIN — breaks crates, hover-spins in the air", 60, 372);
-  ctx.fillText("bounce on crates to break them ↑", 560, 300);
+  // world hints (sector 1 only)
+  if(stage===0){
+    ctx.fillStyle="rgba(210,220,235,0.5)"; ctx.font="14px monospace"; ctx.textAlign="left";
+    ctx.fillText("◀ ▶ move · SPACE jump (tap short / hold high) · again in air = double jump", 60, 350);
+    ctx.fillText("J / K = SPIN — breaks crates, hover-spins in the air", 60, 372);
+    ctx.fillText("bounce on crates to break them ↑", 560, 300);
+  }
   ctx.restore();
 
   // screen flash
   if(flashT>0){ ctx.fillStyle=`rgba(255,240,220,${flashT/6*0.5})`; ctx.fillRect(0,0,VW,VH); }
 
   /* HUD */
-  ctx.fillStyle="rgba(10,14,20,0.55)"; ctx.fillRect(14,12,196,84);
+  ctx.fillStyle="rgba(10,14,20,0.55)"; ctx.fillRect(14,12,206,102);
   ctx.fillStyle="#e8a33d"; ctx.font="bold 16px monospace"; ctx.textAlign="left";
-  ctx.fillText(`CRATES ${broken} / ${totalBoxes}`, 26, 36);
-  ctx.fillStyle="#9aa5b1"; ctx.font="13px monospace";
-  ctx.fillText(`deaths ${deaths}   R restart`, 26, 58);
+  ctx.fillText(`SECTOR ${stage+1}/${N_STAGES}`, 26, 36);
+  ctx.fillStyle="#dfe8f2"; ctx.font="13px monospace";
+  ctx.fillText(`crates ${broken}/${totalBoxes}   scrap ${scrap}`, 26, 56);
+  ctx.fillStyle="#9aa5b1";
+  ctx.fillText(`deaths ${deaths}   R restart`, 26, 74);
   ctx.font="11px monospace";
-  ctx.fillText(`seed ${SEED} · T data (${telemN})`, 26, 76);
+  ctx.fillText(`seed ${SEED} · T data (${telemN})`, 26, 92);
   // spin heat gauge
   ctx.fillStyle="rgba(10,14,20,0.55)"; ctx.fillRect(VW-150,12,136,40);
   ctx.fillStyle="#9aa5b1"; ctx.font="11px monospace"; ctx.fillText("GYRO", VW-140, 26);
   for(let i=0;i<HEAT_MAX;i++){
-    ctx.fillStyle = p.overheat>0 ? (perf%20<10?"#b8452e":"#5a2a20") : (i<p.heat?"#7fd8e8":"#2b3442");
+    ctx.fillStyle = p.overheat>0 ? (perf%20<10?"#b8452e":"#5a2a20") : (coolT>0?"#d7ffe6":(i<p.heat?"#7fd8e8":"#2b3442"));
     ctx.fillRect(VW-140+i*26, 32, 20, 10);
   }
+  // consumable buff bars
+  let by=58;
+  if(coolT>0){ ctx.fillStyle="rgba(10,14,20,0.55)"; ctx.fillRect(VW-150,by,136,12);
+    ctx.fillStyle="#7fd8e8"; ctx.fillRect(VW-148,by+2,132*coolT/COOL_T,8); by+=16; }
+  if(empT>0){ ctx.fillStyle="rgba(10,14,20,0.55)"; ctx.fillRect(VW-150,by,136,12);
+    ctx.fillStyle="#ffe14d"; ctx.fillRect(VW-148,by+2,132*empT/EMP_T,8); }
 
   // touch buttons
   if(touchSeen){
@@ -673,11 +939,19 @@ function draw(){
   if(p.win){
     ctx.fillStyle="rgba(8,10,16,0.72)"; ctx.fillRect(0,0,VW,VH);
     ctx.textAlign="center";
-    ctx.fillStyle="#e8a33d"; ctx.font="bold 44px monospace"; ctx.fillText("LEVEL CLEAR", VW/2, VH/2-40);
-    ctx.fillStyle="#dfe8f2"; ctx.font="20px monospace";
-    ctx.fillText(`crates ${broken} / ${totalBoxes}${broken===totalBoxes?"  — ALL CLEAR!":""}`, VW/2, VH/2+6);
-    ctx.fillText(`deaths ${deaths} · seed ${SEED}`, VW/2, VH/2+36);
-    ctx.fillStyle="#9aa5b1"; ctx.font="15px monospace"; ctx.fillText("press R to run it back", VW/2, VH/2+78);
+    if(stage<N_STAGES-1){
+      ctx.fillStyle="#7fe8a3"; ctx.font="bold 40px monospace"; ctx.fillText(`SECTOR ${stage+1} CLEAR`, VW/2, VH/2-34);
+      ctx.fillStyle="#dfe8f2"; ctx.font="18px monospace";
+      ctx.fillText(`crates ${broken}/${totalBoxes}${broken===totalBoxes?" — ALL CLEAR!":""} · scrap ${scrap}`, VW/2, VH/2+4);
+      ctx.fillStyle="#9aa5b1"; ctx.font="15px monospace";
+      ctx.fillText("deploying next sector"+".".repeat(1+(Math.floor(perf/20)%3)), VW/2, VH/2+42);
+    } else {
+      ctx.fillStyle="#e8a33d"; ctx.font="bold 44px monospace"; ctx.fillText("RUN COMPLETE", VW/2, VH/2-46);
+      ctx.fillStyle="#dfe8f2"; ctx.font="20px monospace";
+      ctx.fillText(`crates ${broken}/${totalBoxes}${broken===totalBoxes?"  — ALL CLEAR!":""}`, VW/2, VH/2);
+      ctx.fillText(`scrap ${scrap} · deaths ${deaths} · seed ${SEED}`, VW/2, VH/2+30);
+      ctx.fillStyle="#9aa5b1"; ctx.font="15px monospace"; ctx.fillText("press R to run it back", VW/2, VH/2+72);
+    }
   }
 }
 
@@ -733,6 +1007,7 @@ function drawRobot(x,y,face,sx,sy,spin,run,grounded,vy){
 }
 
 /* ---------------- loop ---------------- */
+buildLevel(0);
 let perf=0, acc=0, last=performance.now();
 function frame(now){
   let dt=now-last; last=now;
