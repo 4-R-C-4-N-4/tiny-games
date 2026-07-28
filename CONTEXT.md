@@ -73,7 +73,8 @@ and the design must be sharp enough to not hide behind content volume.
    loses at random it's unfair. The same loop is the Phase-2 self-play training tap —
    "one engine, two consumers" made literal.
 6. **The deploy contract**: a `game.json` (`name`, `rune` emoji, `tagline`, `note`,
-   optional `embed:false` for fullscreen-only cabinets) + a block in
+   optional `embed:false` for fullscreen-only cabinets, optional `order` for cabinet
+   placement — ascending, unset sorts last alphabetically) + a block in
    `.github/workflows/deploy.yml` that gates on the harness and copies/builds into
    `_site/<slug>/`. Push to main → Pages → the ARCANA site picks it up from
    `games.json` with zero site edits.
