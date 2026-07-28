@@ -21,6 +21,7 @@ The magic, as testable statements (H = enforced in the harness, P = needs playte
 6. **(built)** Proximity is multi-channel: boulder scale + rumble gain + shake + road shadow + red vignette + antenna light.
 7. **(built)** A clean stretch opens the gap — the policy relaxes toward `targetGap` when you stop stumbling.
 8. **(H)** Standing still is death: stumble heat compounds (`heat+1` per stumble, target gap `−heat*4.5`), so an idle player is caught in ~15–40s; clean running bleeds heat off. No AFK equilibrium.
+9. **(built, screenshot-checked)** The downhill read (visual touchstone: Crash 2's *Un-Bearable* polar-bear chase): terrain fills 100% of the frame — no sky; the runner sits mid-frame (~57% down) with generous revealed track below; the boulder sits visually ABOVE the runner on the up-slope; the road darkens up-slope and lightens toward the camera.
 Divergence (only after playtest parity): the boulder as a *director* — it studies steering
 habits and spawns danger where you habitually drift, inside the passability envelope.
 
@@ -44,7 +45,7 @@ F6. Camera fixed; the road does the motion. No lateral camera movement.
 | `STUMBLE_T / PIT / INVULN` | 50f / 62f / 70f | crack stumbles hurt more |
 | stumble pounce | `bSpd ≥ spd+0.09` | touchstone #2 |
 | stumble heat | +1/stumble (max 6), −1/240f after 3s clean | touchstone #8; target gap −`heat*4.5` |
-| projection | `y = HORIZON + A/(CAMD+LEAD−rel)`, `CAMD=16` | one smooth mapping, no kinks/popping |
+| projection | `y = HORIZON + A/(CAMD+LEAD−rel)`, `HORIZON=70`, `CAMD=17` | one smooth mapping; downhill framing (see §2a) |
 | boulder draw | `r=(185+165·prox)·s`, grounded at contact line | proximity fills the frame, not base size |
 
 ## 4. Verbs & knobs

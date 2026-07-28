@@ -36,8 +36,12 @@
 const cv=document.getElementById("cv"), ctx=cv.getContext("2d");
 const VW=540, VH=960, CX=VW/2;
 /* one smooth projective mapping for EVERYTHING on the track — no
-   piecewise kinks, no modulo popping. y = HORIZON + A/(CAMD+LEAD-rel). */
-const HORIZON=230, BOTTOM=VH+40, CAMD=16;
+   piecewise kinks, no modulo popping. y = HORIZON + A/(CAMD+LEAD-rel).
+   Downhill framing (touchstone: Crash 2's Un-Bearable): terrain fills
+   the whole frame (no sky), the runner sits mid-frame with generous
+   revealed track below, and the pursuer looms visually ABOVE them —
+   the camera reads as high and tilted down the slope. */
+const HORIZON=70, BOTTOM=VH+40, CAMD=17;
 
 /* ---------------- seeded RNG (state randomness only) ---------------- */
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
@@ -77,7 +81,7 @@ const PROJ_A=(BOTTOM-HORIZON)*CAMD;
 function yOf(rel){ return HORIZON + PROJ_A/(CAMD+LEAD-Math.min(rel,LEAD)); }
 const PLAYER_Y=yOf(0);
 function scaleOf(y){ return Math.min(1.45, 0.15+0.85*(y-HORIZON)/(PLAYER_Y-HORIZON)); }
-function hwOf(y){ return 24+(y-HORIZON)/(BOTTOM-HORIZON)*300; }
+function hwOf(y){ return 10+(y-HORIZON)/(BOTTOM-HORIZON)*330; }
 
 /* ---------------- course grammar (Phase 0 substrate) ----------------
    Every row must be passable BY CONSTRUCTION: rows containing
@@ -375,34 +379,47 @@ function tick(){
 
 /* ---------------- render ---------------- */
 function drawCanyon(){
-  // midnight sky + horizon glow (robo-smash palette family — no browns)
-  const sky=ctx.createLinearGradient(0,0,0,VH);
-  sky.addColorStop(0,"#101726"); sky.addColorStop(0.55,"#182236"); sky.addColorStop(1,"#0e131d");
-  ctx.fillStyle=sky; ctx.fillRect(0,0,VW,VH);
-  const hg=ctx.createLinearGradient(0,HORIZON-70,0,HORIZON+30);
-  hg.addColorStop(0,"rgba(127,216,232,0)"); hg.addColorStop(1,"rgba(127,216,232,0.10)");
-  ctx.fillStyle=hg; ctx.fillRect(0,HORIZON-70,VW,100);
-  // distant tower silhouettes (static — they're far away)
-  ctx.fillStyle="#141b2a";
-  for(let i=0;i<9;i++){
-    const w=34+((i*2654435761)>>>8)%40, h=42+((i*40503)>>>4)%88;
-    const x=(i*67+((i*97)%23))%(VW+60)-30;
+  // NO sky — terrain fills the frame (downhill read). The strip above
+  // the horizon line is the upper slope, falling away behind the boulder.
+  const up=ctx.createLinearGradient(0,0,0,HORIZON+160);
+  up.addColorStop(0,"#0a0d14"); up.addColorStop(0.6,"#0e1420"); up.addColorStop(1,"#10151f");
+  ctx.fillStyle=up; ctx.fillRect(0,0,VW,HORIZON+160);
+  // crest light: the glow spilling over the ridge you're fleeing down from
+  const hg=ctx.createLinearGradient(0,HORIZON-26,0,HORIZON+34);
+  hg.addColorStop(0,"rgba(127,216,232,0)"); hg.addColorStop(0.5,"rgba(127,216,232,0.13)"); hg.addColorStop(1,"rgba(127,216,232,0)");
+  ctx.fillStyle=hg; ctx.fillRect(0,HORIZON-26,VW,60);
+  // ridge bumps on the crest line
+  ctx.fillStyle="#0c1019";
+  for(let i=0;i<11;i++){
+    const w=30+((i*2654435761)>>>8)%34, h=10+((i*40503)>>>4)%26;
+    const x=(i*53+((i*97)%19))%(VW+40)-20;
     ctx.fillRect(x,HORIZON-h,w,h);
-    ctx.fillRect(x+w*0.3,HORIZON-h-14,6,14);
   }
   // ground plane beyond the causeway
   ctx.fillStyle="#10151f"; ctx.fillRect(0,HORIZON,VW,VH-HORIZON);
+  // heavy side masses framing the corridor (the widening slope walls)
+  for(let side=-1;side<=1;side+=2){
+    ctx.fillStyle="#0d1119";
+    ctx.beginPath();
+    ctx.moveTo(CX+side*(hwOf(HORIZON)+18),HORIZON);
+    for(let i=1;i<=12;i++){
+      const rel=LEAD+2-(LEAD+2+BEHIND)*(1-i/12), y=yOf(rel);
+      ctx.lineTo(CX+side*(hwOf(y)+26+((y-HORIZON)/(BOTTOM-HORIZON))*90),y);
+    }
+    ctx.lineTo(side>0?VW:0,BOTTOM); ctx.lineTo(side>0?VW:0,HORIZON);
+    ctx.closePath(); ctx.fill();
+  }
   // lit pylons flanking the causeway — smooth continuous motion (no strata popping)
   for(let k=0;k<10;k++){
     const zp=Math.floor((p.z-BEHIND)/7)*7+k*7, rel=zp-p.z;
     if(rel>LEAD+4||rel<-BEHIND) continue;
     const y=yOf(rel), s=scaleOf(y);
     for(let side=-1;side<=1;side+=2){
-      const x=CX+side*(hwOf(y)+14*s+10);
-      ctx.fillStyle="#232b3a"; ctx.fillRect(x-5*s,y-88*s,10*s,88*s);
-      ctx.fillStyle="#2f3a4d"; ctx.fillRect(x-5*s,y-88*s,10*s,8*s);
+      const x=CX+side*(hwOf(y)+20*s+12);
+      ctx.fillStyle="#1c2431"; ctx.fillRect(x-9*s,y-132*s,18*s,132*s);
+      ctx.fillStyle="#2a3547"; ctx.fillRect(x-9*s,y-132*s,18*s,10*s);
       ctx.fillStyle=`rgba(127,216,232,${0.35+0.25*Math.sin(perf/14+k)})`;
-      ctx.fillRect(x-3*s,y-80*s,6*s,10*s);
+      ctx.fillRect(x-5*s,y-120*s,10*s,13*s);
     }
   }
 }
@@ -415,8 +432,11 @@ function railPath(side){
   }
 }
 function drawRoad(){
-  // slate causeway — one opaque fill, no seam artifacts
-  ctx.fillStyle="#1b2230";
+  // slate causeway — one opaque fill, no seam artifacts; darker up-slope,
+  // lighter toward the camera = light falling on the near face of the hill
+  const slope=ctx.createLinearGradient(0,HORIZON,0,BOTTOM);
+  slope.addColorStop(0,"#131a28"); slope.addColorStop(0.5,"#1b2230"); slope.addColorStop(1,"#242e42");
+  ctx.fillStyle=slope;
   ctx.beginPath();
   ctx.moveTo(CX-hwOf(HORIZON),HORIZON); ctx.lineTo(CX+hwOf(HORIZON),HORIZON);
   ctx.lineTo(CX+hwOf(BOTTOM),BOTTOM); ctx.lineTo(CX-hwOf(BOTTOM),BOTTOM);
@@ -487,7 +507,7 @@ function drawBolt(k){
 function drawBoulder(){
   const y=yOf(-gap), s=scaleOf(y);
   // base size is modest; PROXIMITY is what makes it fill the frame (F4)
-  const prox=Math.max(0,(14-gap)/14), r=(185+165*prox)*s;
+  const prox=Math.max(0,(14-gap)/14), r=(215+150*prox)*s;
   const x=CX+Math.sin(roll*0.13)*8*s;
   // the sphere RESTS on the road: bottom edge at its contact line, mass
   // rising up-screen — it must never spill over the track toward the player
