@@ -21,7 +21,7 @@ The magic, as testable statements (H = enforced in the harness, P = needs playte
 6. **(built)** Proximity is multi-channel: boulder scale + rumble gain + shake + road shadow + red vignette + antenna light.
 7. **(built)** A clean stretch opens the gap — the policy relaxes toward `targetGap` when you stop stumbling.
 8. **(H)** Standing still is death: stumble heat compounds (`heat+1` per stumble, target gap `−heat*4.5`), so an idle player is caught in ~15–40s; clean running bleeds heat off. No AFK equilibrium.
-9. **(built, screenshot-checked)** The downhill read (visual touchstone: Crash 2's *Un-Bearable* polar-bear chase): terrain fills 100% of the frame — no sky; the runner sits mid-frame (~57% down) with generous revealed track below; the boulder sits visually ABOVE the runner on the up-slope; the road darkens up-slope and lightens toward the camera.
+9. **(built, screenshot-checked)** The downhill read (visual touchstone: Crash 2's *Un-Bearable* polar-bear chase): terrain fills 100% of the frame — no sky; the runner sits mid-frame (~57% down) with generous revealed track below; the boulder sits visually ABOVE the runner on the up-slope; the road darkens up-slope and lightens toward the camera; edge scenery (wall ribs, ruined columns/slabs/girders, near-rail debris, cage arches every ~40m) streams past, hash-keyed to world z — stable per frame, zero state-RNG cost, dark slate only so the cage stays mute vs hazards.
 Divergence (only after playtest parity): the boulder as a *director* — it studies steering
 habits and spawns danger where you habitually drift, inside the passability envelope.
 

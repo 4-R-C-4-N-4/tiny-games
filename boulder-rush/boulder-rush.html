@@ -409,7 +409,80 @@ function drawCanyon(){
     ctx.lineTo(side>0?VW:0,BOTTOM); ctx.lineTo(side>0?VW:0,HORIZON);
     ctx.closePath(); ctx.fill();
   }
-  // lit pylons flanking the causeway — smooth continuous motion (no strata popping)
+  drawScenery();
+}
+/* streaming edge scenery — every element is a pure function of its
+   world-z segment (integer hash), so it is stable frame to frame,
+   consumes no state RNG, and streams/accelerates correctly through
+   the shared projection. Scenery is dark slate only: amber means
+   hazard, cyan means information — the cage stays mute. */
+function sceneHash(n){ n=Math.imul(n^(n>>>15),2654435761); n=Math.imul(n^(n>>>13),40503); return (n^(n>>>16))>>>0; }
+function drawScenery(){
+  // wall ribs: dense strata streaming down the side masses
+  for(let k=0;k<22;k++){
+    const zi=Math.floor((p.z-BEHIND)/2.2)+k, rel=zi*2.2-p.z;
+    if(rel>LEAD+2||rel<-BEHIND) continue;
+    const y=yOf(rel), s=scaleOf(y); if(s<0.18) continue;
+    const h=sceneHash(zi), w=(24+(h%26))*s;
+    ctx.fillStyle="#131926";
+    for(let side=-1;side<=1;side+=2){
+      const x=CX+side*(hwOf(y)+30+((y-HORIZON)/(BOTTOM-HORIZON))*95);
+      ctx.fillRect(side>0?x:x-w,y-2*s,w,3*s);
+    }
+  }
+  // ruins: columns / slab stacks / girder frames / rubble, alternating sides
+  for(let k=0;k<15;k++){
+    const zi=Math.floor((p.z-BEHIND)/3.5)+k, rel=zi*3.5-p.z;
+    if(rel>LEAD+3||rel<-BEHIND) continue;
+    const y=yOf(rel), s=scaleOf(y); if(s<0.16) continue;
+    const h=sceneHash(zi*7+1), side=(h&1)?1:-1;
+    const x=CX+side*(hwOf(y)+(24+(h>>>3)%34)*s+10);
+    const t=(h>>>8)%4;
+    if(t===0){                                        // broken column
+      const ch=(80+(h>>>10)%70)*s;
+      ctx.fillStyle="#1f2836"; ctx.fillRect(x-7*s,y-ch,14*s,ch);
+      ctx.fillStyle="#2a3547"; ctx.fillRect(x-8*s,y-ch,16*s,7*s);
+      ctx.fillStyle="#141a26"; ctx.fillRect(x-7*s,y-ch*0.45,14*s,3*s);
+    } else if(t===1){                                 // slab stack
+      ctx.fillStyle="#1c2431"; ctx.fillRect(x-16*s,y-12*s,32*s,12*s);
+      ctx.fillStyle="#222c3c"; ctx.fillRect(x-12*s,y-22*s,24*s,10*s);
+      ctx.fillStyle="#1a212e"; ctx.fillRect(x-8*s,y-30*s,16*s,8*s);
+    } else if(t===2){                                 // girder frame
+      ctx.strokeStyle="#232d3d"; ctx.lineWidth=Math.max(1,3.5*s);
+      ctx.beginPath();
+      ctx.moveTo(x-13*s,y); ctx.lineTo(x-13*s,y-52*s); ctx.lineTo(x+13*s,y-52*s); ctx.lineTo(x+13*s,y);
+      ctx.moveTo(x-13*s,y); ctx.lineTo(x+13*s,y-52*s); ctx.moveTo(x+13*s,y); ctx.lineTo(x-13*s,y-52*s);
+      ctx.stroke();
+    } else {                                          // rubble mound
+      ctx.fillStyle="#1a212e";
+      ctx.beginPath(); ctx.ellipse(x,y-5*s,18*s,9*s,0,0,7); ctx.fill();
+      ctx.fillStyle="#232d3d"; ctx.beginPath(); ctx.ellipse(x-6*s,y-10*s,8*s,5*s,0,0,7); ctx.fill();
+    }
+  }
+  // near-rail debris: small, fast — the speed-lines of the bottom half
+  for(let k=0;k<36;k++){
+    const zi=Math.floor((p.z-BEHIND)/1.3)+k, rel=zi*1.3-p.z;
+    if(rel>LEAD+1||rel<-BEHIND*0.6) continue;
+    const y=yOf(rel), s=scaleOf(y); if(s<0.3) continue;
+    const h=sceneHash(zi*13+5), side=(h&1)?1:-1;
+    const x=CX+side*(hwOf(y)+(6+(h>>>4)%14)*s);
+    ctx.fillStyle="#1e2735";
+    ctx.fillRect(x-2.5*s,y-2.5*s,5*s,4*s);
+  }
+  // arches: the corridor's cage bars, every ~40m
+  for(let k=0;k<3;k++){
+    const zi=Math.floor((p.z-BEHIND)/40)+k, rel=zi*40-p.z;
+    if(rel>LEAD+2||rel<-BEHIND) continue;
+    const y=yOf(rel), s=scaleOf(y); if(s<0.15) continue;
+    const hw=hwOf(y)+16, top=(150+((sceneHash(zi*31+9)>>>6)%40))*s;
+    ctx.fillStyle="#161d29";
+    ctx.fillRect(CX-hw-12*s,y-top,12*s,top);
+    ctx.fillRect(CX+hw,y-top,12*s,top);
+    ctx.fillRect(CX-hw-14*s,y-top,hw*2+28*s,12*s);
+    ctx.fillStyle="#1f2836";
+    ctx.fillRect(CX-hw-14*s,y-top,hw*2+28*s,3*s);
+  }
+  // lit pylons flanking the causeway (drawn last: nearest the track)
   for(let k=0;k<10;k++){
     const zp=Math.floor((p.z-BEHIND)/7)*7+k*7, rel=zp-p.z;
     if(rel>LEAD+4||rel<-BEHIND) continue;
