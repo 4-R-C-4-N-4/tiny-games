@@ -14,6 +14,9 @@ starting a new game (with a worked example). This file is only the summary.
    replays exactly), cosmetic randomness unseeded and stateless.
 4. **Headless test harness** driving the real sim, wired as the deploy gate. Passing
    count goes in `game.json.note`.
+   **A play loop ships with every game** (`observe/act/step`, player verbs only) and
+   the agent plays it: null / naive / tuned policies, with the skill gradient asserted
+   (null always loses; null < naive < tuned).
 5. **Feel first**: each game has a numbered feel contract; never touch its constants to
    balance the AI. Playtest the first 20 seconds after every change; feel regression =
    revert first, discuss second.

@@ -63,14 +63,23 @@ and the design must be sharp enough to not hide behind content volume.
    if built). Cover: generation validity across many seeds, determinism, the game's
    fairness floors, input-latch edge cases, and a long random-input soak. The passing
    count goes in `game.json.note` — brag with evidence.
-5. **The deploy contract**: a `game.json` (`name`, `rune` emoji, `tagline`, `note`,
+5. **A minimal play loop ships, and the agent plays the game.** Every build exposes
+   `play.observe() → play.act(<verbs>) → play.step()` over the real sim — the player's
+   verbs and player-visible state ONLY, never internals (internals are for harness
+   assertions, not for play). All harness bots go through it. Before first-gen is done,
+   the building agent plays: a **null** policy, a **naive** policy, and a **tuned**
+   policy, and the harness asserts the skill gradient — null always loses, outcomes
+   strictly order null < naive < tuned. If null ≈ naive the game lacks depth; if tuned
+   loses at random it's unfair. The same loop is the Phase-2 self-play training tap —
+   "one engine, two consumers" made literal.
+6. **The deploy contract**: a `game.json` (`name`, `rune` emoji, `tagline`, `note`,
    optional `embed:false` for fullscreen-only cabinets) + a block in
    `.github/workflows/deploy.yml` that gates on the harness and copies/builds into
    `_site/<slug>/`. Push to main → Pages → the ARCANA site picks it up from
    `games.json` with zero site edits.
-6. **PR flow.** Branch from `origin/main`, PR, merge. Worktrees live in
+7. **PR flow.** Branch from `origin/main`, PR, merge. Worktrees live in
    `../tiny-games-worktrees/<slug>`.
-7. **Baseline player expectations ship with every game**: pause (key + touch target +
+8. **Baseline player expectations ship with every game**: pause (key + touch target +
    auto-pause when the tab hides, any tap resumes), instant restart, seed sharing, and
    sane idle behaviour. In any real-time game **the null strategy must lose** — hands
    off the controls is a losing strategy, and the harness proves it. (A harness full of
@@ -117,6 +126,12 @@ and the design must be sharp enough to not hide behind content volume.
   kink where the pieces meet and modulo-windowed effects pop as elements enter their
   window — players report it as "phasing in and out." One smooth `1/distance` mapping
   for everything on the track fixed it. (boulder-rush)
+- **Play your own game — a policy ladder finds what checks can't.** boulder-rush's
+  first "naive" bot (sloppy late jumps) scored WORSE than doing nothing, revealing both
+  a bot mis-model and a real insight about the skill curve (avoidance is the low-skill
+  path, timing the high-skill one). Scripted checks verify claims you thought of;
+  playing finds the ones you didn't. And fix what the ladder finds in the *policies or
+  the knobs*, never by bending feel constants to flatter a bot. (boulder-rush)
 - **Keep decisions visible.** Resolved open questions get struck through and dated in
   the intent doc, never deleted — the doc is a living changelog of *why*. (robo-smash §6)
 
@@ -194,9 +209,11 @@ Phase 3 — verifier in the loop (fairness floors enforced by search/solver).
 - Single-file ship path. Deterministic core. Playtest-first-20-seconds after changes.
 
 ## 10. Harness expectations
-Headless Node driver over the real sim. Checks: <generation validity across ≥100
-seeds, determinism, each fairness floor, input latches, the null-strategy-loses test,
-soak ≥ 20k ticks>. Wired as the deploy gate. Count goes in game.json.note.
+Headless Node driver over the real sim, and a **play loop** (`observe/act/step`,
+player verbs only) that all bots use. Checks: <generation validity across ≥100 seeds,
+determinism, each fairness floor, input latches, the policy ladder (null always loses;
+null < naive < tuned strictly), soak ≥ 20k ticks>. Wired as the deploy gate. Count
+goes in game.json.note; the play report (three policies' scores) goes in this doc.
 Render gate: headless-browser screenshots (start / mid-action / fail state), diffed
 BY EYE against §4's visual checklist before first-gen is called done.
 
@@ -206,8 +223,8 @@ game.json: {name, rune, tagline, note, embed}. Deploy block in deploy.yml. Mobil
 
 ## 12. Definition of first-gen done
 Touchstone parity list green in playtest + §4 visual checklist green in screenshots +
-Phase 0 substrate live + harness green (null strategy loses) + deployed. Then STOP and
-hand off with this doc updated.
+Phase 0 substrate live + harness green with the skill gradient proven through the play
+loop + deployed. Then STOP and hand off with this doc updated.
 
 ## 13. Open questions (deliberately unresolved)
 - <...; resolved ones get struck through and dated, never deleted>
@@ -315,12 +332,13 @@ obstacles at habitual paths. Phase 3: passability verifier on every spawned row.
 - Single file, portrait-friendly canvas, touch-first. Playtest 30s after each change.
 
 ## 10. Harness expectations
-Headless driver (vm + stubs). Checks: row passability across ≥ 200 seeds,
-determinism (same seed = same course + same director decisions under scripted
-input), fairness floor (perfect bot is never caught; gap ≥ floor without stumbles),
-the null strategy loses (hands-off is caught within ~40s), stumble/surge mechanics,
-telemetry shape, ≥ 30k-tick pointer-fuzz soak. Deploy gate. Render gate: headless
-screenshots vs the §4 checklist.
+Headless driver (vm + stubs) + the play loop (`play.observe/act/step`). Checks: row
+passability across ≥ 200 seeds, determinism (same seed = same course + same director
+decisions under scripted input), fairness floor (perfect bot is never caught; gap ≥
+floor without stumbles), the policy ladder (null always dies; null < naive < tuned —
+shipped report: 116m < 307m < 4809m-at-cap), stumble/surge mechanics, telemetry
+shape, ≥ 30k-tick pointer-fuzz soak. Deploy gate. Render gate: headless screenshots
+vs the §4 checklist.
 
 ## 11. Ship path
 game.json: rune 🪨, embed:false (fullscreen — pointer tracking wants the whole
