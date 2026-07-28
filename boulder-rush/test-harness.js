@@ -27,7 +27,7 @@ function makeCtx(seedQ) {
 }
 const expose = `
 globalThis.__G={
-  tick,p,rows,picks,telem,events,steerHist,ensureCourse,boulderPolicy,stumble,knobs,
+  tick,p,rows,picks,telem,events,steerHist,ensureCourse,boulderPolicy,stumble,knobs,play,
   get started(){return started}, set started(v){started=v},
   get gap(){return gap}, set gap(v){gap=v},
   get spd(){return spd}, set spd(v){spd=v},
@@ -98,20 +98,34 @@ function rowPassable(G,row){
   check("steering converges", Math.abs(G.p.x-0.5)<0.01, G.p.x.toFixed(3));
 }
 
-// ---- perfect bot ----
-function botStep(G){
-  const ahead=G.rows.filter(r=>r.z-G.p.z>0&&r.z-G.p.z<=G.C.LEAD).sort((a,b)=>a.z-b.z)[0];
-  if(ahead){
-    const rel=ahead.z-G.p.z, totems=ahead.obs.filter(o=>o.type==="totem");
-    if(totems.length){
-      const spans=totems.map(o=>[o.x-o.w/2-G.C.PW/2,o.x+o.w/2+G.C.PW/2]).sort((a,b)=>a[0]-b[0]);
-      let cursor=-1,gx=0,bw=-1;
-      for(const [a,b] of spans){ if(a-cursor>bw){bw=a-cursor;gx=(cursor+a)/2;} cursor=Math.max(cursor,b); }
-      if(1-cursor>bw){bw=1-cursor;gx=(cursor+1)/2;}
-      G.p.tx=Math.max(-1,Math.min(1,gx));
-    } else if(rel<G.spd*13) G.jumpQueued=true;
-  }
-  G.tick();
+// ---- policies (all play through the SAME verbs a human has: play.observe/act/step) ----
+function widestGap(obs, pw){
+  const spans=obs.map(o=>[o.x-o.w/2-pw/2,o.x+o.w/2+pw/2]).sort((a,b)=>a[0]-b[0]);
+  let cursor=-1,gx=0,bw=-1;
+  for(const [a,b] of spans){ if(a-cursor>bw){bw=a-cursor;gx=(cursor+a)/2;} cursor=Math.max(cursor,b); }
+  if(1-cursor>bw){bw=1-cursor;gx=(cursor+1)/2;}
+  return gx;
+}
+const POLICIES={
+  null:  (G,o)=>{},                                                  // hands off the controls
+  naive: (G,o)=>{                                                    // mid-skill: avoids what it can, jumps late at walls
+    const row=o.ahead[0]; if(!row) return;
+    const wall=row.obs.some(x=>x.type==="wall");
+    if(!wall) G.play.act({steer:widestGap(row.obs,G.C.PW)});
+    else if(row.rel<o.spd*5) G.play.act({jump:true});
+  },
+  tuned: (G,o)=>{                                                    // the competent player
+    const row=o.ahead[0]; if(!row) return;
+    const totems=row.obs.filter(x=>x.type==="totem");
+    if(totems.length) G.play.act({steer:widestGap(totems,G.C.PW)});
+    else if(row.rel<o.spd*13&&o.air===0) G.play.act({jump:true});
+  },
+};
+function botStep(G){ POLICIES.tuned(G,G.play.observe()); G.play.step(); }
+function runPolicy(seed,name,cap){
+  const G=boot(seed);
+  for(let i=0;i<cap;i++){ POLICIES[name](G,G.play.observe()); G.play.step(); if(G.p.dead)break; }
+  return {dist:G.p.z,dead:G.p.dead};
 }
 
 // ---- 4. fairness: perfect bot is never caught ----
@@ -205,6 +219,27 @@ function botStep(G){
   check("pause halts the sim", H.p.z===z0&&H.gap===gap0);
   H.paused=false; H.tick();
   check("resume continues", H.p.z>z0);
+}
+
+// ---- 8.7 the agent plays the game: skill must order outcomes ----
+// Three policies through the play loop (player verbs only). If null ~= naive
+// the game lacks depth; if tuned dies at random the game is unfair.
+{
+  const CAP=15000, seeds=["101","202","303"];
+  const med=a=>a.sort((x,y)=>x-y)[1];
+  const res={};
+  for(const name of Object.keys(POLICIES)){
+    const runs=seeds.map(s=>runPolicy(s,name,CAP));
+    res[name]={dist:med(runs.map(r=>r.dist)), deaths:runs.filter(r=>r.dead).length};
+  }
+  console.log(`   play report: null ${Math.floor(res.null.dist)}m (${res.null.deaths}/3 dead) · naive ${Math.floor(res.naive.dist)}m (${res.naive.deaths}/3 dead) · tuned ${Math.floor(res.tuned.dist)}m (${res.tuned.deaths}/3 dead)`);
+  check("null policy always dies", res.null.deaths===3);
+  check("skill orders outcomes: null < naive < tuned", res.null.dist<res.naive.dist&&res.naive.dist<res.tuned.dist,
+        `${Math.floor(res.null.dist)} < ${Math.floor(res.naive.dist)} < ${Math.floor(res.tuned.dist)}`);
+  check("tuned play survives to the cap", res.tuned.deaths===0);
+  // the play loop hides internals: observation carries only player-visible state
+  const G=boot("7"); const o=G.play.observe();
+  check("observation is player-shaped (no internals)", !("nextLunge" in o)&&!("slack" in o)&&Array.isArray(o.ahead)&&"gap" in o);
 }
 
 // ---- 9. 30k-tick pointer-fuzz soak ----

@@ -139,6 +139,32 @@ function copySeed(){
   else { try{prompt("copy this link:",s);}catch(e){} done(); }
 }
 
+/* ---------------- agent play loop ----------------
+   The engine's second consumer (the renderer is the first): a policy
+   plays through the SAME verbs a human has — observe → act → step.
+   Nothing here exposes internals a player couldn't see. Harness bots
+   are required to play through this, and Phase-2 self-play training
+   taps the same loop. */
+const play={
+  observe(){
+    return {
+      dist:+p.z.toFixed(1), px:+p.x.toFixed(3), tx:+p.tx.toFixed(3),
+      spd:+spd.toFixed(3), gap:+gap.toFixed(2), heat:+heat.toFixed(2),
+      air:p.air, stumble:p.stumble, dead:p.dead, lunge:lungeState,
+      ahead:rows.filter(r=>r.z-p.z>-0.5&&r.z-p.z<=LEAD)
+        .map(r=>({rel:+(r.z-p.z).toFixed(2),obs:r.obs.map(o=>({type:o.type,x:o.x,w:o.w}))}))
+        .sort((a,b)=>a.rel-b.rel),
+      bolts:picks.filter(k=>!k.taken&&k.z-p.z>0&&k.z-p.z<=LEAD)
+        .map(k=>({rel:+(k.z-p.z).toFixed(2),x:k.x})),
+    };
+  },
+  act(a){
+    if(a&&typeof a.steer==="number") p.tx=Math.max(-1,Math.min(1,a.steer));
+    if(a&&a.jump) jumpQueued=true;
+  },
+  step(n){ if(!started)started=true; for(let i=0;i<(n||1);i++) tick(); },
+};
+
 /* ---------------- audio ---------------- */
 let AC=null, rumbleGain=null;
 function audio(){

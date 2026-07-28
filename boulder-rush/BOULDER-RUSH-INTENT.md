@@ -1,6 +1,6 @@
 # BOULDER-RUSH — Design Intent & Handoff
 
-**Status:** Phase 0 playable (`boulder-rush.html`, single hand-authored file). Course grammar, heuristic boulder policy with fairness floors, full telemetry, near-miss lunges, seed sharing — 31 harness checks green. First human playtest (2026-07-28) caught and fixed: brown-dirt palette → midnight foundry causeway (slate/cyan/amber); piecewise projection with a kink at the player line + modulo-popping strips → one smooth 1/distance mapping for everything; boulder drawn spilling past its own contact line → sphere grounded (`cy=y-r*0.94`, proximity drives its size, not a huge base radius); **AFK equilibrium** (idle player never died) → compounding stumble heat; no pause → P/Esc/button + auto-pause on tab hide. Next: Phase 1.
+**Status:** Phase 0 playable (`boulder-rush.html`, single hand-authored file). Course grammar, heuristic boulder policy with fairness floors, full telemetry, near-miss lunges, seed sharing — 35 harness checks green, including the agent-play policy ladder (null 116m always dies < naive 307m < tuned 4809m surviving the cap). First human playtest (2026-07-28) caught and fixed: brown-dirt palette → midnight foundry causeway (slate/cyan/amber); piecewise projection with a kink at the player line + modulo-popping strips → one smooth 1/distance mapping for everything; boulder drawn spilling past its own contact line → sphere grounded (`cy=y-r*0.94`, proximity drives its size, not a huge base radius); **AFK equilibrium** (idle player never died) → compounding stumble heat; no pause → P/Esc/button + auto-pause on tab hide. Next: Phase 1.
 **Prime directive:** The boulder must feel like it is *about to catch you* for the entire run without cheating. When in doubt, playtest 30 seconds and watch the gap.
 
 ## 1. What this game is
@@ -65,6 +65,8 @@ recent stumbles; lunge telegraph ≥ 500ms with the gap held during the roar.
 Legibility tell: the roar (`!` + audio + shake) before every lunge; death screen shows
 the distance the mistake chain bought.
 Call sites: `boulderPolicy(state) -> accel` · `spawnRow(z)` / `knobs(z) -> {…}`.
+Play loop: `play.observe() / play.act({steer,jump}) / play.step()` — the player's verbs
+only; harness bots and future self-play training both go through it.
 
 ## 6. Determinism plan
 Seeded mulberry32 over course generation and the lunge schedule; cosmetic dust/chips/
@@ -88,7 +90,9 @@ Phase 3: passability verifier runs on every spawned row against the *learned* pl
 - Single file, portrait canvas, touch-first. Playtest 30 seconds after each change.
 
 ## 9. Harness expectations
-`node test-harness.js` — headless driver (vm + stubs) over the real sim. 31 checks:
+`node test-harness.js` — headless driver (vm + stubs) over the real sim. 35 checks:
+the agent-play policy ladder (null / naive / tuned through the play loop; null always
+dies, skill strictly orders outcomes, observation is player-shaped — no internals),
 AFK-death (no idle equilibrium), pause halts/resumes the sim, plus:
 floors as numbers, row passability across 200 seeds, course+director determinism,
 steering damping (monotone, no overshoot), perfect-bot fairness (never caught, never
