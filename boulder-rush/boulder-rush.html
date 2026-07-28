@@ -204,15 +204,29 @@ const sfx={
   death:()=>{noiseHit(0.7,0.32,500); tone(100,30,0.8,"sine",0.2);},
 };
 
-/* ---------------- input (F1: pointer polled, applied same tick) ---------------- */
-let pointerX=CX, pointerHeld=false, jumpQueued=false;
+/* ---------------- input (F1: pointer polled, applied same tick) ----------------
+   Touch model (per-pointer, no shared booleans):
+   - drag a finger  -> steer (the first finger to MOVE owns steering)
+   - lone quick tap -> hop (fires on release, <220ms, <10px travel)
+   - second finger  -> hop instantly, never steals steering
+   Mouse: moving steers, click hops. */
+let jumpQueued=false;
+const touches=new Map();   // pointerId -> {x0,y0,t0,steering}
+let steerId=null;
 function canvasPos(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*VW/r.width,y:(e.clientY-r.top)*VH/r.height};}
 function steerFrom(mx){ p.tx=Math.max(-1,Math.min(1,(mx-CX)/hwOf(PLAYER_Y))); }
 const SHARE_BTN={x:CX-140,y:VH/2+150,w:280,h:46};
 const PAUSE_BTN={x:VW-58,y:16,w:42,h:42};
 function togglePause(){ if(started&&!p.dead){ paused=!paused; if(rumbleGain)rumbleGain.gain.value=0; } }
 document.addEventListener("visibilitychange",()=>{ if(document.hidden&&started&&!p.dead) paused=true; });
-cv.addEventListener("pointermove",e=>{ pointerX=canvasPos(e).x; if((e.pointerType==="mouse"||pointerHeld)&&!paused) steerFrom(pointerX); });
+cv.addEventListener("pointermove",e=>{
+  if(paused) return;
+  if(e.pointerType==="mouse"){ steerFrom(canvasPos(e).x); return; }
+  const t=touches.get(e.pointerId); if(!t) return;
+  const pos=canvasPos(e);
+  if(!t.steering&&Math.abs(pos.x-t.x0)+Math.abs(pos.y-t.y0)>10&&(steerId===null||steerId===e.pointerId)){ t.steering=true; steerId=e.pointerId; }
+  if(t.steering&&steerId===e.pointerId) steerFrom(pos.x);
+},{passive:false});
 cv.addEventListener("pointerdown",e=>{
   audio(); const pos=canvasPos(e);
   if(!started){ started=true; return; }
@@ -222,12 +236,20 @@ cv.addEventListener("pointerdown",e=>{
   }
   if(paused){ paused=false; return; }                        // any tap resumes
   if(pos.x>=PAUSE_BTN.x-8&&pos.x<=PAUSE_BTN.x+PAUSE_BTN.w+8&&pos.y>=PAUSE_BTN.y-8&&pos.y<=PAUSE_BTN.y+PAUSE_BTN.h+8){ togglePause(); return; }
-  if(pointerHeld||e.pointerType==="mouse") jumpQueued=true;   // second finger / click = hop
-  pointerHeld=true; pointerX=pos.x; steerFrom(pos.x);
+  if(e.pointerType==="mouse"){ jumpQueued=true; return; }    // click = hop; mousemove already steers
+  if(touches.size>=1){ jumpQueued=true; return; }            // second finger = hop, instantly
+  touches.set(e.pointerId,{x0:pos.x,y0:pos.y,t0:performance.now(),steering:false});
   e.preventDefault();
 },{passive:false});
-function upP(e){ pointerHeld=false; }
-cv.addEventListener("pointerup",upP); cv.addEventListener("pointercancel",upP);
+function upT(e){
+  const t=touches.get(e.pointerId);
+  if(t){
+    if(!t.steering&&performance.now()-t.t0<220&&started&&!p.dead&&!paused) jumpQueued=true;  // lone tap = hop
+    touches.delete(e.pointerId);
+    if(steerId===e.pointerId) steerId=null;
+  }
+}
+cv.addEventListener("pointerup",upT); cv.addEventListener("pointercancel",upT);
 const keys={l:false,r:false};
 addEventListener("keydown",e=>{
   audio();
