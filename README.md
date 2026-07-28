@@ -16,6 +16,9 @@ a quantized instruct model pulled into a Web Worker to interpret a spread (tarot
 bar is always the same: a client-side intelligence that feels like it's thinking, in one
 self-contained file.
 
+The full intention — and the template for starting a new game here — lives in
+[CONTEXT.md](CONTEXT.md).
+
 In the adversarial games the interesting behaviour comes from the **arms race**: an attacker
 that partially conceals its plan, commits a hidden reserve based on where your fire
 *actually* goes, remembers your habits across a run, and probes the specific board you built
@@ -223,6 +226,8 @@ tiny-games/
 │   ├── scripts/        # training, distillation, balance harnesses, headless tools
 │   ├── docs/kickoff/   # design plan, engine contract (PHASE0), wave DSL grammar
 │   └── README.md       # deep dive on wiz-tower
+├── CONTEXT.md          # the intention + the new-game brief template (agents: read first)
+├── AGENTS.md           # agent summary of the invariants (CLAUDE.md mirrors it)
 └── README.md           # you are here
 ```
 
