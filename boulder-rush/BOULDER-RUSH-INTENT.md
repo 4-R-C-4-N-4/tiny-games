@@ -1,6 +1,6 @@
 # BOULDER-RUSH — Design Intent & Handoff
 
-**Status:** Phase 0 playable (`boulder-rush.html`, single hand-authored file). Course grammar, heuristic boulder policy with fairness floors, full telemetry, near-miss lunges, seed sharing — 27 harness checks green. Next: playtest the touchstone list, then Phase 1.
+**Status:** Phase 0 playable (`boulder-rush.html`, single hand-authored file). Course grammar, heuristic boulder policy with fairness floors, full telemetry, near-miss lunges, seed sharing — 31 harness checks green. First human playtest (2026-07-28) caught and fixed: brown-dirt palette → midnight foundry causeway (slate/cyan/amber); piecewise projection with a kink at the player line + modulo-popping strips → one smooth 1/distance mapping for everything; boulder drawn spilling past its own contact line → sphere grounded (`cy=y-r*0.94`, proximity drives its size, not a huge base radius); **AFK equilibrium** (idle player never died) → compounding stumble heat; no pause → P/Esc/button + auto-pause on tab hide. Next: Phase 1.
 **Prime directive:** The boulder must feel like it is *about to catch you* for the entire run without cheating. When in doubt, playtest 30 seconds and watch the gap.
 
 ## 1. What this game is
@@ -20,6 +20,7 @@ The magic, as testable statements (H = enforced in the harness, P = needs playte
 5. **(H)** A death is only reachable through stumbles inside the last `STUMBLE_WIN` (4s) — always attributable.
 6. **(built)** Proximity is multi-channel: boulder scale + rumble gain + shake + road shadow + red vignette + antenna light.
 7. **(built)** A clean stretch opens the gap — the policy relaxes toward `targetGap` when you stop stumbling.
+8. **(H)** Standing still is death: stumble heat compounds (`heat+1` per stumble, target gap `−heat*4.5`), so an idle player is caught in ~15–40s; clean running bleeds heat off. No AFK equilibrium.
 Divergence (only after playtest parity): the boulder as a *director* — it studies steering
 habits and spawns danger where you habitually drift, inside the passability envelope.
 
@@ -42,6 +43,9 @@ F6. Camera fixed; the road does the motion. No lateral camera movement.
 | `ROAR_T / LUNGE_GAP` | 32f (533ms) / 4.5 | telegraph holds the gap while roaring |
 | `STUMBLE_T / PIT / INVULN` | 50f / 62f / 70f | crack stumbles hurt more |
 | stumble pounce | `bSpd ≥ spd+0.09` | touchstone #2 |
+| stumble heat | +1/stumble (max 6), −1/240f after 3s clean | touchstone #8; target gap −`heat*4.5` |
+| projection | `y = HORIZON + A/(CAMD+LEAD−rel)`, `CAMD=16` | one smooth mapping, no kinks/popping |
+| boulder draw | `r=(185+165·prox)·s`, grounded at contact line | proximity fills the frame, not base size |
 
 ## 4. Verbs & knobs
 Player verbs: **steer** (pointer x / drag; arrows-A/D fallback), **hop** (tap, second
@@ -84,7 +88,8 @@ Phase 3: passability verifier runs on every spawned row against the *learned* pl
 - Single file, portrait canvas, touch-first. Playtest 30 seconds after each change.
 
 ## 9. Harness expectations
-`node test-harness.js` — headless driver (vm + stubs) over the real sim. 27 checks:
+`node test-harness.js` — headless driver (vm + stubs) over the real sim. 31 checks:
+AFK-death (no idle equilibrium), pause halts/resumes the sim, plus:
 floors as numbers, row passability across 200 seeds, course+director determinism,
 steering damping (monotone, no overshoot), perfect-bot fairness (never caught, never
 below the lunge floor), stumble pounce timing, roar-holds-the-gap, lunge survivability,
@@ -93,7 +98,8 @@ death attribution, telemetry shape, 30k-tick pointer-fuzz soak. Wired as the dep
 ## 10. Ship path
 `game.json`: rune 🪨, `embed:false` (fullscreen — pointer tracking wants the whole
 screen). Deploy block mirrors robo-smash: no build, harness gate, copy the single file
-as `index.html` + `boulder-rush.html`.
+as `index.html` + `boulder-rush.html`. Pause: P / Esc / top-right button; auto-pauses
+when the tab hides; any tap resumes.
 
 ## 11. Definition of first-gen done
 Touchstone list green (H-items proven, P-items playtested by a human), Phase 0 live,

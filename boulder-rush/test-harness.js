@@ -14,7 +14,7 @@ function makeCtx(seedQ) {
   const ctx = {
     location: { search: seedQ ? `?seed=${seedQ}` : "", reload: () => {}, href: "http://x/?seed="+seedQ },
     document: { getElementById: () => ({ getContext: () => absorb(), addEventListener: () => {}, getBoundingClientRect: () => ({left:0,top:0,width:540,height:960}) }),
-                createElement: () => ({ click: () => {} }) },
+                createElement: () => ({ click: () => {} }), addEventListener: () => {}, hidden: false },
     window: {}, addEventListener: () => {}, requestAnimationFrame: () => {},
     performance: { now: () => 0 }, setTimeout: () => 0,
     URL: function(u){ this.searchParams={set:()=>{}}; this.toString=()=>u; }, Blob: function(){},
@@ -36,6 +36,8 @@ globalThis.__G={
   get lastStumble(){return lastStumble}, set lastStumble(v){lastStumble=v},
   get perf(){return perf}, get telemN(){return telemN}, get eventsN(){return eventsN},
   get bolts(){return bolts}, set jumpQueued(v){jumpQueued=v},
+  get paused(){return paused}, set paused(v){paused=v},
+  get heat(){return heat},
   C:{LEAD,SPD_MAX,GAPMIN,GAP_FLOOR,CATCH,JUMP_T,ROAR_T,LUNGE_GAP,STUMBLE_WIN,PW},
 };`;
 function boot(seedQ){ const c=makeCtx(seedQ); vm.runInContext(src+"\n"+expose,c); return c.__G; }
@@ -186,6 +188,23 @@ function botStep(G){
   const r=G.telem[0];
   check("record shape", r&&["t","z","type","xs","px","gap","outcome"].every(f=>f in r), r&&JSON.stringify(r));
   check("steer histogram fills", G.steerHist.reduce((a,b)=>a+b,0)>0);
+}
+
+// ---- 8.5 standing still is death (no AFK equilibrium) + pause halts the sim ----
+{
+  const G=boot("31"); G.started=true;
+  let t=0;
+  for(;t<12000&&!G.p.dead;t++) G.tick();   // hands off: no steering, no jumps
+  check("AFK player is caught (no equilibrium)", G.p.dead, `after ${t} ticks (${(t/60).toFixed(1)}s)`);
+  check("AFK death took more than a moment (attributable, not instant)", t>300, t);
+  const H=boot("32"); H.started=true;
+  for(let i=0;i<100;i++) H.tick();
+  const z0=H.p.z, gap0=H.gap;
+  H.paused=true;
+  for(let i=0;i<200;i++) H.tick();
+  check("pause halts the sim", H.p.z===z0&&H.gap===gap0);
+  H.paused=false; H.tick();
+  check("resume continues", H.p.z>z0);
 }
 
 // ---- 9. 30k-tick pointer-fuzz soak ----

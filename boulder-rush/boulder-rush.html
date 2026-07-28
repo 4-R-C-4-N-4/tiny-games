@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>BOULDER-RUSH — outrun it</title>
 <style>
-  html,body{margin:0;padding:0;background:#0d0a08;height:100%;overflow:hidden;touch-action:none;}
+  html,body{margin:0;padding:0;background:#0b0e14;height:100%;overflow:hidden;touch-action:none;}
   #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
-  canvas{background:#0d0a08;max-width:100vw;max-height:100vh;touch-action:none;cursor:crosshair;}
+  canvas{background:#0b0e14;max-width:100vw;max-height:100vh;touch-action:none;cursor:crosshair;}
 </style>
 </head>
 <body>
@@ -35,7 +35,9 @@
 
 const cv=document.getElementById("cv"), ctx=cv.getContext("2d");
 const VW=540, VH=960, CX=VW/2;
-const HORIZON=230, PLAYER_Y=640, BOTTOM=VH+40;
+/* one smooth projective mapping for EVERYTHING on the track — no
+   piecewise kinks, no modulo popping. y = HORIZON + A/(CAMD+LEAD-rel). */
+const HORIZON=230, BOTTOM=VH+40, CAMD=16;
 
 /* ---------------- seeded RNG (state randomness only) ---------------- */
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
@@ -59,23 +61,23 @@ const STUMBLE_T=50, PIT_STUMBLE_T=62, INVULN_T=70;
 /* ---------------- state ---------------- */
 const p={x:0,tx:0,z:0,air:0,buf:0,stumble:0,invuln:0,dead:false,anim:0};
 let spd=SPD0, gap=GAP0, bSpd=SPD0, roll=0;
-let started=false, perf=0, bolts=0, shake=0;
-let lungeState=0, lungeT=0, nextLunge=0, lastStumble=-9999;
+let started=false, paused=false, perf=0, bolts=0, shake=0;
+let lungeState=0, lungeT=0, nextLunge=0, lastStumble=-9999, heat=0;
 const rows=[], picks=[], parts=[];
 let nextZ=18, nextBolt=30;
 let best=0; try{best=+localStorage.getItem("boulder-rush-best")||0;}catch(e){}
 
 /* ---------------- projection (F6: fixed camera) ----------------
    World scrolls up-screen. rel = ob.z - p.z:
-   rel = LEAD  -> bottom edge (about to be revealed)
-   rel = 0     -> the player row
-   rel = -BEHIND -> the horizon. The boulder lives at rel = -gap. */
-function yOf(rel){
-  if(rel>=0){ const u=rel/LEAD; return PLAYER_Y+(BOTTOM-PLAYER_Y)*Math.pow(u,0.85); }
-  const u=Math.min(1,-rel/BEHIND); return PLAYER_Y-(PLAYER_Y-HORIZON)*Math.pow(u,0.55);
-}
-function scaleOf(y){ return 0.12+(y-HORIZON)/(BOTTOM-HORIZON)*(1.35-0.12); }
-function hwOf(y){ return 26+(y-HORIZON)/(BOTTOM-HORIZON)*(262-26); }
+   rel = LEAD    -> bottom edge (about to be revealed, nearest camera)
+   rel = 0       -> the player row
+   rel -> -inf   -> approaches the horizon. The boulder lives at rel=-gap.
+   True 1/distance projection: continuous and smooth over the whole range. */
+const PROJ_A=(BOTTOM-HORIZON)*CAMD;
+function yOf(rel){ return HORIZON + PROJ_A/(CAMD+LEAD-Math.min(rel,LEAD)); }
+const PLAYER_Y=yOf(0);
+function scaleOf(y){ return Math.min(1.45, 0.15+0.85*(y-HORIZON)/(PLAYER_Y-HORIZON)); }
+function hwOf(y){ return 24+(y-HORIZON)/(BOTTOM-HORIZON)*300; }
 
 /* ---------------- course grammar (Phase 0 substrate) ----------------
    Every row must be passable BY CONSTRUCTION: rows containing
@@ -181,7 +183,10 @@ let pointerX=CX, pointerHeld=false, jumpQueued=false;
 function canvasPos(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*VW/r.width,y:(e.clientY-r.top)*VH/r.height};}
 function steerFrom(mx){ p.tx=Math.max(-1,Math.min(1,(mx-CX)/hwOf(PLAYER_Y))); }
 const SHARE_BTN={x:CX-140,y:VH/2+150,w:280,h:46};
-cv.addEventListener("pointermove",e=>{ pointerX=canvasPos(e).x; if(e.pointerType==="mouse"||pointerHeld) steerFrom(pointerX); });
+const PAUSE_BTN={x:VW-58,y:16,w:42,h:42};
+function togglePause(){ if(started&&!p.dead){ paused=!paused; if(rumbleGain)rumbleGain.gain.value=0; } }
+document.addEventListener("visibilitychange",()=>{ if(document.hidden&&started&&!p.dead) paused=true; });
+cv.addEventListener("pointermove",e=>{ pointerX=canvasPos(e).x; if((e.pointerType==="mouse"||pointerHeld)&&!paused) steerFrom(pointerX); });
 cv.addEventListener("pointerdown",e=>{
   audio(); const pos=canvasPos(e);
   if(!started){ started=true; return; }
@@ -189,6 +194,8 @@ cv.addEventListener("pointerdown",e=>{
     if(pos.x>=SHARE_BTN.x&&pos.x<=SHARE_BTN.x+SHARE_BTN.w&&pos.y>=SHARE_BTN.y&&pos.y<=SHARE_BTN.y+SHARE_BTN.h){ copySeed(); return; }
     location.reload(); return;
   }
+  if(paused){ paused=false; return; }                        // any tap resumes
+  if(pos.x>=PAUSE_BTN.x-8&&pos.x<=PAUSE_BTN.x+PAUSE_BTN.w+8&&pos.y>=PAUSE_BTN.y-8&&pos.y<=PAUSE_BTN.y+PAUSE_BTN.h+8){ togglePause(); return; }
   if(pointerHeld||e.pointerType==="mouse") jumpQueued=true;   // second finger / click = hop
   pointerHeld=true; pointerX=pos.x; steerFrom(pos.x);
   e.preventDefault();
@@ -198,7 +205,8 @@ cv.addEventListener("pointerup",upP); cv.addEventListener("pointercancel",upP);
 const keys={l:false,r:false};
 addEventListener("keydown",e=>{
   audio();
-  if(e.key===" "||e.key==="w"||e.key==="W"||e.key==="ArrowUp"){ if(!started)started=true; else if(p.dead)location.reload(); else jumpQueued=true; e.preventDefault(); }
+  if(e.key===" "||e.key==="w"||e.key==="W"||e.key==="ArrowUp"){ if(!started)started=true; else if(p.dead)location.reload(); else if(paused)paused=false; else jumpQueued=true; e.preventDefault(); }
+  if(e.key==="p"||e.key==="P"||e.key==="Escape") togglePause();
   if(e.key==="ArrowLeft"||e.key==="a"||e.key==="A") keys.l=true;
   if(e.key==="ArrowRight"||e.key==="d"||e.key==="D") keys.r=true;
   if(e.key==="r"||e.key==="R"){ if(p.dead||started) location.reload(); }
@@ -222,7 +230,10 @@ function boulderPolicy(st){
   if(st.lungeState===2) return +0.010;                     // lunging: close hard
   if(st.lungeState===3) return -0.008;                     // retreating
   if(!recent&&st.gap<GAP_FLOOR) return -0.006;             // fairness floor
-  const target=Math.max(8,GAP0-6*intensity(p.z))-(recent?3.5:0);
+  /* stumble heat compounds: one mistake stings, a chain is fatal.
+     Standing still (stumbling every row) is death in ~15s; running
+     clean bleeds the heat off and the target relaxes back. */
+  const target=Math.max(0.8,Math.max(8,GAP0-6*intensity(p.z))-heat*4.5);
   return st.gap>target?+0.0035:-0.0025;
 }
 
@@ -230,15 +241,17 @@ function boulderPolicy(st){
 function stumble(kind,dur){
   if(p.invuln>0||p.dead) return;
   p.stumble=dur; p.invuln=INVULN_T; lastStumble=perf;
+  heat=Math.min(6,heat+1);
   bSpd=Math.max(bSpd,spd+0.09);      // the pounce: a mistake is punished within 250ms (touchstone #2)
   shake=Math.max(shake,7); sfx.stumble();
   evLog("stumble",{kind});
   for(let i=0;i<10;i++) parts.push({x:CX+p.x*hwOf(PLAYER_Y)+(Math.random()*30-15),y:PLAYER_Y+(Math.random()*16-8),vx:Math.random()*3-1.5,vy:-Math.random()*3,life:22,max:22,c:"#c9a25a",sz:3});
 }
 function tick(){
-  if(!started||p.dead) { if(copiedT>0)copiedT--; return; }
-  perf++;
   if(copiedT>0)copiedT--;
+  if(!started||p.dead||paused){ if(rumbleGain&&paused)rumbleGain.gain.value=0; return; }
+  perf++;
+  if(perf-lastStumble>180&&heat>0) heat=Math.max(0,heat-1/240);   // clean running bleeds the heat off
 
   /* ---- steering (F1/F2: exponential approach, no overshoot) ---- */
   if(keys.l) p.tx=Math.max(-1,p.tx-0.045);
@@ -306,7 +319,7 @@ function tick(){
   for(let i=picks.length-1;i>=0;i--){
     const k=picks[i], rel=k.z-p.z;
     if(!k.taken&&rel<0.5&&rel>-0.5&&Math.abs(p.x-k.x)<0.16&&p.air===0){ k.taken=true; bolts++; sfx.pick(); evLog("pickup",{}); }
-    if(rel<-BEHIND-2) picks.splice(i,1);
+    if(rel<-gap+0.5||rel<-BEHIND-2) picks.splice(i,1);   // the boulder eats what you skipped
   }
   for(let i=parts.length-1;i>=0;i--){ const q=parts[i]; q.x+=q.vx;q.y+=q.vy;q.vy+=0.15;q.life--; if(q.life<=0)parts.splice(i,1); }
   if(shake>0) shake*=0.88;
@@ -314,45 +327,73 @@ function tick(){
 
 /* ---------------- render ---------------- */
 function drawCanyon(){
-  const sky=ctx.createLinearGradient(0,0,0,HORIZON+140);
-  sky.addColorStop(0,"#1a1210"); sky.addColorStop(1,"#2a1d14");
-  ctx.fillStyle=sky; ctx.fillRect(0,0,VW,HORIZON+140);
-  // canyon walls: strata quads keyed to world z (scroll up-screen)
-  for(let side=-1;side<=1;side+=2){
-    for(let k=0;k<14;k++){
-      const z0=Math.floor(p.z/6)*6+k*6-36, rel=z0-p.z;
-      if(rel>LEAD||rel<-BEHIND) continue;
-      const y0=yOf(rel), y1=yOf(rel-6);
-      const xo0=CX+side*(hwOf(y0)+14), xo1=CX+side*(hwOf(y1)+14);
-      const shade=18+((Math.floor(z0/6)*97)%5)*7;
-      ctx.fillStyle=`rgb(${shade+26},${shade+14},${shade})`;
-      ctx.beginPath();
-      ctx.moveTo(xo0,y0); ctx.lineTo(side>0?VW:0,y0); ctx.lineTo(side>0?VW:0,y1); ctx.lineTo(xo1,y1);
-      ctx.closePath(); ctx.fill();
+  // midnight sky + horizon glow (robo-smash palette family — no browns)
+  const sky=ctx.createLinearGradient(0,0,0,VH);
+  sky.addColorStop(0,"#101726"); sky.addColorStop(0.55,"#182236"); sky.addColorStop(1,"#0e131d");
+  ctx.fillStyle=sky; ctx.fillRect(0,0,VW,VH);
+  const hg=ctx.createLinearGradient(0,HORIZON-70,0,HORIZON+30);
+  hg.addColorStop(0,"rgba(127,216,232,0)"); hg.addColorStop(1,"rgba(127,216,232,0.10)");
+  ctx.fillStyle=hg; ctx.fillRect(0,HORIZON-70,VW,100);
+  // distant tower silhouettes (static — they're far away)
+  ctx.fillStyle="#141b2a";
+  for(let i=0;i<9;i++){
+    const w=34+((i*2654435761)>>>8)%40, h=42+((i*40503)>>>4)%88;
+    const x=(i*67+((i*97)%23))%(VW+60)-30;
+    ctx.fillRect(x,HORIZON-h,w,h);
+    ctx.fillRect(x+w*0.3,HORIZON-h-14,6,14);
+  }
+  // ground plane beyond the causeway
+  ctx.fillStyle="#10151f"; ctx.fillRect(0,HORIZON,VW,VH-HORIZON);
+  // lit pylons flanking the causeway — smooth continuous motion (no strata popping)
+  for(let k=0;k<10;k++){
+    const zp=Math.floor((p.z-BEHIND)/7)*7+k*7, rel=zp-p.z;
+    if(rel>LEAD+4||rel<-BEHIND) continue;
+    const y=yOf(rel), s=scaleOf(y);
+    for(let side=-1;side<=1;side+=2){
+      const x=CX+side*(hwOf(y)+14*s+10);
+      ctx.fillStyle="#232b3a"; ctx.fillRect(x-5*s,y-88*s,10*s,88*s);
+      ctx.fillStyle="#2f3a4d"; ctx.fillRect(x-5*s,y-88*s,10*s,8*s);
+      ctx.fillStyle=`rgba(127,216,232,${0.35+0.25*Math.sin(perf/14+k)})`;
+      ctx.fillRect(x-3*s,y-80*s,6*s,10*s);
     }
   }
 }
+function railPath(side){
+  ctx.beginPath();
+  for(let i=0;i<=26;i++){
+    const rel=LEAD+2-(LEAD+2+BEHIND)*(i/26), y=yOf(rel);
+    const x=CX+side*hwOf(y);
+    if(i===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+}
 function drawRoad(){
-  ctx.fillStyle="#3a2c1e";
+  // slate causeway — one opaque fill, no seam artifacts
+  ctx.fillStyle="#1b2230";
   ctx.beginPath();
   ctx.moveTo(CX-hwOf(HORIZON),HORIZON); ctx.lineTo(CX+hwOf(HORIZON),HORIZON);
   ctx.lineTo(CX+hwOf(BOTTOM),BOTTOM); ctx.lineTo(CX-hwOf(BOTTOM),BOTTOM);
   ctx.closePath(); ctx.fill();
-  for(let k=0;k<26;k++){
-    const z0=Math.floor(p.z/2)*2+k*2-30, rel=z0-p.z;
+  // transverse glow lines every 4m — continuous y from fractional rel, so
+  // they slide smoothly instead of phasing (strokes, not alpha quads)
+  for(let k=0;k<14;k++){
+    const zl=Math.floor((p.z-BEHIND)/4)*4+k*4, rel=zl-p.z;
     if(rel>LEAD||rel<-BEHIND) continue;
-    if(Math.floor(z0/2)%2) continue;
-    const y0=yOf(rel), y1=yOf(rel-2);
-    ctx.fillStyle="rgba(0,0,0,0.10)";
-    ctx.beginPath();
-    ctx.moveTo(CX-hwOf(y0),y0); ctx.lineTo(CX+hwOf(y0),y0);
-    ctx.lineTo(CX+hwOf(y1),y1); ctx.lineTo(CX-hwOf(y1),y1);
-    ctx.closePath(); ctx.fill();
+    const y=yOf(rel), q=(y-HORIZON)/(VH-HORIZON);
+    ctx.strokeStyle=`rgba(127,216,232,${0.04+0.10*q})`;
+    ctx.lineWidth=Math.max(1,2.6*scaleOf(y));
+    ctx.beginPath(); ctx.moveTo(CX-hwOf(y),y); ctx.lineTo(CX+hwOf(y),y); ctx.stroke();
+  }
+  // neon edge rails: glow pass + core pass
+  for(let side=-1;side<=1;side+=2){
+    railPath(side);
+    ctx.strokeStyle="rgba(127,216,232,0.12)"; ctx.lineWidth=7; ctx.stroke();
+    railPath(side);
+    ctx.strokeStyle="rgba(127,216,232,0.55)"; ctx.lineWidth=2.5; ctx.stroke();
   }
   // darkening under the boulder = proximity read on the road itself (F4)
   const by=yOf(-gap);
   const g2=ctx.createLinearGradient(0,by,0,Math.min(PLAYER_Y,by+160));
-  g2.addColorStop(0,"rgba(10,6,4,0.55)"); g2.addColorStop(1,"rgba(10,6,4,0)");
+  g2.addColorStop(0,"rgba(6,8,12,0.60)"); g2.addColorStop(1,"rgba(6,8,12,0)");
   ctx.fillStyle=g2; ctx.fillRect(0,by-10,VW,170);
 }
 function drawObstacle(row){
@@ -360,21 +401,30 @@ function drawObstacle(row){
   for(const o of row.obs){
     const x=CX+o.x*hw, w=o.w*hw*0.5;
     if(o.type==="rock"){
-      ctx.fillStyle="#6b5a48"; ctx.beginPath(); ctx.ellipse(x,y-10*s,w,16*s,0,0,7); ctx.fill();
-      ctx.fillStyle="#7d6b56"; ctx.beginPath(); ctx.ellipse(x-w*0.25,y-16*s,w*0.5,9*s,0,0,7); ctx.fill();
+      // slag chunk
+      ctx.fillStyle="#4a5568"; ctx.beginPath(); ctx.ellipse(x,y-10*s,w,16*s,0,0,7); ctx.fill();
+      ctx.fillStyle="#5e6d84"; ctx.beginPath(); ctx.ellipse(x-w*0.25,y-16*s,w*0.5,9*s,0,0,7); ctx.fill();
+      ctx.fillStyle="rgba(127,216,232,0.35)"; ctx.fillRect(x-w*0.1,y-20*s,w*0.22,3*s);
     } else if(o.type==="wall"){
-      ctx.fillStyle="#5c4a38"; ctx.fillRect(CX-hw,y-22*s,hw*2,22*s);
-      ctx.fillStyle="#6e5944"; ctx.fillRect(CX-hw,y-22*s,hw*2,6*s);
-      ctx.fillStyle="rgba(0,0,0,0.25)"; for(let i=-3;i<=3;i++) ctx.fillRect(CX+i*hw/3.5-1,y-22*s,2,22*s);
+      // slab barrier with hazard stripes — reads "hop me"
+      ctx.fillStyle="#2b3442"; ctx.fillRect(CX-hw,y-22*s,hw*2,22*s);
+      ctx.fillStyle="#3d4a5c"; ctx.fillRect(CX-hw,y-22*s,hw*2,5*s);
+      const n=Math.max(4,Math.floor(hw/26));
+      for(let i=0;i<n;i++){ ctx.fillStyle=i%2?"#e8a33d":"#20262f"; ctx.fillRect(CX-hw+i*(hw*2/n),y-14*s,hw*2/n,8*s); }
     } else if(o.type==="crack"){
-      ctx.fillStyle="#120c08"; ctx.beginPath();
+      // glowing fissure
+      ctx.fillStyle="rgba(127,216,232,0.10)";
+      ctx.beginPath(); ctx.ellipse(x,y,w*1.25,11*s,0,0,7); ctx.fill();
+      ctx.fillStyle="#0a0e14"; ctx.beginPath();
       ctx.moveTo(x-w,y); ctx.lineTo(x-w*0.5,y-7*s); ctx.lineTo(x+w*0.3,y-5*s); ctx.lineTo(x+w,y); ctx.lineTo(x+w*0.4,y+7*s); ctx.lineTo(x-w*0.5,y+6*s);
       ctx.closePath(); ctx.fill();
-    } else { // totem: tall, unjumpable
-      ctx.fillStyle="#7a4434"; ctx.fillRect(x-w*0.55,y-58*s,w*1.1,58*s);
-      ctx.fillStyle="#8f5340"; ctx.fillRect(x-w*0.55,y-58*s,w*1.1,10*s);
-      ctx.fillStyle="#2a1a12"; ctx.fillRect(x-w*0.35,y-44*s,w*0.7,8*s);
-      ctx.fillStyle="#ffd98a"; ctx.fillRect(x-w*0.2,y-30*s,w*0.4,6*s);
+      ctx.strokeStyle="rgba(127,216,232,0.45)"; ctx.lineWidth=Math.max(1,1.6*s); ctx.stroke();
+    } else { // totem: tall warning pylon, unjumpable — reads "do not touch"
+      ctx.fillStyle="#2b3442"; ctx.fillRect(x-w*0.55,y-58*s,w*1.1,58*s);
+      for(let i=0;i<3;i++){ ctx.fillStyle=i%2?"#20262f":"#e8a33d"; ctx.fillRect(x-w*0.55,y-50*s+i*14*s,w*1.1,7*s); }
+      ctx.fillStyle="#3d4a5c"; ctx.fillRect(x-w*0.55,y-58*s,w*1.1,6*s);
+      ctx.fillStyle=`rgba(255,93,58,${0.55+0.35*Math.sin(perf/7)})`;
+      ctx.beginPath(); ctx.arc(x,y-62*s,4.5*s,0,7); ctx.fill();
     }
   }
 }
@@ -387,30 +437,44 @@ function drawBolt(k){
   ctx.restore();
 }
 function drawBoulder(){
-  const y=yOf(-gap), s=scaleOf(y), r=300*s;
+  const y=yOf(-gap), s=scaleOf(y);
+  // base size is modest; PROXIMITY is what makes it fill the frame (F4)
+  const prox=Math.max(0,(14-gap)/14), r=(185+165*prox)*s;
   const x=CX+Math.sin(roll*0.13)*8*s;
-  // dust skirt
-  ctx.fillStyle="rgba(90,70,50,0.35)";
-  ctx.beginPath(); ctx.ellipse(x,y+6,r*1.15,r*0.22,0,0,7); ctx.fill();
-  // body
-  const grad=ctx.createRadialGradient(x-r*0.3,y-r*0.5,r*0.2,x,y-r*0.28,r);
-  grad.addColorStop(0,"#8a7660"); grad.addColorStop(0.7,"#5c4c3c"); grad.addColorStop(1,"#3a2f24");
+  // the sphere RESTS on the road: bottom edge at its contact line, mass
+  // rising up-screen — it must never spill over the track toward the player
+  const cy=y-r*0.94;
+  // dust kicked up at the contact line
+  ctx.fillStyle="rgba(90,105,130,0.28)";
+  ctx.beginPath(); ctx.ellipse(x,y+2,r*0.62,r*0.10,0,0,7); ctx.fill();
+  // iron-slate body
+  const grad=ctx.createRadialGradient(x-r*0.35,cy-r*0.35,r*0.15,x,cy,r);
+  grad.addColorStop(0,"#525f75"); grad.addColorStop(0.55,"#39424e"); grad.addColorStop(0.85,"#252c38"); grad.addColorStop(1,"#141922");
   ctx.fillStyle=grad;
-  ctx.beginPath(); ctx.arc(x,y-r*0.28,r,0,7); ctx.fill();
-  // rotating cracks
-  ctx.strokeStyle="rgba(30,22,16,0.55)"; ctx.lineWidth=Math.max(1.5,4*s);
+  ctx.beginPath(); ctx.arc(x,cy,r,0,7); ctx.fill();
+  // rim light from the sky
+  ctx.strokeStyle="rgba(127,216,232,0.14)"; ctx.lineWidth=Math.max(2,5*s);
+  ctx.beginPath(); ctx.arc(x,cy,r*0.985,Math.PI+0.5,Math.PI*2-0.5); ctx.stroke();
+  // molten cracks, rotating with the roll — burning hotter as it closes (F4)
+  const hot=Math.min(1,Math.max(0,(14-gap)/14));
+  ctx.strokeStyle=`rgba(232,163,61,${0.30+0.5*hot})`; ctx.lineWidth=Math.max(1.5,4*s);
   for(let i=0;i<5;i++){
     const a=roll*0.9+i*1.257;
-    ctx.beginPath(); ctx.arc(x,y-r*0.28,r*(0.45+0.11*i),a,a+1.1); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x,cy,r*(0.45+0.11*i),a,a+1.1); ctx.stroke();
+  }
+  ctx.strokeStyle="rgba(16,20,28,0.65)"; ctx.lineWidth=Math.max(1,2.5*s);
+  for(let i=0;i<4;i++){
+    const a=-roll*0.7+i*1.571;
+    ctx.beginPath(); ctx.arc(x,cy,r*(0.3+0.15*i),a,a+0.8); ctx.stroke();
   }
   // roar tell (>=500ms before any lunge closes)
   if(lungeState===1){
     ctx.fillStyle=`rgba(255,90,50,${0.5+0.4*Math.sin(perf*0.7)})`;
     ctx.font="bold 46px monospace"; ctx.textAlign="center";
-    ctx.fillText("!",x,y-r*0.28-r-14);
+    ctx.fillText("!",x,Math.max(56,cy-r-14));
   }
   // chips (cosmetic)
-  if(Math.random()<0.4) parts.push({x:x+(Math.random()*2-1)*r*0.8,y:y-Math.random()*8,vx:Math.random()*2-1,vy:-Math.random()*2-1,life:16,max:16,c:"#6e5944",sz:2+Math.random()*2});
+  if(Math.random()<0.4) parts.push({x:x+(Math.random()*2-1)*r*0.8,y:y-Math.random()*8,vx:Math.random()*2-1,vy:-Math.random()*2-1,life:16,max:16,c:"#39424e",sz:2+Math.random()*2});
 }
 function drawRunner(){
   const hw=hwOf(PLAYER_Y), x=CX+p.x*hw;
@@ -421,7 +485,7 @@ function drawRunner(){
   ctx.beginPath(); ctx.ellipse(x,PLAYER_Y+4,16-airU*5,5,0,0,7); ctx.fill();
   if(p.invuln>0&&perf%6<3&&!p.dead) return;   // stumble flicker
   const run=Math.sin(p.anim*14)*(p.air>0?0.2:1);
-  ctx.save(); ctx.translate(x,y);
+  ctx.save(); ctx.translate(x,y); ctx.scale(1.25,1.25);
   if(p.stumble>0) ctx.rotate(Math.sin(perf*0.8)*0.18);
   // legs (facing camera, kicking toward viewer)
   ctx.fillStyle="#39424e";
@@ -464,20 +528,33 @@ function draw(){
   }
   /* HUD */
   ctx.textAlign="center";
-  ctx.fillStyle="#e8d9c2"; ctx.font="bold 34px monospace";
+  ctx.fillStyle="#dfe8f2"; ctx.font="bold 34px monospace";
   ctx.fillText(`${Math.floor(p.z)}m`,CX,54);
-  ctx.font="14px monospace"; ctx.fillStyle="#a8a08d";
+  ctx.font="14px monospace"; ctx.fillStyle="#9aa5b1";
   ctx.fillText(`⚙ ${bolts}   best ${best}m`,CX,78);
-  ctx.font="11px monospace"; ctx.fillStyle="rgba(168,160,141,0.6)";
-  ctx.fillText(`seed ${SEED} · T data · C share`,CX,VH-14);
+  ctx.font="11px monospace"; ctx.fillStyle="rgba(154,165,177,0.55)";
+  ctx.fillText(`seed ${SEED} · T data · C share · P pause`,CX,VH-14);
   if(copiedT>0){ ctx.fillStyle="#7fe8a3"; ctx.font="bold 15px monospace"; ctx.fillText("link copied ✓",CX,VH-36); }
+  // pause button
+  if(started&&!p.dead){
+    ctx.fillStyle="rgba(10,14,20,0.45)";
+    ctx.beginPath(); ctx.arc(PAUSE_BTN.x+21,PAUSE_BTN.y+21,21,0,7); ctx.fill();
+    ctx.fillStyle="rgba(223,232,242,0.6)";
+    if(paused){ ctx.beginPath(); ctx.moveTo(PAUSE_BTN.x+15,PAUSE_BTN.y+12); ctx.lineTo(PAUSE_BTN.x+31,PAUSE_BTN.y+21); ctx.lineTo(PAUSE_BTN.x+15,PAUSE_BTN.y+30); ctx.closePath(); ctx.fill(); }
+    else { ctx.fillRect(PAUSE_BTN.x+13,PAUSE_BTN.y+12,6,18); ctx.fillRect(PAUSE_BTN.x+24,PAUSE_BTN.y+12,6,18); }
+  }
+  if(paused&&started&&!p.dead){
+    ctx.fillStyle="rgba(8,10,16,0.62)"; ctx.fillRect(0,0,VW,VH);
+    ctx.fillStyle="#7fd8e8"; ctx.font="bold 40px monospace"; ctx.fillText("PAUSED",CX,VH/2-16);
+    ctx.fillStyle="#9aa5b1"; ctx.font="15px monospace"; ctx.fillText("tap · P — resume",CX,VH/2+24);
+  }
 
   if(!started){
-    ctx.fillStyle="rgba(8,6,4,0.66)"; ctx.fillRect(0,0,VW,VH);
+    ctx.fillStyle="rgba(8,10,16,0.66)"; ctx.fillRect(0,0,VW,VH);
     ctx.fillStyle="#e8a33d"; ctx.font="bold 44px monospace"; ctx.fillText("BOULDER-RUSH",CX,VH/2-90);
-    ctx.fillStyle="#e8d9c2"; ctx.font="17px monospace";
+    ctx.fillStyle="#dfe8f2"; ctx.font="17px monospace";
     ctx.fillText("it is right behind you. run.",CX,VH/2-48);
-    ctx.fillStyle="#a8a08d"; ctx.font="14px monospace";
+    ctx.fillStyle="#9aa5b1"; ctx.font="14px monospace";
     ctx.fillText("steer: move pointer / drag thumb",CX,VH/2+4);
     ctx.fillText("hop: tap · click · space",CX,VH/2+28);
     ctx.fillText("obstacles slow you. IT does the rest.",CX,VH/2+64);
@@ -485,13 +562,13 @@ function draw(){
     ctx.fillText(`tap to run  ›`,CX,VH/2+120);
   }
   if(p.dead){
-    ctx.fillStyle="rgba(8,6,4,0.72)"; ctx.fillRect(0,0,VW,VH);
+    ctx.fillStyle="rgba(8,10,16,0.72)"; ctx.fillRect(0,0,VW,VH);
     ctx.fillStyle="#ff5d3a"; ctx.font="bold 48px monospace"; ctx.fillText("RUN OVER",CX,VH/2-80);
-    ctx.fillStyle="#e8d9c2"; ctx.font="22px monospace";
+    ctx.fillStyle="#dfe8f2"; ctx.font="22px monospace";
     ctx.fillText(`${Math.floor(p.z)}m · ⚙ ${bolts}`,CX,VH/2-30);
-    ctx.font="16px monospace"; ctx.fillStyle= Math.floor(p.z)>=best&&best>0?"#7fe8a3":"#a8a08d";
+    ctx.font="16px monospace"; ctx.fillStyle= Math.floor(p.z)>=best&&best>0?"#7fe8a3":"#9aa5b1";
     ctx.fillText(Math.floor(p.z)>=best?`NEW BEST`:`best ${best}m`,CX,VH/2+2);
-    ctx.fillStyle="#a8a08d"; ctx.font="15px monospace";
+    ctx.fillStyle="#9aa5b1"; ctx.font="15px monospace";
     ctx.fillText("tap / R — run again",CX,VH/2+58);
     const hot=copiedT>0;
     ctx.fillStyle= hot?"rgba(127,232,163,0.18)":"rgba(127,216,232,0.14)";

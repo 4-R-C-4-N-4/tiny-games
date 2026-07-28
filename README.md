@@ -226,7 +226,7 @@ the mistakes of the last few seconds.
 - **Telemetry as training data.** Steering histograms + per-obstacle outcome tuples +
   the event stream, exported with `T` — the dataset for the planned steering-prediction
   model that will place danger where you habitually drift.
-- **Headless test suite**: 27 checks — the floors as numbers, 200-seed passability,
+- **Headless test suite**: 31 checks — the floors as numbers, 200-seed passability,
   course determinism, perfect-bot fairness (never caught), and a 30k-tick pointer fuzz.
 
 **Play it:**
@@ -234,7 +234,7 @@ the mistakes of the last few seconds.
 ```bash
 cd boulder-rush
 xdg-open boulder-rush.html   # one hand-authored file, no build, no deps
-node test-harness.js         # 27-check headless suite
+node test-harness.js         # 31-check headless suite
 ```
 
 ## Repo layout
@@ -248,7 +248,7 @@ tiny-games/
 │   └── docs/           # design doc
 ├── boulder-rush/       # mobile-first boulder chase with a fairness-floored chase director
 │   ├── boulder-rush.html    # the whole game — single hand-authored file
-│   ├── test-harness.js      # headless Node driver + 27-check suite
+│   ├── test-harness.js      # headless Node driver + 31-check suite
 │   └── BOULDER-RUSH-INTENT.md # intent doc (instantiated from CONTEXT.md's template)
 ├── robo-smash/         # feel-first Crash-style platformer growing an adversarial director
 │   ├── robo-smash.html      # the whole game — single hand-authored file
